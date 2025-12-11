@@ -1,0 +1,222 @@
+import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import fs from 'fs';
+import path from 'path';
+
+export const dynamic = 'force-dynamic';
+
+// Helper function to parse CSV
+function parseCSV(csvContent: string): Array<{ snapped_at: string; price: number }> {
+  const lines = csvContent.trim().split('\n');
+
+  return lines.slice(1).map(line => {
+    const values = line.split(',');
+    return {
+      snapped_at: values[0],
+      price: parseFloat(values[1])
+    };
+  }).filter(row => !isNaN(row.price));
+}
+
+// Filter reference data by date
+function filterReferenceByDate(data: Array<{ snapped_at: string; price: number }>, startDate: Date | null): Array<{ timestamp: string; price: number }> {
+  if (!startDate) {
+    return data.map(d => ({ timestamp: d.snapped_at, price: d.price }));
+  }
+
+  return data
+    .filter(d => new Date(d.snapped_at) >= startDate)
+    .map(d => ({ timestamp: d.snapped_at, price: d.price }));
+}
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const timeRange = searchParams.get('range') || '7d';
+
+  const client = await pool.connect();
+
+  try {
+    // Calculate date filter based on time range
+    let dateCondition = '';
+    let csvStartDate: Date | null = null;
+    const now = new Date();
+
+    switch (timeRange) {
+      case '24h':
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        dateCondition = `timestamp >= '${yesterday.toISOString()}'`;
+        csvStartDate = yesterday;
+        break;
+      case '7d':
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        dateCondition = `timestamp >= '${weekAgo.toISOString()}'`;
+        csvStartDate = weekAgo;
+        break;
+      case '30d':
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        dateCondition = `timestamp >= '${monthAgo.toISOString()}'`;
+        csvStartDate = monthAgo;
+        break;
+      case '90d':
+        const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        dateCondition = `timestamp >= '${quarterAgo.toISOString()}'`;
+        csvStartDate = quarterAgo;
+        break;
+      default: // 'all'
+        dateCondition = '1=1';
+        csvStartDate = null;
+    }
+
+    // Fetch calculated prices from swaps
+    // New logic: Calculate price from affiliate fee
+    // fee_asset_price = affiliate_fee_usd / fee_amount
+    const runeQuery = `
+      SELECT 
+        timestamp,
+        raw_data,
+        in_amount,
+        out_amount,
+        in_asset,
+        out_asset
+      FROM swaps 
+      WHERE source = 'thorchain'
+        AND ${dateCondition}
+      ORDER BY timestamp ASC
+    `;
+
+    const cacaoQuery = `
+      SELECT 
+        timestamp,
+        raw_data,
+        in_amount,
+        out_amount,
+        in_asset,
+        out_asset
+      FROM swaps 
+      WHERE source = 'mayachain'
+        AND ${dateCondition}
+      ORDER BY timestamp ASC
+    `;
+
+    const [runeResult, cacaoResult] = await Promise.all([
+      client.query(runeQuery),
+      client.query(cacaoQuery)
+    ]);
+
+    const calculatePrice = (rows: any[], chain: 'thorchain' | 'mayachain') => {
+      return rows.map(row => {
+        const metadata = row.raw_data?.metadata?.swap || {};
+
+        // Helper function to get asset decimals
+        const getAssetDecimals = (asset: string): number => {
+          if (!asset) return 1e8;
+          const assetUpper = asset.toUpperCase();
+
+          // ETH and ERC-20 tokens use 18 decimals
+          if (assetUpper.includes('ETH')) return 1e18;
+
+          // CACAO uses 10 decimals
+          if (assetUpper.includes('CACAO')) return 1e10;
+
+          // Most other assets (BTC, RUNE, etc.) use 8 decimals
+          return 1e8;
+        };
+
+        // Get asset-specific decimals
+        const inDecimals = getAssetDecimals(row.in_asset);
+
+        // Inbound Calculation
+        const inAmountRaw = parseFloat(row.in_amount || '0');
+        const inPriceUSD = parseFloat(metadata.inPriceUSD || '0');
+        const inVolumeUSD = (inAmountRaw / inDecimals) * inPriceUSD;
+
+        // Fee Asset Details
+        let feeAmount = 0;
+        let feeAsset = 'N/A';
+        let feeAssetPrice = 0;
+
+        if (row.raw_data?.out && Array.isArray(row.raw_data.out)) {
+          const feeOut = row.raw_data.out.find((o: any) => o.affiliate === true);
+          if (feeOut && feeOut.coins && feeOut.coins.length > 0) {
+            feeAmount = parseFloat(feeOut.coins[0].amount || '0');
+            feeAsset = feeOut.coins[0].asset;
+
+            // Check if fee asset is RUNE or CACAO
+            const isRune = feeAsset.includes('RUNE');
+            const isCacao = feeAsset.includes('CACAO');
+
+            // Only process if fee asset matches the chain's native token
+            const isCorrectChain = (chain === 'thorchain' && isRune) || (chain === 'mayachain' && isCacao);
+
+            if (isCorrectChain && feeAmount > 0 && inAmountRaw > 0 && inPriceUSD > 0) {
+              const feeDecimals = isCacao ? 1e10 : 1e8; // CACAO 1e10, RUNE 1e8
+
+              // Calculate price directly from the swap ratio
+              // feeAssetPrice = inVolumeUSD / feeAmount_normalized
+              // This tells us: "1 unit of fee asset is worth X USD based on this swap"
+              feeAssetPrice = inVolumeUSD / (feeAmount / feeDecimals);
+            }
+          }
+        }
+
+        // Filter out unrealistic prices to avoid chart wicks to $0
+        // RUNE typically trades $0.50-$5.00, CACAO $0.10-$0.50
+        const minPrice = chain === 'thorchain' ? 0.10 : 0.05;
+
+
+        // Helper to filter by min/max range
+        const filterByRange = (data: Array<{ snapped_at: string; price: number }>, minTime: number, maxTime: number) => {
+          return data
+            .filter(d => {
+              const t = new Date(d.snapped_at).getTime();
+              return t >= minTime && t <= maxTime;
+            })
+            .map(d => ({ timestamp: d.snapped_at, price: d.price }));
+        };
+
+        try {
+          if (fs.existsSync(runeCsvPath) && runePrices.length > 0) {
+            const runeCsvContent = fs.readFileSync(runeCsvPath, 'utf-8');
+            const runeParsed = parseCSV(runeCsvContent);
+
+            const minRuneTime = new Date(runePrices[0].timestamp).getTime();
+            const maxRuneTime = new Date(runePrices[runePrices.length - 1].timestamp).getTime();
+
+            runeReferenceData = filterByRange(runeParsed, minRuneTime, maxRuneTime);
+          }
+        } catch (err) {
+          console.error('Error loading RUNE reference data:', err);
+        }
+
+        try {
+          if (fs.existsSync(cacaoCsvPath) && cacaoPrices.length > 0) {
+            const cacaoCsvContent = fs.readFileSync(cacaoCsvPath, 'utf-8');
+            const cacaoParsed = parseCSV(cacaoCsvContent);
+
+            const minCacaoTime = new Date(cacaoPrices[0].timestamp).getTime();
+            const maxCacaoTime = new Date(cacaoPrices[cacaoPrices.length - 1].timestamp).getTime();
+
+            cacaoReferenceData = filterByRange(cacaoParsed, minCacaoTime, maxCacaoTime);
+          }
+        } catch (err) {
+          console.error('Error loading CACAO reference data:', err);
+        }
+
+        return NextResponse.json({
+          rune: {
+            prices: runePrices,
+            referencePrices: runeReferenceData
+          },
+          cacao: {
+            prices: cacaoPrices,
+            referencePrices: cacaoReferenceData
+          }
+        });
+
+      } catch (error) {
+        console.error('Price API Error:', error);
+        return NextResponse.json({ error: 'Failed to fetch price data' }, { status: 500 });
+      } finally {
+        client.release();
+      }
+    }

@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  /* Vultisig Dark Theme - Navy Blue */
+  --background: #020817; /* Deep Navy/Black */
+  --foreground: #F8FAFC;
+  --card-bg: #0F172A;    /* Lighter Navy for cards */
+  --accent-blue: #3B82F6;
+  --accent-blue-light: #60A5FA;
+  --accent-cyan: #06B6D4;
+  --accent-teal: #2DD4BF;
+  --accent-gold: #FACC15;
+  --sidebar-bg: #0B1120; /* Slightly different for sidebar */
+
+  /* Glassmorphism colors */
+  --glass-bg: rgba(15, 23, 42, 0.4); /* #0F172A with 40% opacity */
+  --glass-bg-hover: rgba(15, 23, 42, 0.6); /* #0F172A with 60% opacity */
+  --glass-border: rgba(148, 163, 184, 0.2); /* slate-400 with 20% opacity */
+  --glass-border-hover: rgba(45, 212, 191, 0.4); /* teal-400 with 40% opacity */
+  --glass-shadow: rgba(6, 182, 212, 0.08); /* cyan-500 with 8% opacity */
+  --glass-shadow-hover: rgba(6, 182, 212, 0.15); /* cyan-500 with 15% opacity */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1E293B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0EA5E9;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #38BDF8;
+}
+
+/* Glassmorphism Card Styles */
+.glass-card {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 var(--glass-shadow);
+}
+
+.glass-card-hover {
+  transition: all 0.3s ease;
+}
+
+.glass-card-hover:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 12px 40px 0 var(--glass-shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* Performance optimization for backdrop-filter */
+.will-change-blur {
+  will-change: backdrop-filter, transform;
+}
+
+/* Accordion expand animation - optimized for performance */
+@keyframes expand {
+  from {
+    opacity: 0;
+    transform: scaleY(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.animate-expand {
+  animation: expand 0.3s ease-out;
+  transform-origin: top;
+}
+
+/* Focus indicators for accessibility */
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible,
+[role="radio"]:focus-visible {
+  outline: 2px solid var(--accent-teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
