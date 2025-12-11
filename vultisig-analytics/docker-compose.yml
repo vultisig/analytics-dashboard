@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: vultisig_postgres
+    environment:
+      POSTGRES_DB: vultisig_analytics
+      POSTGRES_USER: vultisig_user
+      POSTGRES_PASSWORD: vultisig_secure_password_123
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vultisig_user -d vultisig_analytics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

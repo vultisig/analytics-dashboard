@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VultisigAnalytics Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">
+                    <span class="logo-icon">⚡</span>
+                    VultisigAnalytics
+                </h1>
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="headerTotalVolume">$0</span>
+                        <span class="stat-label">Total Volume</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="headerTotalFees">$0</span>
+                        <span class="stat-label">Total Fees Earned</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="headerUniqueUsers">0</span>
+                        <span class="stat-label">Total Unique Users</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="controls-section">
+                <h3>Chain Selection</h3>
+                <div class="checkbox-group">
+                    <label class="checkbox-item thorchain">
+                        <input type="checkbox" id="thorchain" checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-label">THORChain</span>
+                        <span class="chain-count" id="thorchainCount">0</span>
+                    </label>
+                    <label class="checkbox-item mayachain">
+                        <input type="checkbox" id="mayachain" checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-label">MayaChain</span>
+                        <span class="chain-count" id="mayachainCount">0</span>
+                    </label>
+                    <label class="checkbox-item lifi">
+                        <input type="checkbox" id="lifi" checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-label">LiFi</span>
+                        <span class="chain-count" id="lifiCount">0</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <h3>Date Range</h3>
+                <div class="date-range">
+                    <input type="date" id="startDate" class="date-input">
+                    <span class="date-separator">to</span>
+                    <input type="date" id="endDate" class="date-input">
+                    <button id="applyDateRange" class="btn-primary">Apply</button>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <h3>Chart Granularity</h3>
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="daily">Daily</button>
+                    <button class="period-btn" data-period="weekly">Weekly</button>
+                    <button class="period-btn" data-period="monthly">Monthly</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Fees Over Time</h3>
+                    <div class="chart-controls">
+                        <button class="chart-toggle active" data-chart="fees">Fees</button>
+                        <button class="chart-toggle" data-chart="volume">Volume</button>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="feesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Chain Distribution</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Unique Addresses Over Time</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="addressesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3>Volume Distribution</h3>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="volumeDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="recent-activity">
+            <div class="activity-header">
+                <h3>Recent Activity</h3>
+                <div class="activity-filters">
+                    <select id="activityFilter" class="filter-select">
+                        <option value="all">All Chains</option>
+                        <option value="thorchain">THORChain</option>
+                        <option value="mayachain">MayaChain</option>
+                        <option value="lifi">LiFi</option>
+                    </select>
+                </div>
+            </div>
+            <div class="activity-table">
+                <table id="activityTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Chain</th>
+                            <th>Transaction</th>
+                            <th>Volume</th>
+                            <th>Fee</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityTableBody">
+                        <!-- Data will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading data...</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
