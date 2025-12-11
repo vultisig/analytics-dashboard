@@ -9,8 +9,9 @@ import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { NewUsersToggle } from '@/components/NewUsersToggle';
-import { TrendingUp, Users, Wallet } from 'lucide-react';
-import { providerColors } from '@/lib/chartStyles';
+import { ChartViewToggle } from '@/components/ChartViewToggle';
+import { TrendingUp, Users, Wallet, Info } from 'lucide-react';
+import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { SHORT_PARAMS } from '@/lib/urlParams';
@@ -33,6 +34,8 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
     const [mainChartCumulative, setMainChartCumulative] = useState(false);
     const [showNewUsersOnly, setShowNewUsersOnly] = useState(false);
     const [providerNewUsersMode, setProviderNewUsersMode] = useState<Record<string, boolean>>({});
+    const [chartView, setChartView] = useState<'provider' | 'platform'>('provider');
+    const [visiblePlatforms, setVisiblePlatforms] = useState<string[]>(['Android', 'iOS', 'Web', 'Other']);
 
     // Fetch all data in parallel when range, dates, or granularity changes
     useEffect(() => {
@@ -205,6 +208,14 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
         }));
     }, []);
 
+    const handlePlatformToggle = useCallback((platform: string) => {
+        setVisiblePlatforms(prev =>
+            prev.includes(platform)
+                ? prev.filter(p => p !== platform)
+                : [...prev, platform]
+        );
+    }, []);
+
     // Transform data to cumulative mode - memoized
     const toCumulativeData = useCallback((data: any[], keys: string[]) => {
         const cumulative: any[] = [];
@@ -236,6 +247,36 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
             default: return 'Average';
         }
     }, [granularity]);
+
+    // Process platform chart data from API (must be before early returns to follow hooks rules)
+    const platformChartData = useMemo(() => {
+        if (!allData?.usersByPlatformOverTime) return [];
+
+        const platformByDate: Record<string, any> = {};
+        allData.usersByPlatformOverTime.forEach((row: any) => {
+            const date = new Date(row.date);
+            let dateStr: string;
+            if (granularity === 'h') {
+                dateStr = date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    hour12: false
+                }).replace(',', '');
+            } else if (granularity === 'm') {
+                dateStr = date.toLocaleString('en-US', { year: 'numeric', month: 'short' });
+            } else {
+                dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+
+            if (!platformByDate[dateStr]) {
+                platformByDate[dateStr] = { date: dateStr };
+            }
+            platformByDate[dateStr][row.platform] = (platformByDate[dateStr][row.platform] || 0) + Number(row.users);
+        });
+
+        return Object.values(platformByDate);
+    }, [allData, granularity]);
 
     // Show error if we have no data at all
     if (error && !data) {
@@ -289,6 +330,22 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                                  granularity === 'w' ? 52 : 12;
     const projectedAnnualUsers = data.averageUsers * projectionMultiplier;
 
+    // Filter platform chart data based on visible platforms
+    let filteredPlatformChartData = platformChartData.map((row: any) => {
+        const filtered: any = { date: row.date };
+        visiblePlatforms.forEach(platform => {
+            if (row[platform] !== undefined) {
+                filtered[platform] = row[platform];
+            }
+        });
+        return filtered;
+    });
+
+    // Apply cumulative transformation to platform chart if enabled
+    if (mainChartCumulative) {
+        filteredPlatformChartData = toCumulativeData(filteredPlatformChartData, visiblePlatforms);
+    }
+
     return (
         <div className="space-y-6">
             {/* Hero Metrics */}
@@ -317,14 +374,32 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                 />
             </div>
 
-            {/* Provider Toggle Controls */}
-            <div className="glass-card rounded-xl p-4">
-                <ProviderToggleControl
-                    providers={data.providers}
-                    visibleProviders={visibleProviders}
-                    onToggleProvider={handleToggleProvider}
-                    colors={providerColors}
-                />
+            {/* Chart View Toggle and Show/Hide Controls */}
+            <div className="glass-card rounded-xl p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <ChartViewToggle view={chartView} onViewChange={setChartView} />
+                    {chartView === 'platform' && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <Info className="w-3.5 h-3.5" />
+                            <span>1inch data excluded (no platform info)</span>
+                        </div>
+                    )}
+                </div>
+                {chartView === 'provider' ? (
+                    <ProviderToggleControl
+                        providers={data.providers}
+                        visibleProviders={visibleProviders}
+                        onToggleProvider={handleToggleProvider}
+                        colors={providerColors}
+                    />
+                ) : (
+                    <ProviderToggleControl
+                        providers={['Android', 'iOS', 'Web', 'Other']}
+                        visibleProviders={visiblePlatforms}
+                        onToggleProvider={handlePlatformToggle}
+                        colors={[chainColorMap['android'], chainColorMap['ios'], chainColorMap['web'], '#64748B']}
+                    />
+                )}
             </div>
 
             {/* Total Unique Users Chart with Cumulative Toggle */}
@@ -332,10 +407,14 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                 <div className="flex flex-wrap justify-between items-center gap-2">
                     <div>
                         <h3 className="text-lg font-bold text-white">
-                            {showNewUsersOnly ? 'New Unique Users by Provider' : 'Total Unique Users by Provider'}
+                            {chartView === 'provider'
+                                ? (showNewUsersOnly ? 'New Unique Users by Provider' : 'Total Unique Users by Provider')
+                                : (showNewUsersOnly ? 'New Unique Users by Platform' : 'Total Unique Users by Platform')
+                            }
                         </h3>
                         <p className="text-sm text-slate-400">
                             {showNewUsersOnly ? 'First-time users only' : getGranularityLabel() + ' breakdown'}
+                            {chartView === 'platform' ? ' (excludes 1inch)' : ''}
                         </p>
                     </div>
                     <div className="flex items-center gap-3 md:gap-4">
@@ -349,14 +428,25 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                         />
                     </div>
                 </div>
-                <StackedBarChart
-                    title=""
-                    subtitle=""
-                    data={filteredChartData}
-                    keys={filteredProviders}
-                    colors={providerColors}
-                    currency={false}
-                />
+                {chartView === 'provider' ? (
+                    <StackedBarChart
+                        title=""
+                        subtitle=""
+                        data={filteredChartData}
+                        keys={filteredProviders}
+                        colors={providerColors}
+                        currency={false}
+                    />
+                ) : (
+                    <StackedBarChart
+                        title=""
+                        subtitle=""
+                        data={filteredPlatformChartData}
+                        keys={visiblePlatforms}
+                        colors={visiblePlatforms.map(p => chainColorMap[p.toLowerCase()] || '#64748B')}
+                        currency={false}
+                    />
+                )}
             </div>
 
             {/* Provider Sections */}

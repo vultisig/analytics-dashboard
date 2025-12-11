@@ -178,6 +178,47 @@ export async function GET(request: NextRequest) {
       parseFloat(b.value) - parseFloat(a.value)
     );
 
+    // 3b. Revenue by Platform Over Time (excludes 1inch which has no platform data)
+    const platformRevenueTimeQuery = `
+      SELECT
+        to_char(date_trunc('${dateTruncParam}', ${dateField}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        SUM(affiliate_fee_usd) as revenue
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1, 2
+      ORDER BY 1 ASC
+    `;
+
+    const platformRevenueTimeRes = await client.query(platformRevenueTimeQuery);
+    const revenueByPlatformOverTime = platformRevenueTimeRes.rows;
+
+    // 3c. Total Revenue by Platform
+    const platformRevenueTotalQuery = `
+      SELECT
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        SUM(affiliate_fee_usd) as total_revenue
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1
+      ORDER BY total_revenue DESC
+    `;
+
+    const platformRevenueTotalRes = await client.query(platformRevenueTotalQuery);
+    const revenueByPlatform = platformRevenueTotalRes.rows;
+
     // 4. Top 10 Swap Paths by Provider (filtered by date range)
     // Get top 10 paths PER PROVIDER (not globally)
     const swapsPathsQuery = `
@@ -270,7 +311,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       totalRevenue,
       revenueOverTime,
+      revenueByPlatformOverTime,
       revenueByProvider,
+      revenueByPlatform,
       topPaths,
       providerData
     });

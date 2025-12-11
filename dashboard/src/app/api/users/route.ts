@@ -175,6 +175,43 @@ export async function GET(request: NextRequest) {
     `;
     const swapCountByPlatform = await client.query(swapCountByPlatformQuery);
 
+    // 3c. Users by Platform Over Time (excludes 1inch which has no platform data)
+    const usersByPlatformOverTimeQuery = `
+      SELECT
+        to_char(date_trunc('${dateTruncParam}', ${dateFieldSwaps}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        COUNT(DISTINCT user_address) as users
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1, 2
+      ORDER BY 1 ASC
+    `;
+    const usersByPlatformOverTime = await client.query(usersByPlatformOverTimeQuery);
+
+    // 3d. Total Users by Platform (normalized)
+    const usersByPlatformNormalizedQuery = `
+      SELECT
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        COUNT(DISTINCT user_address) as total_users
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1
+      ORDER BY total_users DESC
+    `;
+    const usersByPlatformNormalized = await client.query(usersByPlatformNormalizedQuery);
+
     // 4. Swappers by Provider (Total) - filtered by date range
     const usersByProviderQuery = `
       SELECT
@@ -266,7 +303,9 @@ export async function GET(request: NextRequest) {
       usersByPlatform: usersByPlatform.rows,
       swapCountByPlatform: swapCountByPlatform.rows,
       usersByProvider: usersByProvider.rows,
-      swapCountByProvider: swapCountByProvider.rows
+      swapCountByProvider: swapCountByProvider.rows,
+      usersByPlatformOverTime: usersByPlatformOverTime.rows,
+      usersByPlatformNormalized: usersByPlatformNormalized.rows
     });
 
   } catch (error) {

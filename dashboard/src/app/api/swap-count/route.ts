@@ -149,6 +149,27 @@ export async function GET(request: NextRequest) {
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
+    // 2b. Count by Platform Over Time (excludes 1inch - no platform data)
+    const countByPlatformOverTimeQuery = `
+      SELECT
+        date_trunc('${dateTruncParam}', ${dateField}) as time_period,
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' OR LOWER(COALESCE(platform, '')) LIKE '%iphone%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' OR LOWER(COALESCE(platform, '')) LIKE '%desktop%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        COUNT(*) as count
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1, 2
+      ORDER BY 1 ASC
+    `;
+
+    const countByPlatformOverTimeRes = await client.query(countByPlatformOverTimeQuery);
+    const countByPlatformOverTime = countByPlatformOverTimeRes.rows;
+
     // 3. Total Count by Provider (Pie/Metrics) - filtered by date range
     const swapsByProviderQuery = `
       SELECT
@@ -274,6 +295,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       totalCount,
       countOverTime,
+      countByPlatformOverTime,
       countByProvider,
       topPaths,
       providerData

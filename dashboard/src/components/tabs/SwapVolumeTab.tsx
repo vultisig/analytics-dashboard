@@ -9,8 +9,9 @@ import { ProviderSection } from '@/components/ProviderSection';
 import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
-import { TrendingUp, DollarSign, Wallet } from 'lucide-react';
-import { providerColors } from '@/lib/chartStyles';
+import { ChartViewToggle } from '@/components/ChartViewToggle';
+import { TrendingUp, DollarSign, Wallet, Info } from 'lucide-react';
+import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { SHORT_PARAMS } from '@/lib/urlParams';
@@ -31,6 +32,8 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
     const [providerData, setProviderData] = useState<Record<string, any>>({});
     const [cumulativeMode, setCumulativeMode] = useState<Record<string, boolean>>({});
     const [mainChartCumulative, setMainChartCumulative] = useState(false);
+    const [chartView, setChartView] = useState<'provider' | 'platform'>('provider');
+    const [visiblePlatforms, setVisiblePlatforms] = useState<string[]>(['Android', 'iOS', 'Web', 'Other']);
 
     // Fetch all data in parallel when range, dates, or granularity changes
     useEffect(() => {
@@ -206,6 +209,14 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
         }));
     }, []);
 
+    const handlePlatformToggle = useCallback((platform: string) => {
+        setVisiblePlatforms(prev =>
+            prev.includes(platform)
+                ? prev.filter(p => p !== platform)
+                : [...prev, platform]
+        );
+    }, []);
+
     // Transform data to cumulative mode - memoized
     const toCumulativeData = useCallback((data: any[], keys: string[]) => {
         const cumulative: any[] = [];
@@ -237,6 +248,36 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
             default: return 'Average';
         }
     }, [granularity]);
+
+    // Process platform chart data from API (must be before early returns to follow hooks rules)
+    const platformChartData = useMemo(() => {
+        if (!allData?.volumeByPlatformOverTime) return [];
+
+        const platformByDate: Record<string, any> = {};
+        allData.volumeByPlatformOverTime.forEach((row: any) => {
+            const date = new Date(row.time_period);
+            let dateStr: string;
+            if (granularity === 'h') {
+                dateStr = date.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    hour12: false
+                }).replace(',', '');
+            } else if (granularity === 'm') {
+                dateStr = date.toLocaleString('en-US', { year: 'numeric', month: 'short' });
+            } else {
+                dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+
+            if (!platformByDate[dateStr]) {
+                platformByDate[dateStr] = { date: dateStr };
+            }
+            platformByDate[dateStr][row.platform] = (platformByDate[dateStr][row.platform] || 0) + Number(row.volume);
+        });
+
+        return Object.values(platformByDate);
+    }, [allData, granularity]);
 
     // Show error if we have no data at all
     if (error && !data) {
@@ -290,6 +331,22 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                                  granularity === 'w' ? 52 : 12;
     const projectedAnnualVolume = data.averageVolume * projectionMultiplier;
 
+    // Filter platform chart data based on visible platforms
+    let filteredPlatformChartData = platformChartData.map((row: any) => {
+        const filtered: any = { date: row.date };
+        visiblePlatforms.forEach(platform => {
+            if (row[platform] !== undefined) {
+                filtered[platform] = row[platform];
+            }
+        });
+        return filtered;
+    });
+
+    // Apply cumulative transformation to platform chart if enabled
+    if (mainChartCumulative) {
+        filteredPlatformChartData = toCumulativeData(filteredPlatformChartData, visiblePlatforms);
+    }
+
     return (
         <div className="space-y-6">
             {/* Hero Metrics */}
@@ -318,36 +375,69 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                 />
             </div>
 
-            {/* Provider Toggle Controls */}
-            <div className="glass-card rounded-xl p-4">
-                <ProviderToggleControl
-                    providers={data.providers}
-                    visibleProviders={visibleProviders}
-                    onToggleProvider={handleToggleProvider}
-                    colors={providerColors}
-                />
+            {/* Chart View Toggle and Show/Hide Controls */}
+            <div className="glass-card rounded-xl p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <ChartViewToggle view={chartView} onViewChange={setChartView} />
+                    {chartView === 'platform' && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <Info className="w-3.5 h-3.5" />
+                            <span>1inch data excluded (no platform info)</span>
+                        </div>
+                    )}
+                </div>
+                {chartView === 'provider' ? (
+                    <ProviderToggleControl
+                        providers={data.providers}
+                        visibleProviders={visibleProviders}
+                        onToggleProvider={handleToggleProvider}
+                        colors={providerColors}
+                    />
+                ) : (
+                    <ProviderToggleControl
+                        providers={['Android', 'iOS', 'Web', 'Other']}
+                        visibleProviders={visiblePlatforms}
+                        onToggleProvider={handlePlatformToggle}
+                        colors={[chainColorMap['android'], chainColorMap['ios'], chainColorMap['web'], '#64748B']}
+                    />
+                )}
             </div>
 
             {/* Total Swap Volume Chart with Cumulative Toggle */}
             <div className="glass-card rounded-xl p-6 space-y-4">
                 <div className="flex flex-wrap justify-between items-center gap-2">
                     <div>
-                        <h3 className="text-lg font-bold text-white">Total Swap Volume by Provider</h3>
-                        <p className="text-sm text-slate-400">{getGranularityLabel()} breakdown</p>
+                        <h3 className="text-lg font-bold text-white">
+                            {chartView === 'provider' ? 'Total Swap Volume by Provider' : 'Total Swap Volume by Platform'}
+                        </h3>
+                        <p className="text-sm text-slate-400">
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' (excludes 1inch)' : ''}
+                        </p>
                     </div>
                     <CumulativeToggle
                         enabled={mainChartCumulative}
                         onToggle={setMainChartCumulative}
                     />
                 </div>
-                <StackedBarChart
-                    title=""
-                    subtitle=""
-                    data={filteredChartData}
-                    keys={filteredProviders}
-                    colors={providerColors}
-                    currency={true}
-                />
+                {chartView === 'provider' ? (
+                    <StackedBarChart
+                        title=""
+                        subtitle=""
+                        data={filteredChartData}
+                        keys={filteredProviders}
+                        colors={providerColors}
+                        currency={true}
+                    />
+                ) : (
+                    <StackedBarChart
+                        title=""
+                        subtitle=""
+                        data={filteredPlatformChartData}
+                        keys={visiblePlatforms}
+                        colors={visiblePlatforms.map(p => chainColorMap[p.toLowerCase()] || '#64748B')}
+                        currency={true}
+                    />
+                )}
             </div>
 
             {/* Provider Sections */}

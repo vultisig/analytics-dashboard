@@ -9,8 +9,9 @@ import { ProviderSection } from '@/components/ProviderSection';
 import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
-import { TrendingUp, Hash, Wallet } from 'lucide-react';
-import { providerColors } from '@/lib/chartStyles';
+import { TrendingUp, Hash, Wallet, Info } from 'lucide-react';
+import { providerColors, chainColorMap } from '@/lib/chartStyles';
+import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { SHORT_PARAMS } from '@/lib/urlParams';
@@ -31,6 +32,8 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
     const [providerData, setProviderData] = useState<Record<string, any>>({});
     const [cumulativeMode, setCumulativeMode] = useState<Record<string, boolean>>({});
     const [mainChartCumulative, setMainChartCumulative] = useState(false);
+    const [chartView, setChartView] = useState<'provider' | 'platform'>('provider');
+    const [visiblePlatforms, setVisiblePlatforms] = useState<string[]>(['Android', 'iOS', 'Web', 'Other']);
 
     // Fetch all data in parallel when range, dates, or granularity changes
     useEffect(() => {
@@ -206,6 +209,14 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
         }));
     }, []);
 
+    const handlePlatformToggle = useCallback((platform: string) => {
+        setVisiblePlatforms(prev =>
+            prev.includes(platform)
+                ? prev.filter(p => p !== platform)
+                : [...prev, platform]
+        );
+    }, []);
+
     // Transform data to cumulative mode - memoized
     const toCumulativeData = useCallback((data: any[], keys: string[]) => {
         const cumulative: any[] = [];
@@ -237,6 +248,36 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
             default: return 'Average';
         }
     }, [granularity]);
+
+    // Platform chart data (must be before early returns for hooks rules)
+    const platformChartData = useMemo(() => {
+        if (!allData?.countByPlatformOverTime) return [];
+        const platformByDate: Record<string, any> = {};
+
+        allData.countByPlatformOverTime.forEach((row: any) => {
+            const date = new Date(row.time_period);
+            let dateStr: string;
+
+            if (granularity === 'h') {
+                dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
+            } else if (granularity === 'w') {
+                const weekStart = new Date(date);
+                weekStart.setDate(date.getDate() - date.getDay());
+                dateStr = weekStart.toISOString().split('T')[0];
+            } else if (granularity === 'm') {
+                dateStr = date.toISOString().slice(0, 7);
+            } else {
+                dateStr = date.toISOString().split('T')[0];
+            }
+
+            if (!platformByDate[dateStr]) {
+                platformByDate[dateStr] = { date: dateStr, Android: 0, iOS: 0, Web: 0, Other: 0 };
+            }
+            platformByDate[dateStr][row.platform] = (platformByDate[dateStr][row.platform] || 0) + Number(row.count);
+        });
+
+        return Object.values(platformByDate);
+    }, [allData, granularity]);
 
     // Show error if we have no data at all
     if (error && !data) {
@@ -318,21 +359,41 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                 />
             </div>
 
-            {/* Provider Toggle Controls */}
-            <div className="glass-card rounded-xl p-4">
-                <ProviderToggleControl
-                    providers={data.providers}
-                    visibleProviders={visibleProviders}
-                    onToggleProvider={handleToggleProvider}
-                    colors={providerColors}
-                />
+            {/* Chart View Toggle and Provider/Platform Controls */}
+            <div className="glass-card rounded-xl p-4 space-y-4">
+                <div className="flex flex-wrap items-center gap-4">
+                    <ChartViewToggle view={chartView} onViewChange={setChartView} />
+                    {chartView === 'platform' && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <Info className="w-3.5 h-3.5" />
+                            <span>1inch data excluded (no platform info)</span>
+                        </div>
+                    )}
+                </div>
+                {chartView === 'provider' ? (
+                    <ProviderToggleControl
+                        providers={data.providers}
+                        visibleProviders={visibleProviders}
+                        onToggleProvider={handleToggleProvider}
+                        colors={providerColors}
+                    />
+                ) : (
+                    <ProviderToggleControl
+                        providers={['Android', 'iOS', 'Web', 'Other']}
+                        visibleProviders={visiblePlatforms}
+                        onToggleProvider={handlePlatformToggle}
+                        colors={chainColorMap}
+                    />
+                )}
             </div>
 
             {/* Total Swap Count Chart with Cumulative Toggle */}
             <div className="glass-card rounded-xl p-6 space-y-4">
                 <div className="flex flex-wrap justify-between items-center gap-2">
                     <div>
-                        <h3 className="text-lg font-bold text-white">Total Swap Count by Provider</h3>
+                        <h3 className="text-lg font-bold text-white">
+                            Total Swap Count by {chartView === 'provider' ? 'Provider' : 'Platform'}
+                        </h3>
                         <p className="text-sm text-slate-400">{getGranularityLabel()} breakdown</p>
                     </div>
                     <CumulativeToggle
@@ -340,14 +401,40 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                         onToggle={setMainChartCumulative}
                     />
                 </div>
-                <StackedBarChart
-                    title=""
-                    subtitle=""
-                    data={filteredChartData}
-                    keys={filteredProviders}
-                    colors={providerColors}
-                    currency={false}
-                />
+                {chartView === 'provider' ? (
+                    <StackedBarChart
+                        title=""
+                        subtitle=""
+                        data={filteredChartData}
+                        keys={filteredProviders}
+                        colors={providerColors}
+                        currency={false}
+                    />
+                ) : (
+                    (() => {
+                        const filteredPlatforms = ['Android', 'iOS', 'Web', 'Other'].filter(p => visiblePlatforms.includes(p));
+                        let platformData = platformChartData.map(item => {
+                            const filtered: any = { date: item.date };
+                            filteredPlatforms.forEach(platform => {
+                                filtered[platform] = item[platform] || 0;
+                            });
+                            return filtered;
+                        });
+                        if (mainChartCumulative) {
+                            platformData = toCumulativeData(platformData, filteredPlatforms);
+                        }
+                        return (
+                            <StackedBarChart
+                                title=""
+                                subtitle=""
+                                data={platformData}
+                                keys={filteredPlatforms}
+                                colors={chainColorMap}
+                                currency={false}
+                            />
+                        );
+                    })()
+                )}
             </div>
 
             {/* Provider Sections */}

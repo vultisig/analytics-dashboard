@@ -251,6 +251,49 @@ export async function GET(request: NextRequest) {
       parseFloat(b.total_volume) - parseFloat(a.total_volume)
     );
 
+    // 3b. Volume by Platform Over Time (excludes 1inch which has no platform data)
+    // Normalize platform names to Android, iOS, Web
+    const platformTimeQuery = `
+      SELECT
+        DATE_TRUNC('${effectiveGranularity}', ${dateField}) as time_period,
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        SUM(in_amount_usd) as volume
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY time_period, 2
+      ORDER BY time_period ASC
+    `;
+
+    const platformTimeRes = await client.query(platformTimeQuery);
+    const volumeByPlatformOverTime = platformTimeRes.rows;
+
+    // 3c. Total Volume by Platform
+    const platformTotalQuery = `
+      SELECT
+        CASE
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%android%' THEN 'Android'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%ios%' THEN 'iOS'
+          WHEN LOWER(COALESCE(platform, '')) LIKE '%web%' THEN 'Web'
+          ELSE 'Other'
+        END as platform,
+        SUM(in_amount_usd) as total_volume,
+        COUNT(*) as swap_count
+      FROM swaps
+      WHERE source != '1inch'
+        ${dateFilter}
+      GROUP BY 1
+      ORDER BY total_volume DESC
+    `;
+
+    const platformTotalRes = await client.query(platformTotalQuery);
+    const volumeByPlatform = platformTotalRes.rows;
+
     // 4. Top 10 Swap Paths by Provider (filtered by date range)
     // Get top 10 paths PER PROVIDER (not globally)
     const swapsPathsQuery = `
@@ -351,7 +394,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       globalStats,
       volumeOverTime,
+      volumeByPlatformOverTime,
       volumeByProvider,
+      volumeByPlatform,
       topPaths,
       providerData,
       metadata: {
