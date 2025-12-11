@@ -92,7 +92,9 @@ class SyncService:
             total_processed = 0
             pages_processed = 0
             found_existing_data = False
-            
+            max_pages = 10  # Limit pages per sync to avoid infinite pagination
+            consecutive_zero_inserts = 0  # Track consecutive pages with no new data
+
             while True:
                 try:
                     # Fetch data
@@ -130,17 +132,30 @@ class SyncService:
                         total_processed += inserted_count
                         logger.info(f"Inserted {inserted_count} swaps from page {pages_processed + 1}")
 
+                        # Track consecutive zero inserts (all duplicates)
+                        if inserted_count == 0:
+                            consecutive_zero_inserts += 1
+                            if consecutive_zero_inserts >= 3:
+                                logger.info(f"3 consecutive pages with no new data, stopping sync for {source_name}")
+                                break
+                        else:
+                            consecutive_zero_inserts = 0
+
                         # Track latest data timestamp (most recent transaction)
-                        if pages_processed == 0 and swap_records:
+                        if pages_processed == 0:
                             # First page has the newest data
                             latest_data_ts = swap_records[0].get('timestamp')
-                            if not latest_data_ts and swap_records:
+                            if not latest_data_ts:
                                 # Fallback: find max timestamp in first batch
                                 timestamps = [s.get('timestamp') for s in swap_records if s.get('timestamp')]
                                 latest_data_ts = max(timestamps) if timestamps else None
                         else:
                             latest_data_ts = None
                     else:
+                        consecutive_zero_inserts += 1
+                        if consecutive_zero_inserts >= 3:
+                            logger.info(f"3 consecutive pages with no new data, stopping sync for {source_name}")
+                            break
                         latest_data_ts = None
 
                     # Update sync status - handle different pagination formats
@@ -165,10 +180,15 @@ class SyncService:
                     
                     if not next_token:
                         break
-                    
+
                     next_page_token = next_token
                     pages_processed += 1
-                    
+
+                    # Stop if we've reached max pages
+                    if pages_processed >= max_pages:
+                        logger.info(f"Reached max pages ({max_pages}) for {source_name}, stopping")
+                        break
+
                     # Add delay between requests
                     time.sleep(2)
                     

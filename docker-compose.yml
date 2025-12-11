@@ -54,7 +54,7 @@ services:
       dockerfile: Dockerfile
     container_name: vultisig_dashboard
     environment:
-      DATABASE_URL: postgresql://vultisig_user:vultisig_secure_password_123@postgres:5432/vultisig_analytics
+      DATABASE_URL: postgresql://vultisig_user:vultisig_secure_password_123@postgres:5432/vultisig_analytics?sslmode=disable
       NEXT_PUBLIC_API_URL: http://backend:8080
     ports:
       - "3000:3000"
@@ -65,9 +65,31 @@ services:
     networks:
       - vultisig-network
 
+  # Sync Service (Continuous Data Ingestion)
+  sync:
+    build:
+      context: ./vultisig-analytics
+      dockerfile: Dockerfile.sync
+    container_name: vultisig_sync
+    environment:
+      DATABASE_URL: postgresql://vultisig_user:vultisig_secure_password_123@postgres:5432/vultisig_analytics
+      ONEINCH_API_KEY: ${ONEINCH_API_KEY:-HQV2yFppsyX3ovyeLfYkTxb474zpDYhm}
+      ARKHAM_API_KEY: ${ARKHAM_API_KEY:-8538a576-ae75-4284-8bdf-5b5ff6dff2d5}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-EVDFS4EDIV6NTTD55C37W6M5FG79M5311S}
+      INFURA_API_KEY: ${INFURA_API_KEY:-cbb29c355b6949da8ca4785e5ac66bff}
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-CHcp7C4G1NyNH_A_R-f6R}
+      LIFI_API_KEY: ${LIFI_API_KEY:-5a3da278-719e-4a3e-bb26-6db9c49f4f28.d20d1d82-6e6c-434f-a68f-c3e5282063bf}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vultisig-network
+
 volumes:
   postgres_data:
-    driver: local
+    external: true
+    name: vultisig-analytics_postgres_data
 
 networks:
   vultisig-network:

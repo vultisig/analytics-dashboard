@@ -6,7 +6,7 @@ Provides REST endpoints for the frontend dashboard
 import logging
 from datetime import datetime
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from database.connection import db_manager
@@ -16,15 +16,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
-
-# Serve frontend files
-@app.route('/')
-def serve_index():
-    return send_from_directory('frontend', 'index.html')
-
-@app.route('/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('frontend', filename)
 
 @app.route('/api/summary')
 def get_summary():
