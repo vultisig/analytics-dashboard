@@ -218,14 +218,10 @@ class THORChainIngestor(BaseIngestor):
             # Classify volume
             volume_tier = self.classify_volume_tier(in_amount_usd)
 
-            # NEW: Filter Vultisig-specific affiliate addresses
-            vultisig_affiliates = [a for a in affiliate_addresses if a.lower() in ['vi', 'va', 'v0']]
-
-            # CRITICAL FIX: Always store the BPS value that was actually used for calculation
-            # Previously, empty vultisig_affiliates list would result in NULL storage
-            # even though vultisig_bps was used for fee calculation
-            affiliate_addresses_to_store = vultisig_affiliates if vultisig_affiliates else [vultisig_code]
-            affiliate_fees_bps_to_store = affiliate_fees_bps[:len(vultisig_affiliates)] if vultisig_affiliates and affiliate_fees_bps else [vultisig_bps]
+            # Store ALL affiliate addresses (referrer + Vultisig) for referral tracking
+            # This enables tracking of nested/dual affiliates like "VALT/vi" with BPS "10/35"
+            affiliate_addresses_to_store = affiliate_addresses if affiliate_addresses else [vultisig_code]
+            affiliate_fees_bps_to_store = affiliate_fees_bps if affiliate_fees_bps else [vultisig_bps]
 
             return {
                 # Existing fields

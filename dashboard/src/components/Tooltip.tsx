@@ -7,9 +7,10 @@ interface TooltipProps {
     content: string | ReactNode;
     children?: ReactNode;
     iconOnly?: boolean;
+    interactive?: boolean;
 }
 
-export function Tooltip({ content, children, iconOnly = false }: TooltipProps) {
+export function Tooltip({ content, children, iconOnly = false, interactive = false }: TooltipProps) {
     const [isVisible, setIsVisible] = useState(false);
 
     const trigger = iconOnly ? (
@@ -17,9 +18,9 @@ export function Tooltip({ content, children, iconOnly = false }: TooltipProps) {
             type="button"
             className="inline-flex items-center justify-center text-slate-400 hover:text-slate-300 transition-colors"
             onMouseEnter={() => setIsVisible(true)}
-            onMouseLeave={() => setIsVisible(false)}
+            onMouseLeave={() => !interactive && setIsVisible(false)}
             onFocus={() => setIsVisible(true)}
-            onBlur={() => setIsVisible(false)}
+            onBlur={() => !interactive && setIsVisible(false)}
         >
             <Info className="w-4 h-4" />
         </button>
@@ -36,7 +37,7 @@ export function Tooltip({ content, children, iconOnly = false }: TooltipProps) {
             {trigger}
 
             {isVisible && (
-                <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900/95 backdrop-blur-sm border border-slate-700/50 rounded-lg shadow-xl text-sm text-slate-200 whitespace-nowrap pointer-events-none animate-in fade-in duration-200">
+                <div className={`absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900/95 backdrop-blur-sm border border-slate-700/50 rounded-lg shadow-xl text-sm text-slate-200 whitespace-nowrap animate-in fade-in duration-200 ${interactive ? '' : 'pointer-events-none'}`}>
                     {content}
                     <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
                         <div className="border-4 border-transparent border-t-slate-900/95" />

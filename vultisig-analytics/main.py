@@ -10,6 +10,7 @@ from ingestors.thorchain import THORChainIngestor
 from ingestors.mayachain import MayaChainIngestor
 from ingestors.lifi import LiFiIngestor
 from ingestors.arkham_ingestor import ArkhamIngestor
+from ingestors.vult_holders import VultHoldersIngestor
 
 # Setup logging
 logging.basicConfig(
@@ -233,15 +234,46 @@ class SyncService:
 
         logger.info("Completed parallel sync for all sources")
 
+def sync_vult_holders():
+    """Sync VULT token holder data (runs daily)"""
+    logger.info("Starting VULT holders daily sync")
+    try:
+        ingestor = VultHoldersIngestor()
+        ingestor.ingest()
+        logger.info("✅ VULT holders sync completed")
+    except Exception as e:
+        logger.error(f"❌ VULT holders sync failed: {e}")
+
+
 def main():
     sync_service = SyncService()
-    
-    # Schedule sync every N minutes (configurable)
+
+    # Schedule swap data sync every N minutes (configurable)
     schedule.every(config.SYNC_INTERVAL_MINUTES).minutes.do(sync_service.sync_all_sources)
-    
-    # Run initial sync
+
+    # Schedule VULT holders sync daily at UTC 00:00
+    schedule.every().day.at("00:00").do(sync_vult_holders)
+
+    # Run initial sync for swap data
     sync_service.sync_all_sources()
-    
+
+    # Run initial VULT holders sync if data is stale (more than 24h old)
+    try:
+        from database.connection import db_manager
+        cursor = db_manager.conn.cursor()
+        cursor.execute("SELECT value FROM vult_holders_metadata WHERE key = 'last_updated'")
+        result = cursor.fetchone()
+        if result:
+            last_updated = datetime.fromisoformat(result[0].replace('Z', '+00:00'))
+            if datetime.now(last_updated.tzinfo) - last_updated > timedelta(hours=24):
+                logger.info("VULT holders data is stale (>24h), running initial sync")
+                sync_vult_holders()
+        else:
+            logger.info("No VULT holders data found, running initial sync")
+            sync_vult_holders()
+    except Exception as e:
+        logger.warning(f"Could not check VULT holders staleness: {e}")
+
     # Keep running
     while True:
         schedule.run_pending()

@@ -70,3 +70,6 @@ Thumbs.db
 *.pem
 *.key
 credentials.json
+
+# Temporary comparison files
+fee_revenue_by_thorname*.csv

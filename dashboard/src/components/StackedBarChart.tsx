@@ -10,7 +10,7 @@ interface StackedBarChartProps {
     subtitle?: string;
     data: any[];
     keys: string[];
-    colors: string[];
+    colors: string[] | Record<string, string>;
     xAxisKey?: string;
     height?: number;
     currency?: boolean;

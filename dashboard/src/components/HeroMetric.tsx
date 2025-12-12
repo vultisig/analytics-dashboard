@@ -14,7 +14,7 @@ interface HeroMetricProps {
         direction: 'up' | 'down';
     };
     color?: 'cyan' | 'blue' | 'teal' | 'purple';
-    format?: 'currency' | 'number';
+    format?: 'currency' | 'number' | 'percent';
     size?: 'default' | 'large';
     tooltip?: string;
 }
@@ -75,6 +75,14 @@ export function HeroMetric({
 
     // Smart formatting: use M for millions, K for thousands
     const getFormattedValue = () => {
+        // For percentages, show with 1 decimal and % suffix
+        if (format === 'percent') {
+            return {
+                end: value,
+                suffix: '%',
+                decimals: 1
+            };
+        }
         if (value >= 1000000) {
             return {
                 end: value / 1000000,

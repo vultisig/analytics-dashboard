@@ -9,7 +9,15 @@ interface ProviderToggleControlProps {
     providers: string[];
     visibleProviders: string[];
     onToggleProvider: (provider: string) => void;
-    colors: string[];
+    colors: string[] | Record<string, string>;
+}
+
+// Helper to get color from either array or object
+function getColor(colors: string[] | Record<string, string>, provider: string, index: number): string {
+    if (Array.isArray(colors)) {
+        return colors[index % colors.length];
+    }
+    return colors[provider.toLowerCase()] || colors[provider] || '#64748b';
 }
 
 export function ProviderToggleControl({
@@ -23,7 +31,7 @@ export function ProviderToggleControl({
             <span className="text-[10px] md:text-xs font-medium text-slate-400 mr-1 md:mr-2">Show/Hide:</span>
             {providers.map((provider, index) => {
                 const isVisible = visibleProviders.includes(provider);
-                const color = providerColorMap[provider.toLowerCase()] || colors[index % colors.length];
+                const color = providerColorMap[provider.toLowerCase()] || getColor(colors, provider, index);
 
                 return (
                     <button

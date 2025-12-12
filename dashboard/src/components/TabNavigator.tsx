@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LayoutDashboard, ArrowRightLeft, Wallet, Users, Hash } from 'lucide-react';
+import { LayoutDashboard, ArrowRightLeft, Wallet, Users, Hash, UserPlus, Gem } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
@@ -17,6 +17,8 @@ const tabs: Tab[] = [
   { id: SHORT_VALUES.TAB_REVENUE, label: 'Revenue', icon: Wallet },
   { id: SHORT_VALUES.TAB_USERS, label: 'Users', icon: Users },
   { id: SHORT_VALUES.TAB_COUNT, label: 'Count', icon: Hash },
+  { id: SHORT_VALUES.TAB_REFERRALS, label: 'Referrals', icon: UserPlus },
+  { id: SHORT_VALUES.TAB_HOLDERS, label: 'Holders', icon: Gem },
 ];
 
 export function TabNavigator() {
@@ -78,16 +80,17 @@ export function TabNavigator() {
             onClick={() => handleTabChange(tab.id)}
             onKeyDown={(e) => handleKeyDown(e, tab.id, index)}
             className={`
-              flex items-center justify-center gap-1 md:gap-2 px-1.5 sm:px-2 md:px-4 py-1.5 md:py-2.5 rounded-md text-[11px] sm:text-xs md:text-sm font-medium
-              transition-all shrink min-w-0
+              flex items-center justify-center gap-1 md:gap-2 px-2 md:px-4 py-1.5 md:py-2.5 rounded-md text-[11px] sm:text-xs md:text-sm font-medium
+              transition-all shrink-0
               ${isActive
                 ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/50'
                 : 'text-slate-400 hover:text-white hover:bg-white/5'
               }
             `}
           >
-            <Icon className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
-            <span className="truncate">{tab.label}</span>
+            <Icon className="w-4 h-4 shrink-0" />
+            {/* On mobile: only show label for active tab. On md+: always show label */}
+            <span className={`${isActive ? 'inline' : 'hidden'} md:inline`}>{tab.label}</span>
           </button>
         );
       })}

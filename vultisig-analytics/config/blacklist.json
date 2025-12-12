@@ -1,0 +1,37 @@
+{
+  "description": "Addresses excluded from VULT holder tier calculations",
+  "blacklist": [
+    {
+      "address": "0xb788144df611029c60b859df47e79b7726c4deba",
+      "description": "VULT Token Contract"
+    },
+    {
+      "address": "0x000000000000000000000000000000000000dead",
+      "description": "Burn Address"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000000000",
+      "description": "Zero Address"
+    },
+    {
+      "address": "0x6Df52cC6E2E6f6531E4ceB4b083CF49864A89020",
+      "description": "Uniswap VULT/USDC"
+    },
+    {
+      "address": "0xedec8b375f256b7cf34f0b0d85a13e7b2e3f46af",
+      "description": "Uniswap VULT/ETH"
+    },
+    {
+      "address": "0x7c0a2cd211c2112e8463c3c3aa9ebe62480bc17a",
+      "description": "Vultisig Deployer"
+    },
+    {
+      "address": "0x643c20eb750ccb4d11d458a578be6530719dbccc",
+      "description": "Treasury"
+    },
+    {
+      "address": "0x1bff6b5fa1323674127756ee3cbb5f54aac4e7e3",
+      "description": "Kraken"
+    }
+  ]
+}

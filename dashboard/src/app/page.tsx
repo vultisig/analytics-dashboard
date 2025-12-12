@@ -11,6 +11,8 @@ import { SwapVolumeTab } from '@/components/tabs/SwapVolumeTab';
 import { RevenueTab } from '@/components/tabs/RevenueTab';
 import { UsersTab } from '@/components/tabs/UsersTab';
 import { CountTab } from '@/components/tabs/CountTab';
+import { ReferralsTab } from '@/components/tabs/ReferralsTab';
+import { HoldersTab } from '@/components/tabs/HoldersTab';
 import { getParam, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
 function DashboardContent() {
@@ -80,17 +82,19 @@ function DashboardContent() {
           {/* Tab Navigator */}
           <TabNavigator />
 
-          {/* Controls */}
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <DateRangeSelector />
-            <div className="flex items-center gap-2">
-              <GranularitySelector />
-              {/* Loading spinner - stays inline with granularity selector */}
-              {showLoader && (
-                <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-              )}
+          {/* Controls - hidden on Holders tab which doesn't use date ranges */}
+          {activeTab !== SHORT_VALUES.TAB_HOLDERS && (
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+              <DateRangeSelector />
+              <div className="flex items-center gap-2">
+                <GranularitySelector />
+                {/* Loading spinner - stays inline with granularity selector */}
+                {showLoader && (
+                  <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -138,6 +142,19 @@ function DashboardContent() {
               endDate={endDate}
               granularity={granularity}
             />
+          )}
+
+          {activeTab === SHORT_VALUES.TAB_REFERRALS && (
+            <ReferralsTab
+              range={range}
+              startDate={startDate}
+              endDate={endDate}
+              granularity={granularity}
+            />
+          )}
+
+          {activeTab === SHORT_VALUES.TAB_HOLDERS && (
+            <HoldersTab />
           )}
         </div>
       </main>
