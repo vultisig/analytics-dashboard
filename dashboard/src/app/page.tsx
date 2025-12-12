@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useTransition, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import SystemStatus from '@/components/SystemStatus';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
@@ -38,7 +38,6 @@ function DashboardContent() {
   const granularity = granularityParam || defaultGranularity;
 
   // Track if we're loading data due to param changes
-  const [isTransitioning, setIsTransitioning] = useTransition();
   const prevParams = useRef<string>('');
   const [showLoader, setShowLoader] = useState(false);
 
@@ -85,14 +84,23 @@ function DashboardContent() {
           {/* Controls - hidden on Holders tab which doesn't use date ranges */}
           {activeTab !== SHORT_VALUES.TAB_HOLDERS && (
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-              <DateRangeSelector />
               <div className="flex items-center gap-2">
-                <GranularitySelector />
-                {/* Loading spinner - stays inline with granularity selector */}
-                {showLoader && (
+                <DateRangeSelector />
+                {/* Loading spinner - shown next to date selector on Referrals tab */}
+                {activeTab === SHORT_VALUES.TAB_REFERRALS && showLoader && (
                   <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
                 )}
               </div>
+              {/* Granularity selector - hidden on Referrals tab */}
+              {activeTab !== SHORT_VALUES.TAB_REFERRALS && (
+                <div className="flex items-center gap-2">
+                  <GranularitySelector />
+                  {/* Loading spinner - stays inline with granularity selector */}
+                  {showLoader && (
+                    <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
