@@ -1,0 +1,30 @@
+# ConfigMap for non-sensitive configuration
+# Values that can be safely stored in version control
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vultisig-backend-config
+  namespace: vultisig-analytics
+  labels:
+    app.kubernetes.io/name: vultisig-analytics
+    app.kubernetes.io/component: backend
+data:
+  # API Configuration
+  THORCHAIN_API_URL: "https://midgard.ninerealms.com/v2/actions"
+  MAYACHAIN_API_URL: "https://midgard.mayachain.info/v2/actions"
+  LIFI_API_URL: "https://li.quest/v2/analytics/transfers"
+  ONEINCH_API_URL: "https://api.1inch.dev/history"
+  ONEINCH_RAYNALYTICS_URL: "https://raynalytics.net/api/vultisig-1inch-swap-insights"
+
+  # Rate Limiting Configuration
+  API_DELAY_SECONDS: "2"
+  MAX_RETRIES: "5"
+  REQUEST_TIMEOUT: "120"
+
+  # Processing Configuration
+  BATCH_SIZE: "1000"
+  SYNC_INTERVAL_MINUTES: "15"
+
+  # Server Configuration
+  FLASK_ENV: "production"
+  LOG_LEVEL: "INFO"

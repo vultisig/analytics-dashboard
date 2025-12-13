@@ -14,7 +14,7 @@ import { TrendingUp, Users, Wallet, Info } from 'lucide-react';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
-import { SHORT_PARAMS } from '@/lib/urlParams';
+import { buildApiUrl, buildQueryParams } from '@/lib/api';
 
 interface UsersTabProps {
     range: string;
@@ -45,11 +45,12 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
 
             try {
                 // Build query parameters
-                const params = new URLSearchParams();
-                params.set(SHORT_PARAMS.RANGE, range);
-                if (startDate) params.set(SHORT_PARAMS.START_DATE, startDate);
-                if (endDate) params.set(SHORT_PARAMS.END_DATE, endDate);
-                params.set(SHORT_PARAMS.GRANULARITY, granularity);
+                const params = buildQueryParams({
+                    r: range,
+                    g: granularity,
+                    sd: startDate,
+                    ed: endDate,
+                });
 
                 const paramsString = params.toString();
 
@@ -58,9 +59,9 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
 
                 // Fetch main users data and all provider data in parallel
                 const [usersRes, ...providerResponses] = await Promise.all([
-                    fetch(`/api/users?${paramsString}`),
+                    fetch(buildApiUrl(`/api/users?${paramsString}`)),
                     ...allKnownProviders.map(provider =>
-                        fetch(`/api/users/provider/${provider}?${paramsString}`)
+                        fetch(buildApiUrl(`/api/users/provider/${provider}?${paramsString}`))
                             .then(res => res.ok ? res.json() : null)
                             .catch(() => null)
                     )

@@ -14,7 +14,7 @@ import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
-import { SHORT_PARAMS } from '@/lib/urlParams';
+import { buildApiUrl, buildQueryParams } from '@/lib/api';
 
 interface CountTabProps {
     range: string;
@@ -43,11 +43,12 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
 
             try {
                 // Build query parameters
-                const params = new URLSearchParams();
-                params.set(SHORT_PARAMS.RANGE, range);
-                if (startDate) params.set(SHORT_PARAMS.START_DATE, startDate);
-                if (endDate) params.set(SHORT_PARAMS.END_DATE, endDate);
-                params.set(SHORT_PARAMS.GRANULARITY, granularity);
+                const params = buildQueryParams({
+                    r: range,
+                    g: granularity,
+                    sd: startDate,
+                    ed: endDate,
+                });
 
                 const paramsString = params.toString();
 
@@ -56,9 +57,9 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
 
                 // Fetch main count data and all provider data in parallel
                 const [countRes, ...providerResponses] = await Promise.all([
-                    fetch(`/api/swap-count?${paramsString}`),
+                    fetch(buildApiUrl(`/api/swap-count?${paramsString}`)),
                     ...allKnownProviders.map(provider =>
-                        fetch(`/api/swap-count/provider/${provider}?${paramsString}`)
+                        fetch(buildApiUrl(`/api/swap-count/provider/${provider}?${paramsString}`))
                             .then(res => res.ok ? res.json() : null)
                             .catch(() => null)
                     )

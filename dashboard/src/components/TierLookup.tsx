@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Search, X, Shield, Award, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
+import { buildApiUrl } from '@/lib/api';
 
 interface LookupResult {
     found: boolean;
@@ -60,7 +61,8 @@ export function TierLookup() {
         setResult(null);
 
         try {
-            const response = await fetch(`/api/holders/lookup?address=${encodeURIComponent(address.trim())}`);
+            const url = buildApiUrl(`/api/holders/lookup?address=${encodeURIComponent(address.trim())}`);
+            const response = await fetch(url);
 
             if (response.status === 429) {
                 const data = await response.json();

@@ -1,0 +1,10 @@
+# Kubernetes Namespace for Vultisig Analytics Backend
+# Creates an isolated namespace for all backend resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vultisig-analytics
+  labels:
+    app.kubernetes.io/name: vultisig-analytics
+    app.kubernetes.io/component: backend
+    environment: production

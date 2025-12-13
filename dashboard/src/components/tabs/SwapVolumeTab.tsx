@@ -14,7 +14,7 @@ import { TrendingUp, DollarSign, Wallet, Info } from 'lucide-react';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
-import { SHORT_PARAMS } from '@/lib/urlParams';
+import { buildApiUrl, buildQueryParams } from '@/lib/api';
 
 interface SwapVolumeTabProps {
     range: string;
@@ -43,11 +43,12 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
 
             try {
                 // Build query parameters
-                const params = new URLSearchParams();
-                params.set(SHORT_PARAMS.RANGE, range);
-                if (startDate) params.set(SHORT_PARAMS.START_DATE, startDate);
-                if (endDate) params.set(SHORT_PARAMS.END_DATE, endDate);
-                params.set(SHORT_PARAMS.GRANULARITY, granularity);
+                const params = buildQueryParams({
+                    r: range,
+                    g: granularity,
+                    sd: startDate,
+                    ed: endDate,
+                });
 
                 const paramsString = params.toString();
 
@@ -56,9 +57,9 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
 
                 // Fetch main volume data and all provider data in parallel
                 const [volumeRes, ...providerResponses] = await Promise.all([
-                    fetch(`/api/swap-volume?${paramsString}`),
+                    fetch(buildApiUrl(`/api/swap-volume?${paramsString}`)),
                     ...allKnownProviders.map(provider =>
-                        fetch(`/api/swap-volume/provider/${provider}?${paramsString}`)
+                        fetch(buildApiUrl(`/api/swap-volume/provider/${provider}?${paramsString}`))
                             .then(res => res.ok ? res.json() : null)
                             .catch(() => null)
                     )

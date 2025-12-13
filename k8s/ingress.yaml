@@ -1,0 +1,79 @@
+# Kubernetes Ingress for external API access
+# Uses NGINX Ingress Controller (most common)
+# Adjust annotations for your ingress controller (Traefik, ALB, etc.)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vultisig-backend
+  namespace: vultisig-analytics
+  labels:
+    app.kubernetes.io/name: vultisig-analytics
+    app.kubernetes.io/component: backend
+  annotations:
+    # NGINX Ingress Controller annotations
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+
+    # CORS headers (allow Vercel frontend)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://your-app.vercel.app"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+
+    # Rate limiting (optional)
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+
+    # TLS with cert-manager (optional - uncomment if using cert-manager)
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  # TLS configuration
+  tls:
+    - hosts:
+        - api.your-domain.com
+      secretName: vultisig-backend-tls
+
+  rules:
+    - host: api.your-domain.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: vultisig-backend
+                port:
+                  name: http
+---
+# Alternative: AWS ALB Ingress (if using AWS)
+# Uncomment and use this instead if you're on EKS with ALB
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: vultisig-backend-alb
+#   namespace: vultisig-analytics
+#   annotations:
+#     kubernetes.io/ingress.class: alb
+#     alb.ingress.kubernetes.io/scheme: internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/healthcheck-path: /api/health
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:region:account:certificate/cert-id
+#     alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+# spec:
+#   rules:
+#     - host: api.your-domain.com
+#       http:
+#         paths:
+#           - path: /api
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: vultisig-backend
+#                 port:
+#                   name: http

@@ -4,12 +4,41 @@ Analytics dashboard for tracking Vultisig swap metrics across multiple DEX aggre
 
 ## Architecture
 
+This project follows a **clean separation between frontend and backend** in a monorepo structure:
+
 ```
 analytics-dashboard/
 ├── dashboard/           # Next.js frontend (React 19, TypeScript, Tailwind)
+│   ├── src/
+│   │   ├── app/        # Pages and layouts
+│   │   ├── components/ # React components
+│   │   └── lib/        # Utilities and API client
+│   └── package.json    # Frontend dependencies (no database access)
+│
 ├── vultisig-analytics/  # Python backend (Flask API, data ingestion)
+│   ├── api_server.py   # REST API endpoints
+│   ├── ingestors/      # Data ingestion scripts
+│   ├── database/       # Database utilities
+│   └── requirements.txt # Python dependencies
+│
 └── docker-compose.yml   # Full stack orchestration
 ```
+
+### Separation of Concerns
+
+- **Frontend (Next.js)**: Pure UI layer with no direct database access
+  - Communicates with backend via HTTP API calls
+  - Uses `NEXT_PUBLIC_API_URL` environment variable to locate backend
+  - All data fetching through `/api/*` endpoints on backend
+
+- **Backend (Python/Flask)**: Data layer and business logic
+  - Direct PostgreSQL/TimescaleDB access
+  - RESTful API for all data operations
+  - Background data ingestion and sync
+
+- **Database (PostgreSQL + TimescaleDB)**: Data persistence
+  - Only accessible by backend and sync services
+  - Time-series optimizations for analytics data
 
 ## Features
 
@@ -65,16 +94,37 @@ MORALIS_API_KEY=your_key  # Required for Holders tab (free tier at moralis.io)
 ```bash
 cd dashboard
 npm install
+
+# Set the backend API URL for local development
+export NEXT_PUBLIC_API_URL=http://localhost:8080
+
 npm run dev
 ```
+
+The frontend will be available at http://localhost:3000
 
 ### Backend (Python)
 
 ```bash
 cd vultisig-analytics
 pip install -r requirements.txt
+
+# Set the database URL
+export DATABASE_URL=postgresql://vultisig_user:vultisig_secure_password_123@localhost:5432/vultisig_analytics
+
 python api_server.py
 ```
+
+The backend API will be available at http://localhost:8080
+
+### Running Both Services
+
+For local development, you need to run:
+1. PostgreSQL database (via Docker or local install)
+2. Python backend (api_server.py)
+3. Next.js frontend (npm run dev)
+
+Or simply use Docker Compose to run everything together (recommended).
 
 ### Manual Data Ingestion
 

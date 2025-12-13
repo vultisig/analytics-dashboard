@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { fetchSystemStatus } from '@/lib/api';
 
 interface SyncStatus {
     source: string;
@@ -30,9 +31,7 @@ export default function SystemStatus() {
     useEffect(() => {
         const fetchStatus = async () => {
             try {
-                const response = await fetch('/api/system-status');
-                if (!response.ok) throw new Error('Failed to fetch status');
-                let data = await response.json();
+                let data = await fetchSystemStatus() as SyncStatus[];
 
                 // Sort: Most recent updated at the bottom (Oldest -> Newest)
                 data.sort((a: SyncStatus, b: SyncStatus) =>

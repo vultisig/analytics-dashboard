@@ -5,7 +5,7 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { ReferrerLeaderboard } from '@/components/ReferrerLeaderboard';
 import { PiggyBank, DollarSign, Users, TrendingUp, Info } from 'lucide-react';
 import { providerColors } from '@/lib/chartStyles';
-import { SHORT_PARAMS } from '@/lib/urlParams';
+import { buildApiUrl, buildQueryParams } from '@/lib/api';
 
 interface ReferralsTabProps {
     range: string;
@@ -56,13 +56,15 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
             setError(null);
 
             try {
-                const params = new URLSearchParams();
-                params.set(SHORT_PARAMS.RANGE, range);
-                if (startDate) params.set(SHORT_PARAMS.START_DATE, startDate);
-                if (endDate) params.set(SHORT_PARAMS.END_DATE, endDate);
-                params.set(SHORT_PARAMS.GRANULARITY, granularity);
+                const params = buildQueryParams({
+                    r: range,
+                    g: granularity,
+                    sd: startDate,
+                    ed: endDate,
+                });
 
-                const res = await fetch(`/api/referrals?${params.toString()}`);
+                const url = buildApiUrl(`/api/referrals?${params.toString()}`);
+                const res = await fetch(url);
                 if (!res.ok) throw new Error('Failed to fetch referrals data');
 
                 const data = await res.json();
@@ -123,7 +125,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                     icon={DollarSign}
                     color="blue"
                     format="currency"
-                    tooltip="Total revenue earned by referrers (referrer BPS × volume)"
+                    tooltip="Total revenue earned by referrers (referrer BPS x volume)"
                 />
                 <HeroMetric
                     label="Referral Swaps"

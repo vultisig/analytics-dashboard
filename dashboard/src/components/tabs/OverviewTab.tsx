@@ -9,7 +9,7 @@ import { DollarSign, Users, Hash, TrendingUp, Activity, Wallet } from 'lucide-re
 import { providerColors } from '@/lib/chartStyles';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
-import { SHORT_PARAMS } from '@/lib/urlParams';
+import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import CountUp from 'react-countup';
 
 interface OverviewTabProps {
@@ -32,16 +32,19 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
 
             try {
                 // Build query parameters
-                const params = new URLSearchParams();
-                params.set(SHORT_PARAMS.RANGE, range);
-                if (startDate) params.set(SHORT_PARAMS.START_DATE, startDate);
-                if (endDate) params.set(SHORT_PARAMS.END_DATE, endDate);
-                params.set(SHORT_PARAMS.GRANULARITY, granularity);
+                const params = buildQueryParams({
+                    r: range,
+                    g: granularity,
+                    sd: startDate,
+                    ed: endDate,
+                });
+
+                const paramsString = params.toString();
 
                 const [volumeRes, revenueRes, usersRes] = await Promise.all([
-                    fetch(`/api/swap-volume?${params.toString()}`),
-                    fetch(`/api/revenue?${params.toString()}`),
-                    fetch(`/api/users?${params.toString()}`)
+                    fetch(buildApiUrl(`/api/swap-volume?${paramsString}`)),
+                    fetch(buildApiUrl(`/api/revenue?${paramsString}`)),
+                    fetch(buildApiUrl(`/api/users?${paramsString}`))
                 ]);
 
                 if (!volumeRes.ok || !revenueRes.ok || !usersRes.ok) {

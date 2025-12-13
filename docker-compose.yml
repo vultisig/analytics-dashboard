@@ -54,12 +54,10 @@ services:
       dockerfile: Dockerfile
     container_name: vultisig_dashboard
     environment:
-      DATABASE_URL: postgresql://vultisig_user:vultisig_secure_password_123@postgres:5432/vultisig_analytics?sslmode=disable
       NEXT_PUBLIC_API_URL: http://backend:8080
     ports:
       - "3000:3000"
     depends_on:
-      - postgres
       - backend
     restart: unless-stopped
     networks:

@@ -73,3 +73,14 @@ credentials.json
 
 # Temporary comparison files
 fee_revenue_by_thorname*.csv
+
+# Debug and test files (cleaned up legacy files)
+debug_*.js
+debug_*.ts
+test_*.js
+test_*.ts
+check_*.js
+investigate_*.js
+
+# Backend should not have Node.js files (Python only)
+vultisig-analytics/package*.json

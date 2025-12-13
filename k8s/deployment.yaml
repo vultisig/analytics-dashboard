@@ -1,0 +1,169 @@
+# Kubernetes Deployment for Vultisig Analytics Backend API
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vultisig-backend
+  namespace: vultisig-analytics
+  labels:
+    app.kubernetes.io/name: vultisig-analytics
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vultisig-analytics
+      app.kubernetes.io/component: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vultisig-analytics
+        app.kubernetes.io/component: backend
+      annotations:
+        # Force pod restart on config/secret changes
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+        checksum/secret: "{{ include (print $.Template.BasePath \"/secret.yaml\") . | sha256sum }}"
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # Service account (create if using IRSA or workload identity)
+      # serviceAccountName: vultisig-backend
+
+      containers:
+        - name: backend
+          image: your-registry/vultisig-backend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # Environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: vultisig-backend-config
+
+          # Sensitive environment variables from Secret
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: DATABASE_URL
+            - name: ONEINCH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: ONEINCH_API_KEY
+            - name: LIFI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: LIFI_API_KEY
+            - name: ARKHAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: ARKHAM_API_KEY
+            - name: ETHERSCAN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: ETHERSCAN_API_KEY
+            - name: INFURA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: INFURA_API_KEY
+            - name: ALCHEMY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: ALCHEMY_API_KEY
+            - name: MORALIS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vultisig-backend-secrets
+                  key: MORALIS_API_KEY
+
+          # Liveness probe - checks if container is running
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Readiness probe - checks if container is ready to receive traffic
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Startup probe - allows slow startup
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+            successThreshold: 1
+
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+      # Graceful termination
+      terminationGracePeriodSeconds: 30
+
+      # Pod anti-affinity for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: vultisig-analytics
+                    app.kubernetes.io/component: backend
+                topologyKey: kubernetes.io/hostname
+
+      # Tolerations (optional - customize as needed)
+      # tolerations:
+      #   - key: "node-role.kubernetes.io/spot"
+      #     operator: "Equal"
+      #     value: "true"
+      #     effect: "NoSchedule"

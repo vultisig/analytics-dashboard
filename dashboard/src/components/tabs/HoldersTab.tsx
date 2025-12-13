@@ -6,6 +6,7 @@ import { ChartCard } from '@/components/ChartCard';
 import { TierCard } from '@/components/TierCard';
 import { TierLookup } from '@/components/TierLookup';
 import { Users, Shield, Award, Search, Info, ExternalLink } from 'lucide-react';
+import { fetchHolders } from '@/lib/api';
 
 interface TierData {
     tier: string;
@@ -102,10 +103,7 @@ export function HoldersTab() {
             setError(null);
 
             try {
-                const res = await fetch('/api/holders');
-                if (!res.ok) throw new Error('Failed to fetch holders data');
-
-                const holdersData = await res.json();
+                const holdersData = await fetchHolders() as HoldersData;
                 setData(holdersData);
             } catch (err) {
                 console.error('Error fetching holders data:', err);

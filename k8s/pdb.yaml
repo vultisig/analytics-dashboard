@@ -1,0 +1,17 @@
+# Pod Disruption Budget for high availability during cluster maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vultisig-backend
+  namespace: vultisig-analytics
+  labels:
+    app.kubernetes.io/name: vultisig-analytics
+    app.kubernetes.io/component: backend
+spec:
+  # Ensure at least 1 pod is always available during voluntary disruptions
+  # (node drains, cluster upgrades, etc.)
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vultisig-analytics
+      app.kubernetes.io/component: backend
