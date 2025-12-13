@@ -128,7 +128,8 @@ export function aggregateByGranularity(
   if (!data || data.length === 0) return [];
 
   // Group by the appropriate time bucket
-  const grouped: Record<string, Record<string, number>> = {};
+  // Store both the formatted date string and the original timestamp for sorting
+  const grouped: Record<string, { values: Record<string, number>; timestamp: number }> = {};
 
   data.forEach(item => {
     const date = new Date(item.date);
@@ -162,28 +163,38 @@ export function aggregateByGranularity(
     }
 
     if (!grouped[bucketKey]) {
-      grouped[bucketKey] = {};
+      grouped[bucketKey] = {
+        values: {},
+        timestamp: date.getTime(),
+      };
       providers.forEach(p => {
-        grouped[bucketKey][p] = 0;
+        grouped[bucketKey].values[p] = 0;
       });
+    }
+
+    // Update timestamp to the earliest date in the bucket for consistent sorting
+    if (date.getTime() < grouped[bucketKey].timestamp) {
+      grouped[bucketKey].timestamp = date.getTime();
     }
 
     // Sum values for each provider
     providers.forEach(provider => {
       if (item[provider] !== undefined) {
-        grouped[bucketKey][provider] += Number(item[provider]) || 0;
+        grouped[bucketKey].values[provider] += Number(item[provider]) || 0;
       }
     });
   });
 
-  // Convert to array and sort
+  // Convert to array and sort by timestamp
   const result: ChartDataItem[] = Object.entries(grouped)
-    .map(([date, values]) => ({
+    .map(([date, { values, timestamp }]) => ({
       date,
       ...values,
-    }));
+      timestamp, // Store timestamp for sorting
+    }))
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map(({ timestamp, ...item }) => item); // Remove timestamp after sorting
 
-  // Sort by original date order (approximate)
   return result;
 }
 
