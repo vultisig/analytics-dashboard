@@ -70,8 +70,11 @@ const nextConfig: NextConfig = {
   },
 
   // Rewrites can proxy API calls in development if needed
+  // Proxy all /api/* requests to the backend server-side.
+  // BACKEND_URL must only be set in the server environment (not NEXT_PUBLIC_),
+  // so it is never exposed to the browser.
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://backend:8080';
+    const backendUrl = process.env.BACKEND_URL || 'http://backend:8080';
     return [
       {
         source: '/api/:path*',

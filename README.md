@@ -28,7 +28,7 @@ analytics-dashboard/
 
 - **Frontend (Next.js)**: Pure UI layer with no direct database access
   - Communicates with backend via HTTP API calls
-  - Uses `NEXT_PUBLIC_API_URL` environment variable to locate backend
+  - Proxies all `/api/*` requests to the backend via Next.js rewrites (configured with `BACKEND_URL`)
   - All data fetching through `/api/*` endpoints on backend
 
 - **Backend (Python/Flask)**: Data layer and business logic
@@ -95,8 +95,8 @@ MORALIS_API_KEY=your_key  # Required for Holders tab (free tier at moralis.io)
 cd dashboard
 npm install
 
-# Set the backend API URL for local development
-export NEXT_PUBLIC_API_URL=http://localhost:8080
+# Set the backend URL for the Next.js proxy (server-side only)
+export BACKEND_URL=http://localhost:8080
 
 npm run dev
 ```

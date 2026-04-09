@@ -66,7 +66,7 @@ Add the following environment variable in Vercel:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `NEXT_PUBLIC_API_URL` | Backend API URL | `https://api.your-domain.com` |
+| `BACKEND_URL` | Backend API URL (server-side proxy only) | `https://api.your-domain.com` |
 
 **Important**:
 - `NEXT_PUBLIC_` prefix makes the variable available to client-side code
@@ -92,7 +92,7 @@ Add the following environment variable in Vercel:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NEXT_PUBLIC_API_URL` | Yes | Backend API base URL |
+| `BACKEND_URL` | Yes | Backend API base URL (used server-side by Next.js proxy) |
 | `NEXT_PUBLIC_ENVIRONMENT` | No | Environment identifier (dev/staging/prod) |
 
 ---
@@ -263,7 +263,7 @@ EOF
 
 | Variable | Required | Build/Runtime | Description |
 |----------|----------|---------------|-------------|
-| `NEXT_PUBLIC_API_URL` | Yes | Build | Backend API base URL (e.g., `https://api.vultisig.com`) |
+| `BACKEND_URL` | Yes | Runtime | Backend API base URL (e.g., `https://api.vultisig.com`) — server-side only, never exposed to browser |
 
 ### Backend (API Server)
 
@@ -297,7 +297,7 @@ Error: Cannot find module 'X'
 TypeError: Failed to fetch
 ```
 **Solution**:
-1. Check `NEXT_PUBLIC_API_URL` is set correctly in Vercel
+1. Check `BACKEND_URL` is set correctly in your deployment environment
 2. Verify CORS is configured on the backend Ingress
 3. Check browser console for specific error
 

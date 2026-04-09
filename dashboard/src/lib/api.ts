@@ -1,19 +1,17 @@
 /**
  * API utility module for making requests to the backend API.
  *
- * In Docker: NEXT_PUBLIC_API_URL = http://backend:8080
- * For local dev: NEXT_PUBLIC_API_URL = http://localhost:8080
- *
- * If NEXT_PUBLIC_API_URL is not set, falls back to relative URLs
- * which will use Next.js API routes (for backward compatibility during migration).
+ * All /api/* requests are relative URLs proxied server-side by Next.js
+ * to the backend (configured via BACKEND_URL in docker-compose / env).
+ * The browser never needs to know the backend's address.
  */
 
 /**
- * Get the base API URL from environment variable.
- * Returns empty string if not set (falls back to relative URLs).
+ * Get the base API URL. Always returns empty string so requests use
+ * relative URLs and are proxied through the Next.js rewrite rules.
  */
 export function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || '';
+  return '';
 }
 
 /**
