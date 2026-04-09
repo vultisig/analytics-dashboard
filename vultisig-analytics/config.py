@@ -6,7 +6,15 @@ load_dotenv()
 
 class Config:
     # Database
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/vultisig_analytics")
+    DATABASE_URL = os.getenv("DATABASE_URL") or (
+        "postgresql://{user}:{password}@{host}:{port}/{db}".format(
+            user=os.getenv("POSTGRES_USER", "vultisig_user"),
+            password=os.getenv("POSTGRES_PASSWORD", ""),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            port=os.getenv("POSTGRES_PORT", "5432"),
+            db=os.getenv("POSTGRES_DB", "vultisig_analytics"),
+        )
+    )
 
     # API Configuration
     THORCHAIN_API_URL = "https://midgard.ninerealms.com/v2/actions"

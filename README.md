@@ -119,8 +119,8 @@ The frontend will be available at http://localhost:3000
 cd vultisig-analytics
 pip install -r requirements.txt
 
-# Set the database URL (use your own credentials)
-export DATABASE_URL=postgresql://vultisig_user:your_password@localhost:5432/vultisig_analytics
+# Set database credentials
+export POSTGRES_PASSWORD=your_password
 
 python api_server.py
 ```
