@@ -67,6 +67,10 @@ cd analytics-dashboard
 # Create the database volume (first time only)
 docker volume create vultisig-analytics_postgres_data
 
+# Copy the example env file and fill in your values
+cp vultisig-analytics/.env_example .env
+# Edit .env and set at least POSTGRES_PASSWORD
+
 # Start all services
 docker compose up -d
 ```
@@ -74,14 +78,20 @@ docker compose up -d
 Services will be available at:
 - **Dashboard**: http://localhost:3000
 - **API**: http://localhost:8080
-- **PostgreSQL**: localhost:5432
+- **PostgreSQL**: localhost:5432 (or the port set in `POSTGRES_PORT`)
 
 ### Environment Variables
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory (see `vultisig-analytics/.env_example`):
 
 ```env
-# Optional: Override default API keys
+# PostgreSQL (required)
+POSTGRES_USER=vultisig_user
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=vultisig_analytics
+POSTGRES_PORT=5432
+
+# API Keys
 ARKHAM_API_KEY=your_key
 LIFI_API_KEY=your_key
 MORALIS_API_KEY=your_key  # Required for Holders tab (free tier at moralis.io)
@@ -109,8 +119,8 @@ The frontend will be available at http://localhost:3000
 cd vultisig-analytics
 pip install -r requirements.txt
 
-# Set the database URL
-export DATABASE_URL=postgresql://vultisig_user:vultisig_secure_password_123@localhost:5432/vultisig_analytics
+# Set the database URL (use your own credentials)
+export DATABASE_URL=postgresql://vultisig_user:your_password@localhost:5432/vultisig_analytics
 
 python api_server.py
 ```
