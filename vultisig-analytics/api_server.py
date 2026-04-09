@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+
+@app.errorhandler(ValueError)
+def handle_value_error(e):
+    return jsonify({'error': str(e)}), 400
+
+
 # =============================================================================
 # Constants and Configuration
 # =============================================================================
@@ -135,6 +141,13 @@ def build_date_filter(range_param, start_date_param=None, end_date_param=None):
     date_filter = ''
     date_filter_arkham = ''
     now = datetime.utcnow()
+
+    # Validate date parameters to prevent SQL injection
+    _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    if start_date_param and not _DATE_RE.match(start_date_param):
+        raise ValueError("Invalid start date format, expected YYYY-MM-DD")
+    if end_date_param and not _DATE_RE.match(end_date_param):
+        raise ValueError("Invalid end date format, expected YYYY-MM-DD")
 
     # Map short range to canonical values
     range_value = RANGE_TO_SQL.get(range_param, range_param) if range_param else 'all'
@@ -410,7 +423,7 @@ def get_summary():
 
     except Exception as e:
         logger.error(f"Error getting summary data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/overview-chart')
@@ -461,7 +474,7 @@ def get_overview_chart():
 
     except Exception as e:
         logger.error(f"Error getting overview chart: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/timeseries')
@@ -542,7 +555,7 @@ def get_timeseries():
 
     except Exception as e:
         logger.error(f"Error getting timeseries data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/timeseries/stacked')
@@ -617,7 +630,7 @@ def get_stacked_timeseries():
 
     except Exception as e:
         logger.error(f"Error getting stacked timeseries: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/activity')
@@ -681,7 +694,7 @@ def get_recent_activity():
 
     except Exception as e:
         logger.error(f"Error getting recent activity: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/health')
@@ -746,7 +759,7 @@ def get_stats():
 
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/stats/provider')
@@ -802,7 +815,7 @@ def get_stats_by_provider():
         return jsonify(data)
     except Exception as e:
         logger.error(f"Error getting provider stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/stats/platform')
@@ -862,7 +875,7 @@ def get_stats_by_platform():
         return jsonify(data)
     except Exception as e:
         logger.error(f"Error getting platform stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/stats/chain')
@@ -925,7 +938,7 @@ def get_stats_by_chain():
         return jsonify(data)
     except Exception as e:
         logger.error(f"Error getting chain stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/top-paths')
@@ -1013,7 +1026,7 @@ def get_top_paths():
         return jsonify(data)
     except Exception as e:
         logger.error(f"Error getting top paths: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -1258,7 +1271,7 @@ def get_revenue():
 
     except Exception as e:
         logger.error(f"Error getting revenue data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/revenue/provider/<provider>')
@@ -1363,7 +1376,7 @@ def get_revenue_by_provider(provider):
 
     except Exception as e:
         logger.error(f"Error getting {provider} revenue data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -1637,7 +1650,7 @@ def get_swap_volume():
 
     except Exception as e:
         logger.error(f"Error getting swap volume data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/swap-volume/provider/<provider>')
@@ -1755,7 +1768,7 @@ def get_swap_volume_by_provider(provider):
 
     except Exception as e:
         logger.error(f"Error getting {provider} volume data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -1989,7 +2002,7 @@ def get_swap_count():
 
     except Exception as e:
         logger.error(f"Error getting swap count data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/swap-count/provider/<provider>')
@@ -2107,7 +2120,7 @@ def get_swap_count_by_provider(provider):
 
     except Exception as e:
         logger.error(f"Error getting {provider} count data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -2370,7 +2383,7 @@ def get_users():
 
     except Exception as e:
         logger.error(f"Error getting users data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/users/provider/<provider>')
@@ -2488,7 +2501,7 @@ def get_users_by_provider(provider):
 
     except Exception as e:
         logger.error(f"Error getting {provider} users data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -2563,7 +2576,7 @@ def get_holders():
 
     except Exception as e:
         logger.error(f"Error getting holders data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/holders/lookup')
@@ -2830,7 +2843,7 @@ def get_referrals():
 
     except Exception as e:
         logger.error(f"Error getting referrals data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
@@ -2927,7 +2940,7 @@ def get_fee_tier_distribution():
 
     except Exception as e:
         logger.error(f"Error getting fee tier distribution: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 
