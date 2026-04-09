@@ -21,8 +21,14 @@ from typing import Any
 try:
     import requests
 except ImportError:
-    print("Error: requests library not installed. Run: pip install requests")
-    sys.exit(1)
+    requests = None
+
+import unittest
+
+if requests is None:
+    # Skip this module when discovered by unittest (it's an integration test
+    # that requires the `requests` library and a running server).
+    raise unittest.SkipTest("requests library not installed")
 
 
 class Colors:
