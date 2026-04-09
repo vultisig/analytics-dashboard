@@ -77,6 +77,7 @@ CREATE TABLE sync_status (
     id SERIAL PRIMARY KEY,
     source VARCHAR(20) NOT NULL UNIQUE,
     last_synced_timestamp TIMESTAMPTZ,
+    latest_data_timestamp TIMESTAMPTZ,
     last_synced_block BIGINT,
     next_page_token TEXT,
     is_active BOOLEAN DEFAULT TRUE,
