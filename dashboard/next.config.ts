@@ -70,14 +70,15 @@ const nextConfig: NextConfig = {
   },
 
   // Rewrites can proxy API calls in development if needed
-  // async rewrites() {
-  //   return [
-  //     {
-  //       source: '/api/:path*',
-  //       destination: `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
-  //     },
-  //   ];
-  // },
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://backend:8080';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
+      },
+    ];
+  },
 
   // Disable x-powered-by header for security
   poweredByHeader: false,
