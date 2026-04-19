@@ -342,13 +342,11 @@ def _with_vultisig(
 # ---------------------------------------------------------------------------
 
 class TestInit(unittest.TestCase):
-    def test_source_name_and_endpoints(self):
+    def test_source_name_and_endpoint(self):
         ing = THORChainIngestor()
         self.assertEqual(ing.source_name, "thorchain")
-        self.assertIsInstance(ing.api_endpoints, list)
-        self.assertGreaterEqual(len(ing.api_endpoints), 2)
-        self.assertIn("midgard.ninerealms.com", ing.api_endpoints[0])
-        self.assertEqual(ing.current_endpoint_index, 0)
+        self.assertIsInstance(ing.api_endpoint, str)
+        self.assertTrue(ing.api_endpoint)
 
 
 # ---------------------------------------------------------------------------
@@ -359,18 +357,17 @@ class TestFetchData(unittest.TestCase):
     def setUp(self):
         self.ing = THORChainIngestor()
 
-    def test_first_endpoint_success(self):
+    def test_endpoint_success(self):
         with patch.object(self.ing, "make_request", return_value={"actions": []}) as m:
             result = self.ing.fetch_data(limit=25)
         self.assertEqual(result, {"actions": []})
         m.assert_called_once()
         called_url, called_params = m.call_args[0]
-        self.assertEqual(called_url, self.ing.api_endpoints[0])
+        self.assertEqual(called_url, self.ing.api_endpoint)
         self.assertEqual(called_params["type"], "swap")
         self.assertEqual(called_params["limit"], 25)
         self.assertIn("vi", called_params["affiliate"])
         self.assertNotIn("nextPageToken", called_params)
-        self.assertEqual(self.ing.current_endpoint_index, 0)
 
     def test_full_response_envelope_is_returned_verbatim(self):
         """
@@ -392,22 +389,22 @@ class TestFetchData(unittest.TestCase):
         _, params = m.call_args[0]
         self.assertEqual(params["nextPageToken"], "257195089000001200")
 
-    def test_fallback_to_next_endpoint(self):
-        side_effects = [Exception("primary down"), _clone_response()]
-        with patch.object(self.ing, "make_request", side_effect=side_effects) as m:
+    def test_retry_then_succeed(self):
+        side_effects = [Exception("transient"), _clone_response()]
+        with patch("ingestors.base.time.sleep"), \
+             patch.object(self.ing, "make_request", side_effect=side_effects) as m:
             result = self.ing.fetch_data()
         self.assertEqual(len(result["actions"]), 5)
         self.assertEqual(m.call_count, 2)
-        self.assertEqual(self.ing.current_endpoint_index, 1)
 
-    def test_all_endpoints_fail_raises(self):
-        with patch.object(
-            self.ing, "make_request", side_effect=Exception("boom")
-        ) as m:
+    def test_retries_exhausted_raises(self):
+        with patch("ingestors.base.time.sleep"), \
+             patch.object(self.ing, "make_request", side_effect=Exception("boom")) as m:
             with self.assertRaises(Exception) as ctx:
                 self.ing.fetch_data()
-        self.assertIn("All THORChain endpoints failed", str(ctx.exception))
-        self.assertEqual(m.call_count, len(self.ing.api_endpoints))
+        self.assertIn("Max retries reached", str(ctx.exception))
+        self.assertIn("boom", str(ctx.exception))
+        self.assertEqual(m.call_count, self.ing.backoff_retry.max_retries)
 
 
 # ---------------------------------------------------------------------------
@@ -901,14 +898,13 @@ class TestGetRunePriceFromMidgard(unittest.TestCase):
         self.assertEqual(called_params["count"], 1)
         self.assertEqual(called_params["from"], int(self.ts.timestamp()))
 
-    def test_uses_current_endpoint_index(self):
-        self.ing.current_endpoint_index = 2
+    def test_uses_api_endpoint_for_history_url(self):
         with patch.object(
             self.ing, "make_request", return_value={"intervals": [{"runePriceUSD": "2"}]}
         ) as m:
             self.ing._get_rune_price_from_midgard(self.ts)
         called_url, _ = m.call_args[0]
-        expected_base = self.ing.api_endpoints[2].replace(
+        expected_base = self.ing.api_endpoint.replace(
             "/v2/actions", "/v2/history/swaps"
         )
         self.assertEqual(called_url, expected_base)

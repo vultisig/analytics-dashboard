@@ -73,12 +73,12 @@ class BackoffRetryTests(unittest.TestCase):
         # Sleeps only happen between attempts, not after the last one.
         self.assertEqual(mock_sleep.call_count, 2)
 
-    def test_additive_backoff_progression(self):
-        # backoff_duration starts at initial_backoff and is multiplied by
-        # the attempt number on each failure:
-        #   after attempt 1: 2.0 * 1 = 2.0
-        #   after attempt 2: 2.0 * 2 = 4.0
-        #   after attempt 3: 4.0 * 3 = 12.0
+    def test_exponential_backoff_progression(self):
+        # backoff_duration is exponential in the attempt number, capped at
+        # max_backoff (60s):
+        #   attempt 1: 2.0 * 2**0 = 2.0
+        #   attempt 2: 2.0 * 2**1 = 4.0
+        #   attempt 3: 2.0 * 2**2 = 8.0
         retry = BackoffRetry(max_retries=4, initial_backoff=2.0)
 
         def fn():
@@ -90,7 +90,7 @@ class BackoffRetryTests(unittest.TestCase):
 
         self.assertEqual(
             [c.args[0] for c in mock_sleep.call_args_list],
-            [2.0, 4.0, 12.0],
+            [2.0, 4.0, 8.0],
         )
 
     def test_max_retries_of_one_does_not_sleep(self):
