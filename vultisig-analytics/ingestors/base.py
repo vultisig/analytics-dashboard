@@ -9,6 +9,38 @@ from config import config
 
 logger = logging.getLogger(__name__)
 
+
+class BackoffRetry:
+    """Reusable backoff retry utility with additive backoff strategy"""
+
+    def __init__(self, max_retries: int = 10, initial_backoff: float = 1.0):
+        self.logger = logging.getLogger(f"{__name__}.BackoffRetry")
+        self.max_retries = max_retries
+        self.initial_backoff = initial_backoff
+
+    def retry(self, fn):
+        """
+        Attempt to execute `fn` up to `max_retries` times.
+        On failure, wait with an additively increasing backoff.
+        """
+        last_error: Optional[Exception] = None
+        backoff_duration = self.initial_backoff
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                return fn()
+            except Exception as e:
+                last_error = e
+                if attempt < self.max_retries:
+                    backoff_duration *= attempt
+                    self.logger.warning(
+                        f"Attempt {attempt} failed with error: {e}. Retrying in {backoff_duration}s..."
+                    )
+                    time.sleep(backoff_duration)
+
+        raise Exception(f"Max retries reached: last error was {last_error}")
+
+
 class BaseIngestor(ABC):
     def __init__(self, source_name: str):
         self.source_name = source_name

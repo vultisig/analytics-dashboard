@@ -1,7 +1,7 @@
 # ingestors/mayachain.py
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
-from .base import BaseIngestor
+from .base import BaseIngestor, BackoffRetry
 from config import config
 import logging
 import json
@@ -11,54 +11,22 @@ logger = logging.getLogger(__name__)
 class MayaChainIngestor(BaseIngestor):
     def __init__(self):
         super().__init__('mayachain')
-        # Prioritized list of API endpoints
-        self.api_endpoints = [
-            config.MAYACHAIN_API_URL,  # Primary: https://midgard.mayachain.info/v2/actions
-            "https://midgard-proxy.odindex.io/v2/actions"  # Fallback: Odindex Proxy
-        ]
-        self.current_endpoint_index = 0
+        self.api_endpoint = config.MAYACHAIN_API_URL
+        self.backoff_retry = BackoffRetry(max_retries=10)
 
     def fetch_data(self, next_page_token: str = None, limit: int = 50) -> Dict:
-        """Fetch swap data from MayaChain API with fallback support"""
+        """Fetch swap data from MayaChain API with backoff retry"""
         params = {
             'type': 'swap',
             'affiliate': ','.join(config.VULTISIG_AFFILIATES),
             'limit': limit
         }
-
         if next_page_token:
             params['nextPageToken'] = next_page_token
 
-        # Try endpoints in order, starting from the last successful one
-        # We'll try all endpoints once, wrapping around if needed
-        start_index = self.current_endpoint_index
-        attempts = 0
-        total_endpoints = len(self.api_endpoints)
-        
-        last_exception = None
-
-        while attempts < total_endpoints:
-            endpoint = self.api_endpoints[self.current_endpoint_index]
-            
-            # Construct full URL if the endpoint is just the base URL
-            # But here we store full paths in the list for simplicity, 
-            # except config.MAYACHAIN_API_URL might be just base.
-            # Let's assume config.MAYACHAIN_API_URL is full path or handle it.
-            # config.MAYACHAIN_API_URL is likely "https://midgard.mayachain.info/v2/actions" based on usage
-            
-            try:
-                logger.info(f"Attempting MayaChain endpoint: {endpoint}")
-                return self.make_request(endpoint, params)
-            except Exception as e:
-                logger.warning(f"Endpoint {endpoint} failed: {e}")
-                last_exception = e
-                # Move to next endpoint
-                self.current_endpoint_index = (self.current_endpoint_index + 1) % total_endpoints
-                attempts += 1
-        
-        # If all endpoints failed
-        logger.error("All MayaChain endpoints failed")
-        raise last_exception or Exception("All endpoints failed")
+        return self.backoff_retry.retry(
+            lambda: self.make_request(self.api_endpoint, params)
+        )
 
     def parse_swap(self, raw_swap: Dict) -> Dict:
         """Parse MayaChain swap data into normalized format"""
