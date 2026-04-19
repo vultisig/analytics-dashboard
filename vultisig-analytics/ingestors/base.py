@@ -17,6 +17,7 @@ class BackoffRetry:
         self.logger = logging.getLogger(f"{__name__}.BackoffRetry")
         self.max_retries = max_retries
         self.initial_backoff = initial_backoff
+        self.max_backoff = 60.0  # Cap backoff to 60 seconds to avoid excessively long waits
 
     def retry(self, fn):
         """
@@ -31,8 +32,8 @@ class BackoffRetry:
                 return fn()
             except Exception as e:
                 last_error = e
-                if attempt < self.max_retries:
-                    backoff_duration *= attempt
+                if attempt < self.max_retries: 
+                    backoff_duration = min(self.initial_backoff * (2 ** (attempt - 1)), self.max_backoff)
                     self.logger.warning(
                         f"Attempt {attempt} failed with error: {e}. Retrying in {backoff_duration}s..."
                     )
@@ -90,11 +91,9 @@ class BaseIngestor(ABC):
                 
                 if response.status_code in [502, 503, 504]:
                     retries += 1
-                    if retries >= 2:  # Only retry once for server errors, then fail to allow fallback
-                        raise Exception(f"Server error {response.status_code}")
-                    delay = base_delay * 2
-                    logger.warning(f"Server error {response.status_code}. Retrying in {delay}s")
-                    time.sleep(delay)
+                    if retries >= config.MAX_RETRIES:  # Only retry once for server errors, then fail to allow fallback
+                        raise Exception(f"Server error {response.status_code}") 
+                    logger.warning(f"Server error {response.status_code}. Retrying")
                     continue
                 
                 response.raise_for_status()
