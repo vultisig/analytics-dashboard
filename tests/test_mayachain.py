@@ -328,36 +328,32 @@ def _with_vultisig(
 # ---------------------------------------------------------------------------
 
 class TestInit(unittest.TestCase):
-    def test_source_name_and_endpoints(self):
+    def test_source_name_and_endpoint(self):
         ing = MayaChainIngestor()
         self.assertEqual(ing.source_name, "mayachain")
-        self.assertIsInstance(ing.api_endpoints, list)
-        self.assertGreaterEqual(len(ing.api_endpoints), 2)
-        self.assertIn("mayachain", ing.api_endpoints[0])
-        self.assertEqual(ing.current_endpoint_index, 0)
+        self.assertIsInstance(ing.api_endpoint, str)
+        self.assertTrue(ing.api_endpoint)
 
 
 # ---------------------------------------------------------------------------
-# fetch_data — round-robin fallback
+# fetch_data — single endpoint + BackoffRetry
 # ---------------------------------------------------------------------------
 
 class TestFetchData(unittest.TestCase):
     def setUp(self):
         self.ing = MayaChainIngestor()
 
-    def test_first_endpoint_success(self):
+    def test_endpoint_success(self):
         with patch.object(self.ing, "make_request", return_value={"actions": []}) as m:
             result = self.ing.fetch_data(limit=25)
         self.assertEqual(result, {"actions": []})
         m.assert_called_once()
         called_url, called_params = m.call_args[0]
-        self.assertEqual(called_url, self.ing.api_endpoints[0])
+        self.assertEqual(called_url, self.ing.api_endpoint)
         self.assertEqual(called_params["type"], "swap")
         self.assertEqual(called_params["limit"], 25)
         self.assertIn("vi", called_params["affiliate"])
         self.assertNotIn("nextPageToken", called_params)
-        # Successful first call shouldn't change endpoint index
-        self.assertEqual(self.ing.current_endpoint_index, 0)
 
     def test_full_response_envelope_is_returned_verbatim(self):
         """
@@ -379,37 +375,22 @@ class TestFetchData(unittest.TestCase):
         _, params = m.call_args[0]
         self.assertEqual(params["nextPageToken"], "160668699000000002")
 
-    def test_round_robin_fallback_to_next_endpoint(self):
-        # First fails → index advances → second succeeds.
-        side_effects = [Exception("primary down"), {"actions": ["x"]}]
-        with patch.object(self.ing, "make_request", side_effect=side_effects) as m:
+    def test_retry_then_succeed(self):
+        side_effects = [Exception("transient"), {"actions": ["x"]}]
+        with patch("ingestors.base.time.sleep"), \
+             patch.object(self.ing, "make_request", side_effect=side_effects) as m:
             result = self.ing.fetch_data()
         self.assertEqual(result, {"actions": ["x"]})
         self.assertEqual(m.call_count, 2)
-        self.assertEqual(self.ing.current_endpoint_index, 1)
 
-    def test_all_endpoints_fail_raises_last_exception(self):
-        # With 2 endpoints, both fail → index wraps back to 0.
-        with patch.object(
-            self.ing,
-            "make_request",
-            side_effect=[Exception("first"), Exception("LAST")],
-        ) as m:
+    def test_retries_exhausted_raises(self):
+        with patch("ingestors.base.time.sleep"), \
+             patch.object(self.ing, "make_request", side_effect=Exception("LAST")) as m:
             with self.assertRaises(Exception) as ctx:
                 self.ing.fetch_data()
-        self.assertEqual(m.call_count, len(self.ing.api_endpoints))
-        # last_exception is re-raised
+        self.assertIn("Max retries reached", str(ctx.exception))
         self.assertIn("LAST", str(ctx.exception))
-        # Index wraps back to start after all fail
-        self.assertEqual(self.ing.current_endpoint_index, 0)
-
-    def test_round_robin_continues_from_last_successful_index(self):
-        # Force the ingestor to start its next call from a non-zero index.
-        self.ing.current_endpoint_index = 1
-        with patch.object(self.ing, "make_request", return_value={"ok": True}) as m:
-            self.ing.fetch_data()
-        called_url, _ = m.call_args[0]
-        self.assertEqual(called_url, self.ing.api_endpoints[1])
+        self.assertEqual(m.call_count, self.ing.backoff_retry.max_retries)
 
 
 # ---------------------------------------------------------------------------

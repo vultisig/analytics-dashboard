@@ -17,7 +17,7 @@ class Config:
     )
 
     # API Configuration
-    THORCHAIN_API_URL = "https://midgard.ninerealms.com/v2/actions"
+    THORCHAIN_API_URL = "https://gateway.liquify.com/chain/thorchain_midgard/v2/actions"
     MAYACHAIN_API_URL = "https://midgard.mayachain.info/v2/actions"
     LIFI_API_URL = "https://li.quest/v2/analytics/transfers"
     ONEINCH_API_URL = "https://api.1inch.dev/history"

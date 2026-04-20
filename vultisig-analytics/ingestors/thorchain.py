@@ -1,7 +1,7 @@
 # ingestors/thorchain.py
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
-from .base import BaseIngestor
+from .base import BaseIngestor, BackoffRetry
 from config import config
 import logging
 import json
@@ -11,45 +11,22 @@ logger = logging.getLogger(__name__)
 class THORChainIngestor(BaseIngestor):
     def __init__(self):
         super().__init__('thorchain')
-        # List of endpoints to try in order (primary to fallback)
-        self.api_endpoints = [
-            'https://midgard.ninerealms.com/v2/actions',
-            'https://vanaheimex.com/actions',  # Vanaheimex as fallback
-            'https://midgard.thorswap.net/v2/actions',
-            'https://midgard.thorchain.liquify.com/v2/actions',
-        ]
-        self.current_endpoint_index = 0
-    
-    def fetch_data(self, next_page_token: str = None, limit: int = 50) -> Dict:
-        """Fetch swap data from THORChain API with endpoint fallback"""
+        self.api_endpoint = config.THORCHAIN_API_URL
+        self.backoff_retry = BackoffRetry(max_retries=10)
+
+    def fetch_data(self, next_page_token: str = '', limit: int = 50) -> Dict:
+        """Fetch swap data from THORChain API with backoff retry"""
         params = {
             'type': 'swap',
             'affiliate': ','.join(config.VULTISIG_AFFILIATES),
             'limit': limit
         }
-        
         if next_page_token:
             params['nextPageToken'] = next_page_token
-        
-        # Try each endpoint in sequence
-        last_error = None
-        for i, endpoint in enumerate(self.api_endpoints):
-            try:
-                logger.info(f"Attempting endpoint {i+1}/{len(self.api_endpoints)}: {endpoint}")
-                result = self.make_request(endpoint, params)
-                # If successful, remember this endpoint for next time
-                if self.current_endpoint_index != i:
-                    logger.info(f"Switched to working endpoint: {endpoint}")
-                    self.current_endpoint_index = i
-                return result
-            except Exception as e:
-                last_error = e
-                logger.warning(f"Endpoint {endpoint} failed: {e}")
-                # Continue to next endpoint
-                continue
-        
-        # All endpoints failed
-        raise Exception(f"All THORChain endpoints failed. Last error: {last_error}")
+
+        return self.backoff_retry.retry(
+            lambda: self.make_request(self.api_endpoint, params)
+        )
     
     def parse_swap(self, raw_swap: Dict) -> Dict:
         """Parse THORChain swap data into normalized format"""
@@ -370,9 +347,8 @@ class THORChainIngestor(BaseIngestor):
         # Get Unix timestamp
         ts_unix = int(timestamp.replace(tzinfo=timezone.utc).timestamp())
 
-        # Use first endpoint, replace /v2/actions with /v2/history/swaps
-        base_url = self.api_endpoints[self.current_endpoint_index]
-        history_url = base_url.replace('/v2/actions', '/v2/history/swaps')
+        # Replace /v2/actions with /v2/history/swaps
+        history_url = self.api_endpoint.replace('/v2/actions', '/v2/history/swaps')
 
         # Use 5min interval, from timestamp, count=1 (only these 2 parameters allowed)
         params = {
