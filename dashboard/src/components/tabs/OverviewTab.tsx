@@ -5,7 +5,7 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { DonutChart } from '@/components/DonutChart';
 import { StatsCard } from '@/components/StatsCard';
 import { Tooltip } from '@/components/Tooltip';
-import { DollarSign, Users, Hash, TrendingUp, Activity, Wallet } from 'lucide-react';
+import { ArrowUpRight, DollarSign, Users, Hash, TrendingUp, Activity, Wallet } from 'lucide-react';
 import { providerColors } from '@/lib/chartStyles';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
@@ -227,47 +227,20 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                     </span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="glass-card glass-card-hover will-change-blur rounded-lg p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="bg-cyan-500/10 p-2 rounded-lg">
-                                <DollarSign className="w-5 h-5 text-cyan-400" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <p className="text-slate-400 text-sm font-medium">Projected Annual Volume</p>
-                                <Tooltip content={`Based on ${getGranularityLabel()} average of selected date range`} iconOnly />
-                            </div>
-                        </div>
-                        <p className="text-3xl font-bold text-white">
-                            $<CountUp
-                                end={stats.projectedAnnualVolume}
-                                duration={0.8}
-                                separator=","
-                                decimals={0}
-                                useEasing={true}
-                            />
-                        </p>
-                    </div>
-
-                    <div className="glass-card glass-card-hover will-change-blur rounded-lg p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="bg-blue-500/10 p-2 rounded-lg">
-                                <Wallet className="w-5 h-5 text-blue-400" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <p className="text-slate-400 text-sm font-medium">Projected Annual Revenue</p>
-                                <Tooltip content={`Based on ${getGranularityLabel()} average of selected date range`} iconOnly />
-                            </div>
-                        </div>
-                        <p className="text-3xl font-bold text-white">
-                            $<CountUp
-                                end={stats.projectedAnnualRevenue}
-                                duration={0.8}
-                                separator=","
-                                decimals={0}
-                                useEasing={true}
-                            />
-                        </p>
-                    </div>
+                    <ProjectionCard
+                        variant="volume"
+                        label="Projected Annual Volume"
+                        tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
+                        value={stats.projectedAnnualVolume}
+                    />
+                    <ProjectionCard
+                        variant="revenue"
+                        label="Projected Annual Revenue"
+                        tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
+                        value={stats.projectedAnnualRevenue}
+                        soFarLabel="Revenue so far"
+                        soFarValue={stats.totalRevenue}
+                    />
                 </div>
             </div>
 
@@ -330,6 +303,109 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                         }
                         icon={Activity}
                     />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function formatCompactCurrency(value: number): string {
+    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+    return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+interface ProjectionCardProps {
+    variant: 'volume' | 'revenue';
+    label: string;
+    tooltip: string;
+    value: number;
+    soFarLabel?: string;
+    soFarValue?: number;
+}
+
+function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue }: ProjectionCardProps) {
+    const showProgress = variant === 'revenue' && soFarLabel !== undefined && soFarValue !== undefined;
+    const progressPercent = showProgress && value > 0
+        ? Math.min(100, Math.max(0, (soFarValue / value) * 100))
+        : 0;
+
+    return (
+        <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative overflow-hidden min-h-[150px]">
+            {variant === 'volume' && (
+                <img
+                    src="/figma/projection-chart.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute right-0 bottom-0 w-[60%] max-w-[340px] h-auto pointer-events-none select-none"
+                />
+            )}
+
+            <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+                <div className="flex items-center gap-3">
+                    {variant === 'volume' ? (
+                        <div className="w-8 h-8 rounded-[10px] bg-[#11284A] flex items-center justify-center flex-shrink-0">
+                            <ArrowUpRight className="w-4 h-4 text-[#8295AE]" strokeWidth={1.75} />
+                        </div>
+                    ) : (
+                        <img
+                            src="/figma/treasure-chest.svg"
+                            alt=""
+                            width={32}
+                            height={32}
+                            className="w-8 h-8 flex-shrink-0"
+                        />
+                    )}
+                    <div className="flex items-center gap-1.5">
+                        <p className="text-slate-300 text-sm font-medium">{label}</p>
+                        <Tooltip content={tooltip} iconOnly />
+                    </div>
+                </div>
+
+                <div className="flex items-end justify-between gap-4 flex-wrap">
+                    <p className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                        $<CountUp
+                            end={value}
+                            duration={0.8}
+                            separator=","
+                            decimals={0}
+                            useEasing={true}
+                        />
+                    </p>
+
+                    {showProgress && (
+                        <div className="flex-1 min-w-[180px] max-w-[280px] pb-1">
+                            <div className="relative h-9 mb-1">
+                                <div
+                                    className="absolute top-1 flex items-start gap-1.5"
+                                    style={{ left: `${progressPercent}%` }}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className="block w-px h-8 flex-shrink-0"
+                                        style={{
+                                            background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+                                        }}
+                                    />
+                                    <div className="flex flex-col items-start gap-0.5">
+                                        <span className="text-[10px] text-slate-500 leading-tight whitespace-nowrap">{soFarLabel}</span>
+                                        <span className="text-xs font-semibold text-slate-200 leading-tight whitespace-nowrap">
+                                            {formatCompactCurrency(soFarValue!)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="relative w-full h-[7px] rounded-full bg-[#11284A] overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-[width] duration-700 ease-out"
+                                    style={{
+                                        width: `${progressPercent}%`,
+                                        background: 'linear-gradient(109deg, #11284A 0%, #2155DF 29%, #FFFFFF 98%)',
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
