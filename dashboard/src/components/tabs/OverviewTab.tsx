@@ -331,14 +331,16 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
         : 0;
 
     return (
-        <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative overflow-hidden min-h-[150px]">
+        <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative min-h-[150px]">
             {variant === 'volume' && (
-                <img
-                    src="/figma/projection-chart.svg"
-                    alt=""
-                    aria-hidden="true"
-                    className="absolute right-0 bottom-0 w-[60%] max-w-[340px] h-auto pointer-events-none select-none"
-                />
+                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+                    <img
+                        src="/figma/projection-chart.svg"
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute right-0 bottom-0 w-[60%] max-w-[340px] h-auto select-none"
+                    />
+                </div>
             )}
 
             <div className="relative z-10 flex flex-col h-full justify-between gap-6">
