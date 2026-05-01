@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartCard } from './ChartCard';
 import { providerColors } from '@/lib/chartStyles';
 
@@ -10,7 +9,6 @@ interface TopPathsChartProps {
     subtitle?: string;
     data: any[];
     dataKey?: string;
-    height?: number;
     /** Optional total value for calculating percentages. If not provided, uses sum of top 10 items. */
     total?: number;
 }
@@ -20,7 +18,6 @@ export function TopPathsChart({
     subtitle,
     data,
     dataKey = 'volume',
-    height = 150,
     total: providedTotal
 }: TopPathsChartProps) {
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -38,15 +35,11 @@ export function TopPathsChart({
     // Check if we have data to display
     const hasData = sortedData.length > 0 && total > 0;
 
-    // Transform data for stacked horizontal bar - normalize to 100% within top 10 for visual consistency
-    // This ensures the bar chart fills completely while percentages in legend show true totals
-    const stackedData = [{
-        name: 'Top 10 Swap Paths',
-        ...Object.fromEntries(sortedData.map((item, index) => [
-            `path${index}`,
-            top10Sum > 0 ? ((item[dataKey] || 0) / top10Sum) * 100 : 0
-        ]))
-    }];
+    // Largest percentage among top 10 — used to scale bar widths so the leader fills its track.
+    const maxPercentage = sortedData.reduce(
+        (max, item) => Math.max(max, total > 0 ? ((item[dataKey] || 0) / total) * 100 : 0),
+        0
+    );
 
     // Function to clean swap path labels - remove contract addresses
     const cleanSwapPathLabel = (label: string) => {
@@ -66,117 +59,33 @@ export function TopPathsChart({
         }
     };
 
-    // Determine label based on dataKey
-    const getDataLabel = () => {
-        switch (dataKey) {
-            case 'volume': return 'Volume';
-            case 'fees': return 'Fees';
-            case 'count': return 'Count';
-            default: return 'Value';
-        }
-    };
-
-    // Custom tooltip
-    const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length) {
-            // Use hoveredIndex if available, otherwise fall back to payload
-            const pathIndex = hoveredIndex !== null ? hoveredIndex : parseInt(payload[0].dataKey.replace('path', ''));
-            const pathData = sortedData[pathIndex];
-            const percentage = ((pathData[dataKey] / total) * 100).toFixed(1);
-            const cleanedName = cleanSwapPathLabel(pathData.name);
-
-            return (
-                <div className="glass-card rounded-xl p-3 shadow-xl">
-                    <p className="text-slate-200 font-medium mb-2">{cleanedName}</p>
-                    <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-4">
-                            <span className="text-slate-400 text-sm">{getDataLabel()}:</span>
-                            <span className="text-cyan-400 font-bold">
-                                {dataKey === 'count'
-                                    ? new Intl.NumberFormat('en-US').format(pathData[dataKey])
-                                    : `$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(pathData[dataKey])}`
-                                }
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                            <span className="text-slate-400 text-sm">Percentage:</span>
-                            <span className="text-white font-semibold">{percentage}%</span>
-                        </div>
-                        {pathData.count && dataKey !== 'count' && (
-                            <div className="flex items-center justify-between gap-4">
-                                <span className="text-slate-400 text-sm">Count:</span>
-                                <span className="text-white font-semibold">
-                                    {new Intl.NumberFormat('en-US').format(pathData.count)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-        return null;
-    };
-
     return (
         <ChartCard title={title} subtitle={subtitle}>
             {hasData ? (
-                <div className="space-y-4">
-                    {/* Stacked Bar Chart */}
-                    <ResponsiveContainer width="100%" height={height}>
-                        <BarChart
-                            data={stackedData}
-                            layout="vertical"
-                            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                        >
-                            <XAxis
-                                type="number"
-                                domain={[0, 100]}
-                                hide
-                            />
-                            <YAxis
-                                type="category"
-                                dataKey="name"
-                                hide
-                            />
-                            <Tooltip content={<CustomTooltip />} cursor={false} />
-                            {sortedData.map((item, index) => (
-                                <Bar
-                                    key={`path${index}`}
-                                    dataKey={`path${index}`}
-                                    stackId="a"
-                                    fill={providerColors[index % providerColors.length]}
-                                    radius={index === 0 ? [4, 0, 0, 4] : index === sortedData.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
-                                    barSize={60}
-                                    onMouseEnter={() => setHoveredIndex(index)}
-                                    onMouseLeave={() => setHoveredIndex(null)}
-                                />
-                            ))}
-                        </BarChart>
-                    </ResponsiveContainer>
+                <div className="-mx-1 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                    {sortedData.map((item, index) => {
+                        const rawPercentage = total > 0 ? ((item[dataKey] || 0) / total) * 100 : 0;
+                        const percentage = rawPercentage.toFixed(1);
+                        const dollarValue = item[dataKey] || 0;
+                        const cleanedLabel = cleanSwapPathLabel(item.name);
+                        const color = providerColors[index % providerColors.length];
+                        // Scale bar fill so the largest item reaches 100% of the track width.
+                        const barWidth = maxPercentage > 0 ? (rawPercentage / maxPercentage) * 100 : 0;
 
-                    {/* Legend */}
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 md:gap-2 px-2 md:px-4">
-                        {sortedData.map((item, index) => {
-                            const percentage = ((item[dataKey] / total) * 100).toFixed(1);
-                            const dollarValue = item[dataKey] || 0;
-                            const cleanedLabel = cleanSwapPathLabel(item.name);
-                            return (
-                                <div
-                                    key={index}
-                                    className="flex items-center gap-1 md:gap-2 cursor-pointer hover:bg-white/5 rounded px-0.5 md:px-1 py-0.5 transition-colors"
-                                    onMouseEnter={() => setHoveredIndex(index)}
-                                    onMouseLeave={() => setHoveredIndex(null)}
-                                    onClick={() => setShowPercentage(!showPercentage)}
-                                    title={`${item.name} - Click to toggle between % and $ value`}
-                                >
-                                    <div
-                                        className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-sm flex-shrink-0"
-                                        style={{ backgroundColor: providerColors[index % providerColors.length] }}
-                                    />
-                                    <span className="text-[10px] md:text-xs text-slate-300 truncate">
+                        return (
+                            <div
+                                key={index}
+                                className="cursor-pointer rounded px-1 py-1 transition-colors hover:bg-white/5"
+                                onMouseEnter={() => setHoveredIndex(index)}
+                                onMouseLeave={() => setHoveredIndex(null)}
+                                onClick={() => setShowPercentage(!showPercentage)}
+                                title={`${item.name} - Click to toggle between % and $ value`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="truncate text-xs md:text-sm text-slate-300">
                                         {hoveredIndex === index ? item.name : cleanedLabel}
                                     </span>
-                                    <span className="text-[10px] md:text-xs text-slate-400 ml-auto font-medium">
+                                    <span className="ml-auto text-xs md:text-sm font-medium text-slate-400">
                                         {showPercentage
                                             ? `${percentage}%`
                                             : dataKey === 'count'
@@ -185,9 +94,18 @@ export function TopPathsChart({
                                         }
                                     </span>
                                 </div>
-                            );
-                        })}
-                    </div>
+                                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/5">
+                                    <div
+                                        className="h-full rounded-full transition-all"
+                                        style={{
+                                            width: `${barWidth}%`,
+                                            backgroundColor: color,
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="flex items-center justify-center h-[300px] w-full">
