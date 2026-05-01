@@ -78,11 +78,13 @@ class SyncService:
             # Get latest transaction hash from database to detect duplicates
             latest_tx_hash = None
             try:
-                cursor = db_manager.conn.cursor()
-                cursor.execute(f"SELECT tx_hash FROM swaps WHERE source = %s ORDER BY timestamp DESC LIMIT 1", (source_name,))
-                result = cursor.fetchone()
-                if result:
-                    latest_tx_hash = result[0]
+                results = db_manager.execute_query(
+                    "SELECT tx_hash FROM swaps WHERE source = %s ORDER BY timestamp DESC LIMIT 1",
+                    (source_name,),
+                    fetch=True
+                )
+                if results:
+                    latest_tx_hash = results[0]['tx_hash']
                     logger.info(f"Latest {source_name} tx in DB: {latest_tx_hash}")
             except Exception as e:
                 logger.warning(f"Could not fetch latest tx_hash for {source_name}: {e}")
@@ -259,12 +261,12 @@ def main():
 
     # Run initial VULT holders sync if data is stale (more than 24h old)
     try:
-        from database.connection import db_manager
-        cursor = db_manager.conn.cursor()
-        cursor.execute("SELECT value FROM vult_holders_metadata WHERE key = 'last_updated'")
-        result = cursor.fetchone()
-        if result:
-            last_updated = datetime.fromisoformat(result[0].replace('Z', '+00:00'))
+        results = db_manager.execute_query(
+            "SELECT value FROM vult_holders_metadata WHERE key = 'last_updated'",
+            fetch=True
+        )
+        if results:
+            last_updated = datetime.fromisoformat(results[0]['value'].replace('Z', '+00:00'))
             if datetime.now(last_updated.tzinfo) - last_updated > timedelta(hours=24):
                 logger.info("VULT holders data is stale (>24h), running initial sync")
                 sync_vult_holders()
