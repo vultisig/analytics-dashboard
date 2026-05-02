@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { HeroMetric } from '@/components/HeroMetric';
 import { DonutChart } from '@/components/DonutChart';
 import { StatsCard } from '@/components/StatsCard';
@@ -330,6 +330,31 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
         ? Math.min(100, Math.max(0, (soFarValue / value) * 100))
         : 0;
 
+    const trackRef = useRef<HTMLDivElement>(null);
+    const labelRef = useRef<HTMLDivElement>(null);
+    const [flipLabel, setFlipLabel] = useState(false);
+
+    useEffect(() => {
+        if (!showProgress) return;
+        const track = trackRef.current;
+        const labelEl = labelRef.current;
+        if (!track || !labelEl) return;
+
+        const check = () => {
+            const trackWidth = track.offsetWidth;
+            const labelWidth = labelEl.offsetWidth;
+            if (trackWidth === 0) return;
+            const linePos = (progressPercent / 100) * trackWidth;
+            setFlipLabel(linePos + labelWidth > trackWidth);
+        };
+
+        check();
+        const observer = new ResizeObserver(check);
+        observer.observe(track);
+        observer.observe(labelEl);
+        return () => observer.disconnect();
+    }, [progressPercent, showProgress, soFarValue]);
+
     return (
         <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative min-h-[150px]">
             {variant === 'volume' && (
@@ -377,10 +402,14 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
 
                     {showProgress && (
                         <div className="flex-1 min-w-[180px] max-w-[280px] pb-1">
-                            <div className="relative h-9 mb-1">
+                            <div ref={trackRef} className="relative h-9 mb-1">
                                 <div
-                                    className="absolute top-1 flex items-start gap-1.5"
-                                    style={{ left: `${progressPercent}%` }}
+                                    ref={labelRef}
+                                    className={`absolute top-1 flex items-start gap-1.5 ${flipLabel ? 'flex-row-reverse' : ''}`}
+                                    style={{
+                                        left: `${progressPercent}%`,
+                                        transform: flipLabel ? 'translateX(-100%)' : undefined,
+                                    }}
                                 >
                                     <span
                                         aria-hidden="true"
@@ -389,7 +418,7 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                                             background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
                                         }}
                                     />
-                                    <div className="flex flex-col items-start gap-0.5">
+                                    <div className={`flex flex-col gap-0.5 ${flipLabel ? 'items-end' : 'items-start'}`}>
                                         <span className="text-[10px] text-slate-500 leading-tight whitespace-nowrap">{soFarLabel}</span>
                                         <span className="text-xs font-semibold text-slate-200 leading-tight whitespace-nowrap">
                                             {formatCompactCurrency(soFarValue!)}
