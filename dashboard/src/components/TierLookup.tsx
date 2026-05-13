@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, X, Shield, Award, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import { buildApiUrl } from '@/lib/api';
+import { IconAlertCircleV, IconAwardV, IconLoader2V, IconMagnifyingGlass2, IconShieldV, IconTrendingUpV, IconXV } from '@/icons';
 
 interface LookupResult {
     found: boolean;
@@ -100,12 +100,12 @@ export function TierLookup() {
 
     return (
         <div className="space-y-4">
-            {/* Search Input */}
+            {/* IconMagnifyingGlass2 Input */}
             <div className={`
                 relative flex items-center rounded-lg bg-white/5 border transition-all
                 ${isFocused ? 'border-[rgba(33,85,223,0.50)] ring-1 ring-[rgba(33,85,223,0.20)]' : 'border-white/10'}
             `}>
-                <Search className="w-5 h-5 text-[var(--text-tertiary)] ml-4 shrink-0" />
+                <IconMagnifyingGlass2 className="w-5 h-5 text-[var(--text-tertiary)] ml-4 shrink-0" />
                 <input
                     type="text"
                     value={address}
@@ -123,7 +123,7 @@ export function TierLookup() {
                         className="p-2 mr-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                         aria-label="Clear search"
                     >
-                        <X className="w-4 h-4" />
+                        <IconXV className="w-4 h-4" />
                     </button>
                 )}
                 <button
@@ -139,7 +139,7 @@ export function TierLookup() {
                     `}
                 >
                     {isLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <IconLoader2V className="w-4 h-4 animate-spin" />
                     ) : (
                         'Lookup'
                     )}
@@ -149,7 +149,7 @@ export function TierLookup() {
             {/* Error Message */}
             {error && (
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-[var(--alert-error)] text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <IconAlertCircleV className="w-4 h-4 shrink-0" />
                     {error}
                 </div>
             )}
@@ -178,7 +178,7 @@ export function TierLookup() {
                                 {/* Tier */}
                                 <div>
                                     <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
-                                        <Award className="w-3 h-3" />
+                                        <IconAwardV className="w-3 h-3" />
                                         Tier
                                     </p>
                                     <p className={`text-xl font-bold ${tierColor.text}`}>
@@ -194,7 +194,7 @@ export function TierLookup() {
                                 {/* VULT Balance */}
                                 <div>
                                     <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
-                                        <TrendingUp className="w-3 h-3" />
+                                        <IconTrendingUpV className="w-3 h-3" />
                                         Balance
                                     </p>
                                     <p className="text-xl font-bold text-[var(--text-primary)]">
@@ -229,7 +229,7 @@ export function TierLookup() {
                             {/* THORGuard Badge */}
                             {result.hasThorguard && (
                                 <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                    <Shield className="w-4 h-4 text-[var(--alert-success)]" />
+                                    <IconShieldV className="w-4 h-4 text-[var(--alert-success)]" />
                                     <span className="text-sm text-[var(--alert-success)] font-medium">
                                         THORGuard NFT Holder
                                     </span>

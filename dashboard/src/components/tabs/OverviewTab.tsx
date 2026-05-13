@@ -5,7 +5,17 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { DonutChart } from '@/components/DonutChart';
 import { StatsCard } from '@/components/StatsCard';
 import { Tooltip } from '@/components/Tooltip';
-import { ArrowUpRight, DollarSign, Users, Hash, TrendingUp, Activity, Wallet } from 'lucide-react';
+import {
+    IconArrowUpRightV,
+    IconDollar,
+    IconVault,
+    IconPeopleAdded,
+    IconHashtag,
+    IconChart4,
+    IconReceiptCheck,
+    IconArrowsRepeatLR,
+    IconCalculatorV,
+} from '@/icons';
 import { providerColors } from '@/lib/chartStyles';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
@@ -191,26 +201,26 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                 <HeroMetric
                     label="Total Swap Volume"
                     value={stats.totalVolume}
-                    icon={DollarSign}
+                    icon={IconDollar}
                     color="accent"
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Revenue"
                     value={stats.totalRevenue}
-                    icon={Wallet}
+                    icon={IconVault}
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Unique Swappers"
                     value={stats.totalUsers}
-                    icon={Users}
+                    icon={IconPeopleAdded}
                     format="number"
                 />
                 <HeroMetric
                     label="Total Swap Count"
                     value={stats.totalSwaps}
-                    icon={Hash}
+                    icon={IconHashtag}
                     format="number"
                 />
             </div>
@@ -270,7 +280,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={TrendingUp}
+                        icon={IconChart4}
                     />
 
                     <StatsCard
@@ -286,7 +296,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={Wallet}
+                        icon={IconReceiptCheck}
                     />
 
                     <StatsCard
@@ -301,7 +311,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={Activity}
+                        icon={IconArrowsRepeatLR}
                     />
                 </div>
             </div>
@@ -347,7 +357,7 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                 <div className="flex items-center gap-3">
                     {variant === 'volume' ? (
                         <div className="w-8 h-8 rounded-[10px] bg-[#11284A] flex items-center justify-center flex-shrink-0">
-                            <ArrowUpRight className="w-4 h-4 text-[#8295AE]" strokeWidth={1.75} />
+                            <IconArrowUpRightV className="text-[var(--text-tertiary)]" />
                         </div>
                     ) : (
                         <img

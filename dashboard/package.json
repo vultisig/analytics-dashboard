@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.44.0",
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "csv-parse": "^6.1.0",

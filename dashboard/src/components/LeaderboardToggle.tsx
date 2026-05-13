@@ -1,6 +1,6 @@
+import { IconDollar, IconPeopleCopy } from '@/icons';
 'use client';
 
-import { DollarSign, Users } from 'lucide-react';
 
 interface LeaderboardToggleProps {
     view: 'revenue' | 'referrals';
@@ -17,7 +17,7 @@ export function LeaderboardToggle({ view, onViewChange }: LeaderboardToggleProps
                 data-active={view === 'revenue'}
                 className="toggle-group-item flex items-center gap-1.5"
             >
-                <DollarSign className="size-3.5" />
+                <IconDollar className="size-3.5" />
                 <span>Revenue</span>
             </button>
             <button
@@ -27,7 +27,7 @@ export function LeaderboardToggle({ view, onViewChange }: LeaderboardToggleProps
                 data-active={view === 'referrals'}
                 className="toggle-group-item flex items-center gap-1.5"
             >
-                <Users className="size-3.5" />
+                <IconPeopleCopy className="size-3.5" />
                 <span>Referrals</span>
             </button>
         </div>

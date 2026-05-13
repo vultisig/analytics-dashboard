@@ -1,14 +1,17 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 import CountUp from 'react-countup';
-import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
+import { IconTrendingUpV, IconTrendingDownV } from '@/icons';
 import { Tooltip } from './Tooltip';
+
+type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 interface HeroMetricProps {
     label: string;
     value: number;
-    icon: LucideIcon;
+    icon: IconComponent;
     trend?: {
         value: string;
         direction: 'up' | 'down';
@@ -64,7 +67,7 @@ export function HeroMetric({
         <div className={`metric-card ${isAccent ? 'metric-card-accent' : ''}`}>
             <div className="flex items-center justify-between relative z-10">
                 <div className={`icon-badge ${isAccent ? 'icon-badge-brand' : ''}`}>
-                    <Icon className="size-[18px]" />
+                    <Icon size={18} />
                 </div>
             </div>
             <div className="flex flex-col gap-[14px] relative z-10">
@@ -99,9 +102,9 @@ export function HeroMetric({
                 {trend && (
                     <div className="flex items-center gap-1.5">
                         {trend.direction === 'up' ? (
-                            <TrendingUp className="size-4 text-[var(--alert-success)]" />
+                            <IconTrendingUpV className="text-[var(--alert-success)]" />
                         ) : (
-                            <TrendingDown className="size-4 text-[var(--alert-error)]" />
+                            <IconTrendingDownV className="text-[var(--alert-error)]" />
                         )}
                         <span className={`text-sm font-medium ${trend.direction === 'up' ? 'text-[var(--alert-success)]' : 'text-[var(--alert-error)]'}`}>
                             {trend.value}

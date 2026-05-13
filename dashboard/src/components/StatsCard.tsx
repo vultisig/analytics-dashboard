@@ -1,4 +1,6 @@
-import { LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
+
+type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 interface StatsCardProps {
     title: string;
@@ -6,7 +8,7 @@ interface StatsCardProps {
     value: string | React.ReactNode;
     change?: string;
     changeType?: 'positive' | 'negative';
-    icon: LucideIcon;
+    icon: IconComponent;
     trend?: 'up' | 'down';
     size?: 'default' | 'large';
     /** Optional small caption shown to the right of the value (e.g. "Weekly"). */
@@ -27,7 +29,7 @@ export function StatsCard({
         <div className="surface-card surface-card-hover p-5 flex flex-col gap-4">
             <div className="flex items-center gap-2.5">
                 <div className="icon-badge">
-                    <Icon className="size-4" />
+                    <Icon />
                 </div>
                 <p className="text-[13px] leading-[18px] tracking-[0.04em] text-[var(--text-secondary)]">
                     {title}

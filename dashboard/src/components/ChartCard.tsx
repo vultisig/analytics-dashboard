@@ -1,10 +1,11 @@
-import { ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
+import { ReactNode, ComponentType } from 'react';
+
+type IconComponent = ComponentType<{ size?: number; className?: string }>;
 
 interface ChartCardProps {
     title: string;
     subtitle?: string;
-    icon?: LucideIcon;
+    icon?: IconComponent;
     children: ReactNode;
     className?: string;
     action?: ReactNode;
@@ -29,7 +30,7 @@ export function ChartCard({
                 <div className="flex items-center gap-3 min-w-0">
                     {Icon && (
                         <div className={`icon-badge ${brandIcon ? 'icon-badge-brand' : ''}`}>
-                            <Icon className="size-4" />
+                            <Icon />
                         </div>
                     )}
                     <div className="min-w-0">

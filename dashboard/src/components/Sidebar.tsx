@@ -2,34 +2,35 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { ComponentType } from 'react';
 import {
-    LayoutDashboard,
-    ArrowRightLeft,
-    Wallet,
-    Users,
-    Hash,
-    UserPlus,
-    Gem,
-    PanelLeft,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+    IconSquareGridCircle,
+    IconArrowLeftRight,
+    IconWallet4,
+    IconPeopleCopy,
+    IconHashtag,
+    IconPeopleAdded,
+    IconTrophyV,
+    IconLayoutLeft,
+    IconLayoutLeftExpand,
+} from '@/icons';
 import SystemStatus from './SystemStatus';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
 interface NavItem {
     id: string;
     label: string;
-    icon: LucideIcon;
+    icon: ComponentType<{ size?: number; className?: string }>;
 }
 
 const NAV_ITEMS: NavItem[] = [
-    { id: SHORT_VALUES.TAB_OVERVIEW, label: 'Overview', icon: LayoutDashboard },
-    { id: SHORT_VALUES.TAB_VOLUME, label: 'Volume', icon: ArrowRightLeft },
-    { id: SHORT_VALUES.TAB_REVENUE, label: 'Revenue', icon: Wallet },
-    { id: SHORT_VALUES.TAB_USERS, label: 'Users', icon: Users },
-    { id: SHORT_VALUES.TAB_COUNT, label: 'Count', icon: Hash },
-    { id: SHORT_VALUES.TAB_REFERRALS, label: 'Referrals', icon: UserPlus },
-    { id: SHORT_VALUES.TAB_HOLDERS, label: 'Holders', icon: Gem },
+    { id: SHORT_VALUES.TAB_OVERVIEW, label: 'Overview', icon: IconSquareGridCircle },
+    { id: SHORT_VALUES.TAB_VOLUME, label: 'Volume', icon: IconArrowLeftRight },
+    { id: SHORT_VALUES.TAB_REVENUE, label: 'Revenue', icon: IconWallet4 },
+    { id: SHORT_VALUES.TAB_USERS, label: 'Users', icon: IconPeopleCopy },
+    { id: SHORT_VALUES.TAB_COUNT, label: 'Count', icon: IconHashtag },
+    { id: SHORT_VALUES.TAB_REFERRALS, label: 'Referrals', icon: IconPeopleAdded },
+    { id: SHORT_VALUES.TAB_HOLDERS, label: 'Holders', icon: IconTrophyV },
 ];
 
 const STORAGE_KEY = 'vult-analytics-sidebar-collapsed';
@@ -101,7 +102,9 @@ export function Sidebar() {
                     aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                 >
-                    <PanelLeft className="size-5" />
+                    {collapsed
+                        ? <IconLayoutLeftExpand size={20} />
+                        : <IconLayoutLeft size={20} />}
                 </button>
             </div>
 

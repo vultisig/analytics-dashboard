@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, ChevronDown } from 'lucide-react';
+import { IconLineChart1, IconChevronDownSmall } from '@/icons';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
 type Granularity = 'h' | 'd' | 'w' | 'm';
@@ -120,9 +120,9 @@ export function GranularitySelector() {
                 onClick={() => setIsOpen((v) => !v)}
                 className="pill"
             >
-                <BarChart3 className="size-4" />
+                <IconLineChart1 />
                 <span>Granularity: <span className="text-[var(--text-primary)]">{currentOption.label}</span></span>
-                <ChevronDown className={`size-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <IconChevronDownSmall className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (

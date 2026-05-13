@@ -9,12 +9,12 @@ import { ProviderSection } from '@/components/ProviderSection';
 import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
-import { TrendingUp, Hash, Wallet, Info } from 'lucide-react';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
+import { IconCircleInfo, IconHashtag, IconTrendingUpV, IconWallet4 } from '@/icons';
 
 interface CountTabProps {
     range: string;
@@ -339,21 +339,21 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                 <HeroMetric
                     label="Total Swap Count"
                     value={data.totalCount}
-                    icon={Hash}
+                    icon={IconHashtag}
                     color="cyan"
                     format="number"
                 />
                 <HeroMetric
                     label={`Average Swap Count (${getGranularityLabel()})`}
                     value={data.averageCount}
-                    icon={TrendingUp}
+                    icon={IconTrendingUpV}
                     color="blue"
                     format="number"
                 />
                 <HeroMetric
                     label="Projected Annual Count"
                     value={projectedAnnualCount}
-                    icon={Wallet}
+                    icon={IconWallet4}
                     color="teal"
                     format="number"
                     tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
@@ -366,7 +366,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
                     {chartView === 'platform' && (
                         <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-                            <Info className="w-3.5 h-3.5" />
+                            <IconCircleInfo className="w-3.5 h-3.5" />
                             <span>1inch data excluded (no platform info)</span>
                         </div>
                     )}

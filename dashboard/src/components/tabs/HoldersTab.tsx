@@ -5,8 +5,8 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { ChartCard } from '@/components/ChartCard';
 import { TierCard } from '@/components/TierCard';
 import { TierLookup } from '@/components/TierLookup';
-import { Users, Shield, Award, Search, Info, ExternalLink } from 'lucide-react';
 import { fetchHolders } from '@/lib/api';
+import { IconAwardV, IconCircleInfo, IconExternalLinkV, IconMagnifyingGlass2, IconPeopleCopy, IconShieldV } from '@/icons';
 
 interface TierData {
     tier: string;
@@ -157,7 +157,7 @@ export function HoldersTab() {
                 <HeroMetric
                     label="Total Holders"
                     value={data.totalHolders}
-                    icon={Users}
+                    icon={IconPeopleCopy}
                     color="cyan"
                     format="number"
                     tooltip="Total number of addresses holding VULT tokens"
@@ -165,7 +165,7 @@ export function HoldersTab() {
                 <HeroMetric
                     label="Tiered Holders"
                     value={data.tieredHolders}
-                    icon={Award}
+                    icon={IconAwardV}
                     color="purple"
                     format="number"
                     tooltip="Number of holders with Bronze tier or higher"
@@ -173,7 +173,7 @@ export function HoldersTab() {
                 <HeroMetric
                     label="Supply Held"
                     value={supplyHeldPercent}
-                    icon={Award}
+                    icon={IconAwardV}
                     color="blue"
                     format="percent"
                     tooltip="Percentage of total supply held by tiered holders (Bronze+)"
@@ -181,7 +181,7 @@ export function HoldersTab() {
                 <HeroMetric
                     label="THORGuard Holders"
                     value={data.thorguardHolders}
-                    icon={Shield}
+                    icon={IconShieldV}
                     color="teal"
                     format="number"
                     tooltip="Number of VULT holders who also hold a THORGuard NFT"
@@ -192,7 +192,7 @@ export function HoldersTab() {
             <ChartCard
                 title="Tier Distribution"
                 subtitle="Holders by discount tier"
-                icon={Award}
+                icon={IconAwardV}
             >
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     {tiersWithHolders.map((tier) => (
@@ -213,7 +213,7 @@ export function HoldersTab() {
             <ChartCard
                 title="Check Your Tier"
                 subtitle="Enter your Ethereum address to see your VULT tier"
-                icon={Search}
+                icon={IconMagnifyingGlass2}
             >
                 <TierLookup />
             </ChartCard>
@@ -221,7 +221,7 @@ export function HoldersTab() {
             {/* Update Notice */}
             <div className="flex flex-col items-center gap-1 text-xs text-[var(--text-tertiary)]">
                 <div className="flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5" />
+                    <IconCircleInfo className="w-3.5 h-3.5" />
                     <span>Data updates daily at {showUTC ? '00:00 UTC' : getNextUpdateLocal()}</span>
                 </div>
                 <button
@@ -243,7 +243,7 @@ export function HoldersTab() {
                     className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors"
                 >
                     Learn about $VULT discount tiers
-                    <ExternalLink className="w-3 h-3" />
+                    <IconExternalLinkV className="w-3 h-3" />
                 </a>
             </div>
         </div>

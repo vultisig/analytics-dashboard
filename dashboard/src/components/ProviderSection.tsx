@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { formatProviderName } from '@/lib/providerUtils';
+import { IconChevronDownSmall } from '@/icons';
 
 interface ProviderSectionProps {
     provider: string;
@@ -47,7 +47,7 @@ export function ProviderSection({
                 <h3 className="text-xl font-bold text-[var(--text-primary)]">
                     {formatProviderName(provider)}
                 </h3>
-                <ChevronDown
+                <IconChevronDownSmall
                     className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform duration-300 ${
                         isExpanded ? 'rotate-180' : ''
                     }`}

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { ChartCard } from './ChartCard';
 import { LeaderboardToggle } from './LeaderboardToggle';
-import { Trophy, DollarSign, Users, TrendingUp, ChevronLeft, ChevronRight, Search, X, ExternalLink } from 'lucide-react';
+import { IconChevronLeftV, IconChevronRightV, IconDollar, IconExternalLinkV, IconMagnifyingGlass2, IconPeopleCopy, IconTrendingUpV, IconTrophyV, IconXV } from '@/icons';
 
 interface ReferrerData {
     referrerCode: string;
@@ -99,7 +99,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
             <ChartCard
                 title="Referrer Leaderboard"
                 subtitle="Top performing referrers"
-                icon={Trophy}
+                icon={IconTrophyV}
             >
                 <div className="flex items-center justify-center h-48 text-[var(--text-tertiary)]">
                     No referral data available for this period
@@ -112,23 +112,23 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
         <ChartCard
             title="Referrer Leaderboard"
             subtitle={view === 'revenue' ? 'Ranked by total revenue earned' : 'Ranked by unique users referred'}
-            icon={Trophy}
+            icon={IconTrophyV}
             action={<LeaderboardToggle view={view} onViewChange={handleViewChange} />}
         >
-            {/* Search Input */}
+            {/* IconMagnifyingGlass2 Input */}
             <div className="mt-4 mb-3">
                 <div className={`
                     relative flex items-center rounded-lg bg-white/5 border transition-all
                     ${isSearchFocused ? 'border-[rgba(33,85,223,0.50)] ring-1 ring-[rgba(33,85,223,0.20)]' : 'border-white/10'}
                 `}>
-                    <Search className="w-4 h-4 text-[var(--text-tertiary)] ml-3 shrink-0" />
+                    <IconMagnifyingGlass2 className="w-4 h-4 text-[var(--text-tertiary)] ml-3 shrink-0" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => setIsSearchFocused(true)}
                         onBlur={() => setIsSearchFocused(false)}
-                        placeholder="Search referrer code..."
+                        placeholder="IconMagnifyingGlass2 referrer code..."
                         className="flex-1 bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] placeholder-slate-500 focus:outline-none"
                     />
                     {searchQuery && (
@@ -138,12 +138,12 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             className="p-1.5 mr-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                             aria-label="Clear search"
                         >
-                            <X className="w-4 h-4" />
+                            <IconXV className="w-4 h-4" />
                         </button>
                     )}
                 </div>
 
-                {/* Search Result Card */}
+                {/* IconMagnifyingGlass2 Result Card */}
                 {searchQuery && (
                     <div className="mt-2">
                         {searchResult ? (
@@ -176,7 +176,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                                 }
                                             </p>
                                             <p className="text-[10px] text-[var(--text-tertiary)]">
-                                                {view === 'revenue' ? 'Revenue' : 'Users'}
+                                                {view === 'revenue' ? 'Revenue' : 'IconPeopleCopy'}
                                             </p>
                                         </div>
                                         {searchResult.pageNumber !== currentPage && (
@@ -232,11 +232,11 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                 </p>
                                 <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-[var(--text-tertiary)]">
                                     <span className="flex items-center gap-0.5 md:gap-1">
-                                        <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
+                                        <IconTrendingUpV className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
                                         <span className="truncate">{formatNumber(item.referralCount)}</span>
                                     </span>
                                     <span className="flex items-center gap-0.5 md:gap-1">
-                                        <DollarSign className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
+                                        <IconDollar className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
                                         <span className="truncate">{formatCurrency(item.totalVolume)}</span>
                                     </span>
                                 </div>
@@ -251,7 +251,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                     }
                                 </p>
                                 <p className="text-[10px] md:text-xs text-[var(--text-tertiary)]">
-                                    {view === 'revenue' ? 'Revenue' : 'Users'}
+                                    {view === 'revenue' ? 'Revenue' : 'IconPeopleCopy'}
                                 </p>
                             </div>
 
@@ -264,7 +264,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                     }
                                 </p>
                                 <p className="text-xs text-[var(--text-tertiary)]">
-                                    {view === 'revenue' ? 'Users' : 'Revenue'}
+                                    {view === 'revenue' ? 'IconPeopleCopy' : 'Revenue'}
                                 </p>
                             </div>
                         </div>
@@ -292,7 +292,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             `}
                             aria-label="Previous page"
                         >
-                            <ChevronLeft className="w-4 h-4" />
+                            <IconChevronLeftV className="w-4 h-4" />
                         </button>
                         <div className="flex items-center gap-1">
                             {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
@@ -325,7 +325,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             `}
                             aria-label="Next page"
                         >
-                            <ChevronRight className="w-4 h-4" />
+                            <IconChevronRightV className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
@@ -340,7 +340,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                     className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors"
                 >
                     Learn how to become a referrer
-                    <ExternalLink className="w-3 h-3" />
+                    <IconExternalLinkV className="w-3 h-3" />
                 </a>
             </div>
         </ChartCard>

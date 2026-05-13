@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { HeroMetric } from '@/components/HeroMetric';
 import { ReferrerLeaderboard } from '@/components/ReferrerLeaderboard';
-import { PiggyBank, DollarSign, Users, TrendingUp, Info } from 'lucide-react';
 import { providerColors } from '@/lib/chartStyles';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
+import { IconCircleInfo, IconDollar, IconPeopleCopy, IconPigMoneyV, IconTrendingUpV } from '@/icons';
 
 interface ReferralsTabProps {
     range: string;
@@ -114,7 +114,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                 <HeroMetric
                     label="Total Fees Saved"
                     value={allData.totalFeesSaved}
-                    icon={PiggyBank}
+                    icon={IconPigMoneyV}
                     color="cyan"
                     format="currency"
                     tooltip="User savings from using referral codes vs standard 50 bps fee"
@@ -122,7 +122,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                 <HeroMetric
                     label="Referrer Revenue"
                     value={allData.totalReferrerRevenue}
-                    icon={DollarSign}
+                    icon={IconDollar}
                     color="blue"
                     format="currency"
                     tooltip="Total revenue earned by referrers (referrer BPS x volume)"
@@ -130,15 +130,15 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                 <HeroMetric
                     label="Referral Swaps"
                     value={allData.totalReferralCount}
-                    icon={TrendingUp}
+                    icon={IconTrendingUpV}
                     color="teal"
                     format="number"
                     tooltip="Total number of swaps using referral codes"
                 />
                 <HeroMetric
-                    label="Users with Referrals"
+                    label="IconPeopleCopy with Referrals"
                     value={allData.uniqueUsersWithReferrals}
-                    icon={Users}
+                    icon={IconPeopleCopy}
                     color="purple"
                     format="number"
                     tooltip="Number of unique users who used a referral code"
@@ -193,7 +193,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-[var(--text-tertiary)]">Unique Users</p>
+                                        <p className="text-[var(--text-tertiary)]">Unique IconPeopleCopy</p>
                                         <p className="text-[var(--text-primary)] font-semibold">
                                             {provider.uniqueUsers.toLocaleString()}
                                         </p>
@@ -207,7 +207,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
 
             {/* Footer Note */}
             <div className="flex items-center justify-center gap-2 text-xs text-[var(--text-tertiary)]">
-                <Info className="w-3.5 h-3.5" />
+                <IconCircleInfo className="w-3.5 h-3.5" />
                 <span>Referral data is only available for THORChain and MAYAChain swaps</span>
             </div>
         </div>

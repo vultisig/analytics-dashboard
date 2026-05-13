@@ -4,8 +4,8 @@ import { useMemo } from 'react';
 import { Pie, PieChart, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from 'recharts';
 import { HeroMetric } from './HeroMetric';
 import { Tooltip } from './Tooltip';
-import { Users, TrendingUp, Award } from 'lucide-react';
 import { getTierColor, glassTooltipStyle } from '@/lib/chartStyles';
+import { IconAwardV, IconPeopleCopy, IconTrendingUpV } from '@/icons';
 
 // Fee tier discount percentages for tooltip
 // These match the backend BPS values in api_server.py
@@ -71,7 +71,7 @@ function CustomTooltipContent({ active, payload, totalUsers }: CustomTooltipProp
         </div>
         <div className="space-y-1 text-sm">
           <p className="text-[var(--text-primary)]">
-            <span className="text-[var(--text-tertiary)]">Users:</span>{' '}
+            <span className="text-[var(--text-tertiary)]">IconPeopleCopy:</span>{' '}
             {new Intl.NumberFormat('en-US').format(item.value)} ({percentage}%)
           </p>
           <p className="text-[var(--text-primary)]">
@@ -157,7 +157,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     return (
       <div className="glass-card rounded-xl p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Award className="w-5 h-5 text-[var(--alert-warn)]" />
+          <IconAwardV className="w-5 h-5 text-[var(--alert-warn)]" />
           <h3 className="text-lg font-bold text-[var(--text-primary)]">Fee Tier Distribution</h3>
           <Tooltip
             content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
@@ -183,7 +183,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     <div className="glass-card rounded-xl p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <Award className="w-5 h-5 text-[var(--alert-warn)]" />
+        <IconAwardV className="w-5 h-5 text-[var(--alert-warn)]" />
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Fee Tier Distribution</h3>
         <Tooltip
           content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
@@ -194,9 +194,9 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
       {/* Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <HeroMetric
-          label="Total Users"
+          label="Total IconPeopleCopy"
           value={totals.totalUsers}
-          icon={Users}
+          icon={IconPeopleCopy}
           color="cyan"
           format="number"
           size="default"
@@ -204,7 +204,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
         <HeroMetric
           label="Avg Volume/User"
           value={totals.avgVolumePerUser}
-          icon={TrendingUp}
+          icon={IconTrendingUpV}
           color="blue"
           format="currency"
           size="default"
@@ -215,7 +215,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left: Donut Chart */}
         <div className="glass-card rounded-xl p-4">
-          <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Users by Tier</h4>
+          <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-4">IconPeopleCopy by Tier</h4>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie

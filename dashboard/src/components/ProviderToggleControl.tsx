@@ -1,8 +1,8 @@
 'use client';
 
-import { Eye, EyeOff } from 'lucide-react';
 import { providerColorMap } from '@/lib/chartStyles';
 import { formatProviderName } from '@/lib/providerUtils';
+import { IconEyeOffV, IconEyeV } from '@/icons';
 
 
 interface ProviderToggleControlProps {
@@ -55,9 +55,9 @@ export function ProviderToggleControl({
                         />
                         <span>{formatProviderName(provider)}</span>
                         {isVisible ? (
-                            <Eye className="w-3 h-3" />
+                            <IconEyeV className="w-3 h-3" />
                         ) : (
-                            <EyeOff className="w-3 h-3" />
+                            <IconEyeOffV className="w-3 h-3" />
                         )}
                     </button>
                 );

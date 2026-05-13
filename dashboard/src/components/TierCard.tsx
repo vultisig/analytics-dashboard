@@ -1,6 +1,6 @@
+import { IconPeopleCopy } from '@/icons';
 'use client';
 
-import { Users } from 'lucide-react';
 
 interface TierCardProps {
     tier: string;
@@ -87,7 +87,7 @@ export function TierCard({ tier, count, avgBalance, thorguardBoosted, requiremen
 
             {/* Holder Count */}
             <div className="flex items-center gap-2 mb-2">
-                <Users className={`w-4 h-4 ${colors.text}`} />
+                <IconPeopleCopy className={`w-4 h-4 ${colors.text}`} />
                 <span className="text-2xl font-bold text-[var(--text-primary)]">
                     {formatNumber(count)}
                 </span>

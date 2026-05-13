@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Search } from 'lucide-react';
+import { IconMagnifyingGlass2 } from '@/icons';
 import { Sidebar } from '@/components/Sidebar';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { GranularitySelector } from '@/components/GranularitySelector';
@@ -79,7 +79,7 @@ function DashboardContent() {
                         </h1>
                         <div className="flex items-center gap-3.5 flex-wrap justify-end">
                             <div className="search-pill">
-                                <Search className="size-4 text-[var(--text-tertiary)]" />
+                                <IconMagnifyingGlass2 className="text-[var(--text-tertiary)]" />
                                 <input
                                     type="search"
                                     placeholder="Search"

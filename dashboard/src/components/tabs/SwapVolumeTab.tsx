@@ -10,11 +10,11 @@ import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
-import { TrendingUp, DollarSign, Wallet, Info } from 'lucide-react';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
+import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
 
 interface SwapVolumeTabProps {
     range: string;
@@ -355,21 +355,21 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                 <HeroMetric
                     label="Total Swap Volume"
                     value={data.totalVolume}
-                    icon={DollarSign}
+                    icon={IconDollar}
                     color="cyan"
                     format="currency"
                 />
                 <HeroMetric
                     label={`Average Swap Volume (${getGranularityLabel()})`}
                     value={data.averageVolume}
-                    icon={TrendingUp}
+                    icon={IconTrendingUpV}
                     color="blue"
                     format="currency"
                 />
                 <HeroMetric
                     label="Projected Annual Volume"
                     value={projectedAnnualVolume}
-                    icon={Wallet}
+                    icon={IconWallet4}
                     color="teal"
                     format="currency"
                     tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
@@ -382,7 +382,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
                     {chartView === 'platform' && (
                         <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-                            <Info className="w-3.5 h-3.5" />
+                            <IconCircleInfo className="w-3.5 h-3.5" />
                             <span>1inch data excluded (no platform info)</span>
                         </div>
                     )}

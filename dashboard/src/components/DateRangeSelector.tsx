@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { IconCalendar3, IconChevronDownSmall } from '@/icons';
 import { DateRangeType } from '@/lib/dateUtils';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
@@ -118,9 +118,9 @@ export function DateRangeSelector() {
                 onClick={() => setIsOpen((v) => !v)}
                 className="pill"
             >
-                <Calendar className="size-4" />
+                <IconCalendar3 />
                 <span>Period: <span className="text-[var(--text-primary)]">{buttonLabel}</span></span>
-                <ChevronDown className={`size-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <IconChevronDownSmall className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {isOpen && (

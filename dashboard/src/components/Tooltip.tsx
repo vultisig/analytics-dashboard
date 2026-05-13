@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { Info } from 'lucide-react';
+import { IconCircleInfo } from '@/icons';
 
 interface TooltipProps {
     content: string | ReactNode;
@@ -22,7 +22,7 @@ export function Tooltip({ content, children, iconOnly = false, interactive = fal
             onFocus={() => setIsVisible(true)}
             onBlur={() => !interactive && setIsVisible(false)}
         >
-            <Info className="w-4 h-4" />
+            <IconCircleInfo className="w-4 h-4" />
         </button>
     ) : children;
 
