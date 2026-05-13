@@ -61,7 +61,10 @@ class THORChainIngestor(BaseIngestor):
             # Split by "/" for multiple affiliates
             affiliate_addresses = affiliate_addresses_str.split('/') if affiliate_addresses_str else []
             affiliate_fees_bps = [int(f) for f in affiliate_fee_str.split('/') if f.isdigit()] if affiliate_fee_str else []
-            
+            affiliate_fees_bps = self.reconcile_affiliate_fees_from_memo(
+                affiliate_addresses, affiliate_fees_bps, memo
+            )
+
             # Extract Vultisig affiliate info (vi/va/v0)
             vultisig_affiliate_info = self._extract_vultisig_affiliate(affiliate_address, memo)
             
