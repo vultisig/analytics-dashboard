@@ -16,10 +16,16 @@
   --text-secondary: #c9d6e8;
   --text-tertiary: #8295ae;
 
-  --brand-blue: #2155df;
-  --brand-blue-light: #4879fd;
-  --brand-blue-deep: #0d39b1;
+  /* Figma: Primary/Accent 3 + 4 — exact match. Deep + hover are derived
+     for the logo gradient stop and primary-button hover. */
+  --brand-blue: #2155df;        /* Buttons/Neutral (Primary), Primary/Accent 3 */
+  --brand-blue-light: #4879fd;  /* Primary/Accent 4 — logo top stop, hover accents */
+  --brand-blue-deep: #0d39b1;   /* logo bottom stop (Figma gradient) */
   --brand-blue-hover: #3464e6;
+
+  /* Neutrals (Figma) */
+  --neutrals-50: #ffffff;
+  --neutrals-500: #7d909e;
 
   --alert-success: #13c89d;
   --alert-success-bg: rgba(19, 200, 157, 0.05);
@@ -88,6 +94,60 @@ html, body {
 .text-num {
   font-family: 'Satoshi', 'Brockmann', 'Inter', sans-serif;
   font-variant-numeric: tabular-nums;
+}
+
+/* === Figma type scale (Brockmann Medium) ===
+   1:1 with Headings/Title*, Body/*, Supplementary/*, Button/* tokens. */
+.t-title-1 {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 34px;
+  letter-spacing: -0.64px;
+  color: var(--text-primary);
+}
+.t-title-2 {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 24px;
+  letter-spacing: -0.36px;
+  color: var(--text-primary);
+}
+.t-title-3 {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 20px;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+.t-body-s {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0;
+}
+.t-button-s {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 18px;
+}
+.t-footnote {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0.06px;
+}
+.t-caption {
+  font-family: 'Brockmann', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.12px;
 }
 
 /* Scrollbar */
@@ -264,11 +324,13 @@ html, body {
   overflow: hidden;
   position: relative;
 }
+/* Figma: first hero card has a 4-layer background.
+   Stops/angles taken directly from the Figma export. */
 .metric-card-accent {
   background:
-    radial-gradient(circle at 60% 0%, rgba(72,121,253,0.55), rgba(20,56,141,0.18) 45%, rgba(6,27,58,0) 70%),
-    linear-gradient(40deg, rgba(6,27,58,0) 58%, rgba(72,121,253,0.5) 100%),
-    linear-gradient(-23deg, rgba(6,27,58,0) 47%, rgba(72,121,253,0.5) 100%),
+    radial-gradient(120% 80% at 60% -15%, rgba(33,85,223,1) 0%, rgba(20,56,141,0.5) 50%, rgba(6,27,58,0) 100%),
+    linear-gradient(39.71deg, rgba(6,27,58,0) 58.01%, rgba(72,121,253,0.6) 98.302%),
+    linear-gradient(-23.34deg, rgba(6,27,58,0) 47.519%, rgba(72,121,253,0.6) 98.539%),
     var(--surface-1);
 }
 
