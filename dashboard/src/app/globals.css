@@ -1,106 +1,307 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap');
+@import url('https://fonts.cdnfonts.com/css/brockmann');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  /* Vultisig Dark Theme - Navy Blue */
-  --background: #020817; /* Deep Navy/Black */
-  --foreground: #F8FAFC;
-  --card-bg: #0F172A;    /* Lighter Navy for cards */
-  --accent-blue: #3B82F6;
-  --accent-blue-light: #60A5FA;
-  --accent-cyan: #06B6D4;
-  --accent-teal: #2DD4BF;
-  --accent-gold: #FACC15;
-  --sidebar-bg: #0B1120; /* Slightly different for sidebar */
+  /* Vultisig App — Figma tokens */
+  --bg-page: #02122b;
+  --surface-1: #061b3a;
+  --surface-2: #11284a;
+  --surface-3: #1b3f73;
+  --border-light: #11284a;
+  --border-normal: #1b3f73;
 
-  /* Glassmorphism colors */
-  --glass-bg: rgba(15, 23, 42, 0.4); /* #0F172A with 40% opacity */
-  --glass-bg-hover: rgba(15, 23, 42, 0.6); /* #0F172A with 60% opacity */
-  --glass-border: rgba(148, 163, 184, 0.2); /* slate-400 with 20% opacity */
-  --glass-border-hover: rgba(45, 212, 191, 0.4); /* teal-400 with 40% opacity */
-  --glass-shadow: rgba(6, 182, 212, 0.08); /* cyan-500 with 8% opacity */
-  --glass-shadow-hover: rgba(6, 182, 212, 0.15); /* cyan-500 with 15% opacity */
+  --text-primary: #f0f4fc;
+  --text-secondary: #c9d6e8;
+  --text-tertiary: #8295ae;
+
+  --brand-blue: #2155df;
+  --brand-blue-light: #4879fd;
+  --brand-blue-deep: #0d39b1;
+  --brand-blue-hover: #3464e6;
+
+  --alert-success: #13c89d;
+  --alert-success-bg: rgba(19, 200, 157, 0.05);
+  --alert-success-border: rgba(19, 200, 157, 0.2);
+  --alert-info: #5ca7ff;
+  --alert-warn: #f59e0b;
+  --alert-error: #ef4444;
+
+  /* Provider chart palette */
+  --provider-thorchain: #2155df;
+  --provider-mayachain: #5ca7ff;
+  --provider-1inch: #f59e0b;
+  --provider-lifi: #13c89d;
+  --provider-kyber: #a78bfa;
+
+  /* Tier palette (Bronze → Ultimate) */
+  --tier-bronze: #cd7f32;
+  --tier-silver: #c0c0c0;
+  --tier-gold: #fbbf24;
+  --tier-platinum: #38bdf8;
+  --tier-diamond: #818cf8;
+  --tier-ultimate: #a78bfa;
+
+  /* legacy aliases (so any leftover refs keep rendering until removed) */
+  --background: var(--bg-page);
+  --foreground: var(--text-primary);
+  --card-bg: var(--surface-1);
+  --accent-blue: var(--brand-blue);
+  --accent-blue-light: var(--brand-blue-light);
+  --accent-cyan: var(--alert-info);
+  --accent-teal: var(--alert-success);
+  --accent-gold: var(--tier-gold);
+  --sidebar-bg: var(--surface-1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-background: var(--bg-page);
+  --color-foreground: var(--text-primary);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border-light: var(--border-light);
+  --color-border-normal: var(--border-normal);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-light: var(--brand-blue-light);
+  --color-alert-success: var(--alert-success);
+  --color-alert-info: var(--alert-info);
+  --font-sans: 'Brockmann', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Satoshi', 'Brockmann', 'Inter', sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+html, body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: 'Brockmann', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
   min-height: 100vh;
+  letter-spacing: -0.01em;
 }
 
-/* Custom scrollbar for dark theme */
-::-webkit-scrollbar {
-  width: 10px;
+/* numeric / display text */
+.font-display,
+.text-num {
+  font-family: 'Satoshi', 'Brockmann', 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
-::-webkit-scrollbar-track {
-  background: #1E293B;
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--surface-1); }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--brand-blue); }
+
+/* === Surface cards === */
+.surface-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+}
+.surface-card-hover {
+  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.surface-card-hover:hover {
+  border-color: var(--border-normal);
 }
 
-::-webkit-scrollbar-thumb {
-  background: #0EA5E9;
-  border-radius: 5px;
+/* Icon badge — 32px rounded-10 with surface-2 background, used in chart headers */
+.icon-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.icon-badge-brand {
+  background: var(--brand-blue);
+  color: var(--text-primary);
+  box-shadow: inset 0 2px 9.8px 0 var(--brand-blue-light);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #38BDF8;
+/* Pill button (Period / Granularity / toggles) */
+.pill {
+  height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 88px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  cursor: pointer;
+}
+.pill:hover {
+  border-color: var(--border-normal);
+  color: var(--text-primary);
+}
+.pill[aria-expanded="true"],
+.pill[data-active="true"] {
+  border-color: var(--brand-blue);
+  color: var(--text-primary);
+}
+.pill-sm {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  gap: 6px;
 }
 
-/* Glassmorphism Card Styles */
+/* Search input wrapper */
+.search-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 99px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  width: 343px;
+  box-shadow: inset 0 0 4px 0 rgba(240,244,252,0.04), inset 0 0 8px 0 rgba(240,244,252,0.03);
+}
+
+/* Toggle group (segmented pill) */
+.toggle-group {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  gap: 2px;
+}
+.toggle-group-item {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: transparent;
+  transition: color 150ms ease, background 150ms ease;
+  cursor: pointer;
+}
+.toggle-group-item[data-active="true"] {
+  background: var(--brand-blue);
+  color: var(--text-primary);
+}
+.toggle-group-item:hover:not([data-active="true"]) {
+  color: var(--text-secondary);
+}
+
+/* iOS-style switch */
+.switch-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  position: relative;
+  cursor: pointer;
+  transition: background 180ms ease;
+  flex-shrink: 0;
+}
+.switch-track[data-checked="true"] {
+  background: var(--brand-blue);
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--text-primary);
+  transition: transform 180ms ease;
+}
+.switch-track[data-checked="true"] .switch-thumb {
+  transform: translateX(16px);
+}
+
+/* === Status pill (sidebar) === */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 12px;
+  border-radius: 70px;
+  background: var(--alert-success-bg);
+  border: 1px solid var(--alert-success-border);
+  color: var(--alert-success);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12px;
+}
+.status-pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--alert-success);
+  box-shadow: 0 0 8px rgba(19,200,157,0.6);
+}
+
+/* Hero metric card backgrounds */
+.metric-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 20px;
+  height: 170px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  position: relative;
+}
+.metric-card-accent {
+  background:
+    radial-gradient(circle at 60% 0%, rgba(72,121,253,0.55), rgba(20,56,141,0.18) 45%, rgba(6,27,58,0) 70%),
+    linear-gradient(40deg, rgba(6,27,58,0) 58%, rgba(72,121,253,0.5) 100%),
+    linear-gradient(-23deg, rgba(6,27,58,0) 47%, rgba(72,121,253,0.5) 100%),
+    var(--surface-1);
+}
+
+/* Legacy glass classes preserved as plain surface cards so unmigrated files still render */
 .glass-card {
-  background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px 0 var(--glass-shadow);
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
 }
-
 .glass-card-hover {
-  transition: all 0.3s ease;
+  transition: border-color 180ms ease;
 }
-
 .glass-card-hover:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--glass-border-hover);
-  box-shadow: 0 12px 40px 0 var(--glass-shadow-hover);
-  transform: translateY(-2px);
+  border-color: var(--border-normal);
 }
+.will-change-blur { will-change: border-color; }
 
-/* Performance optimization for backdrop-filter */
-.will-change-blur {
-  will-change: backdrop-filter, transform;
-}
-
-/* Accordion expand animation - optimized for performance */
+/* Accordion */
 @keyframes expand {
-  from {
-    opacity: 0;
-    transform: scaleY(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scaleY(1);
-  }
+  from { opacity: 0; transform: scaleY(0.95); }
+  to { opacity: 1; transform: scaleY(1); }
 }
-
 .animate-expand {
   animation: expand 0.3s ease-out;
   transform-origin: top;
 }
 
-/* Focus indicators for accessibility */
+/* Focus */
 button:focus-visible,
 a:focus-visible,
 [role="tab"]:focus-visible,
 [role="radio"]:focus-visible {
-  outline: 2px solid var(--accent-teal);
+  outline: 2px solid var(--brand-blue-light);
   outline-offset: 2px;
   border-radius: 4px;
 }

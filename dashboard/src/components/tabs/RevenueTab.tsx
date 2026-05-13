@@ -281,7 +281,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
     if (error && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error || 'No data available'}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error || 'No data available'}</div>
             </div>
         );
     }
@@ -289,7 +289,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
     if (loading && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading revenue data...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading revenue data...</div>
             </div>
         );
     }
@@ -297,7 +297,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
     if (!data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -375,7 +375,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
                     {chartView === 'platform' && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
                             <Info className="w-3.5 h-3.5" />
                             <span>1inch data excluded (no platform info)</span>
                         </div>
@@ -402,10 +402,10 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
             <div className="glass-card rounded-xl p-6 space-y-4">
                 <div className="flex flex-wrap justify-between items-center gap-2">
                     <div>
-                        <h3 className="text-lg font-bold text-white">
+                        <h3 className="text-lg font-bold text-[var(--text-primary)]">
                             {chartView === 'provider' ? 'Total Revenue by Provider' : 'Total Revenue by Platform'}
                         </h3>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-[var(--text-tertiary)]">
                             {getGranularityLabel()} breakdown{chartView === 'platform' ? ' (excludes 1inch)' : ''}
                         </p>
                     </div>
@@ -492,9 +492,9 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                                                     currency={true}
                                                 />
                                                 {!hasData && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-1)]/80 backdrop-blur-sm rounded-xl">
                                                         <div className="text-center">
-                                                            <p className="text-slate-400 text-sm">No activity within this date range</p>
+                                                            <p className="text-[var(--text-tertiary)] text-sm">No activity within this date range</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -535,9 +535,9 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                                                     currency={true}
                                                 />
                                                 {!hasData && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-1)]/80 backdrop-blur-sm rounded-xl">
                                                         <div className="text-center">
-                                                            <p className="text-slate-400 text-sm">No activity within this date range</p>
+                                                            <p className="text-[var(--text-tertiary)] text-sm">No activity within this date range</p>
                                                         </div>
                                                     </div>
                                                 )}

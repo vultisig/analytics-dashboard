@@ -35,9 +35,9 @@ function CustomTooltip({ active, payload, total, currency }: CustomTooltipProps)
 
     return (
         <div style={glassTooltipStyle} className="p-3">
-            <p className="text-slate-200 font-semibold mb-1">{name}</p>
-            <p className="text-white font-bold">{formatValue(value, currency)}</p>
-            <p className="text-slate-400 text-sm mt-1">{percentage}%</p>
+            <p className="text-[var(--text-primary)] font-semibold mb-1">{name}</p>
+            <p className="text-[var(--text-primary)] font-bold">{formatValue(value, currency)}</p>
+            <p className="text-[var(--text-tertiary)] text-sm mt-1">{percentage}%</p>
         </div>
     );
 }
@@ -98,14 +98,14 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
                                             className="w-2.5 h-2.5 rounded-full shrink-0"
                                             style={{ backgroundColor: colorFor(entry.name, index) }}
                                         />
-                                        <span className="text-sm text-slate-300 truncate">
+                                        <span className="text-sm text-[var(--text-secondary)] truncate">
                                             {formatProviderName(entry.name)}
                                         </span>
                                     </div>
-                                    <span className="text-base md:text-lg font-semibold text-white truncate">
+                                    <span className="text-base md:text-lg font-semibold text-[var(--text-primary)] truncate">
                                         {formatValue(entry.value, currency)}
                                     </span>
-                                    <span className="text-xs text-slate-400">{percentage}%</span>
+                                    <span className="text-xs text-[var(--text-tertiary)]">{percentage}%</span>
                                 </div>
                             );
                         })}
@@ -114,7 +114,7 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
             ) : (
                 <div className="flex items-center justify-center h-[300px] w-full">
                     <div className="text-center">
-                        <p className="text-slate-400 text-sm">No data available for the selected time range</p>
+                        <p className="text-[var(--text-tertiary)] text-sm">No data available for the selected time range</p>
                     </div>
                 </div>
             )}

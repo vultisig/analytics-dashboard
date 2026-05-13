@@ -58,25 +58,25 @@ export function StackedBarChart({
                                 const total = payload.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
                                 return (
                                     <div className="glass-card rounded-xl p-3 shadow-xl">
-                                        <p className="text-slate-200 font-medium mb-2 border-b border-slate-700/50 pb-1">{label}</p>
+                                        <p className="text-[var(--text-primary)] font-medium mb-2 border-b border-[var(--border-normal)]/50 pb-1">{label}</p>
                                         {payload.map((entry: any, index: number) => {
                                             const percentage = total > 0 ? (entry.value / total) * 100 : 0;
                                             return (
                                                 <div key={index} className="flex items-center gap-2 mb-1">
                                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                                                    <span className="text-slate-300 text-sm">{formatProviderName(entry.name)}:</span>
+                                                    <span className="text-[var(--text-secondary)] text-sm">{formatProviderName(entry.name)}:</span>
                                                     <span className="text-[#F8FAFC] font-bold text-sm ml-auto">
                                                         {currency
                                                             ? `$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(entry.value)}`
                                                             : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(entry.value)}
                                                     </span>
-                                                    <span className="text-slate-400 text-xs">({percentage.toFixed(2)}%)</span>
+                                                    <span className="text-[var(--text-tertiary)] text-xs">({percentage.toFixed(2)}%)</span>
                                                 </div>
                                             );
                                         })}
-                                        <div className="mt-2 pt-2 border-t border-slate-700/50 flex justify-between items-center">
-                                            <span className="text-slate-300 font-medium">Total</span>
-                                            <span className="text-white font-bold">
+                                        <div className="mt-2 pt-2 border-t border-[var(--border-normal)]/50 flex justify-between items-center">
+                                            <span className="text-[var(--text-secondary)] font-medium">Total</span>
+                                            <span className="text-[var(--text-primary)] font-bold">
                                                 {currency
                                                     ? `$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(total)}`
                                                     : new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(total)}

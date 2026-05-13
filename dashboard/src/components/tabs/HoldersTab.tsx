@@ -120,7 +120,7 @@ export function HoldersTab() {
     if (error && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error}</div>
             </div>
         );
     }
@@ -129,7 +129,7 @@ export function HoldersTab() {
     if (loading && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading holders data...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading holders data...</div>
             </div>
         );
     }
@@ -138,7 +138,7 @@ export function HoldersTab() {
     if (!data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -219,7 +219,7 @@ export function HoldersTab() {
             </ChartCard>
 
             {/* Update Notice */}
-            <div className="flex flex-col items-center gap-1 text-xs text-slate-500">
+            <div className="flex flex-col items-center gap-1 text-xs text-[var(--text-tertiary)]">
                 <div className="flex items-center gap-2">
                     <Info className="w-3.5 h-3.5" />
                     <span>Data updates daily at {showUTC ? '00:00 UTC' : getNextUpdateLocal()}</span>
@@ -227,7 +227,7 @@ export function HoldersTab() {
                 <button
                     type="button"
                     onClick={() => setShowUTC(!showUTC)}
-                    className="text-slate-400 hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                    className="text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors underline decoration-dotted underline-offset-2"
                     title={`Click to show in ${showUTC ? 'local time' : 'UTC'}`}
                 >
                     Last updated: {showUTC ? formatTimeUTC(data.lastUpdated) : formatTimeLocal(data.lastUpdated)}
@@ -240,7 +240,7 @@ export function HoldersTab() {
                     href="https://docs.vultisig.com/vultisig-token/vult/in-app-utility"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-400 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors"
                 >
                     Learn about $VULT discount tiers
                     <ExternalLink className="w-3 h-3" />

@@ -67,24 +67,24 @@ function CustomTooltipContent({ active, payload, totalUsers }: CustomTooltipProp
             className="w-3 h-3 rounded-full"
             style={{ backgroundColor: getTierColor(item.name) }}
           />
-          <p className="text-slate-200 font-semibold">{item.name}</p>
+          <p className="text-[var(--text-primary)] font-semibold">{item.name}</p>
         </div>
         <div className="space-y-1 text-sm">
-          <p className="text-white">
-            <span className="text-slate-400">Users:</span>{' '}
+          <p className="text-[var(--text-primary)]">
+            <span className="text-[var(--text-tertiary)]">Users:</span>{' '}
             {new Intl.NumberFormat('en-US').format(item.value)} ({percentage}%)
           </p>
-          <p className="text-white">
-            <span className="text-slate-400">Volume:</span>{' '}
+          <p className="text-[var(--text-primary)]">
+            <span className="text-[var(--text-tertiary)]">Volume:</span>{' '}
             ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.volume)}
           </p>
-          <p className="text-white">
-            <span className="text-slate-400">Avg/User:</span>{' '}
+          <p className="text-[var(--text-primary)]">
+            <span className="text-[var(--text-tertiary)]">Avg/User:</span>{' '}
             ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.avgVolume)}
           </p>
-          <div className="mt-2 pt-2 border-t border-slate-600 flex items-center gap-2">
-            <span className="text-slate-400 text-xs">Fee:</span>
-            <span className="px-2 py-1 rounded-md text-xs font-semibold bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-200 border border-blue-400/30">
+          <div className="mt-2 pt-2 border-t border-[var(--border-normal)] flex items-center gap-2">
+            <span className="text-[var(--text-tertiary)] text-xs">Fee:</span>
+            <span className="px-2 py-1 rounded-md text-xs font-semibold bg-gradient-to-r from-[var(--brand-blue)]/20 to-purple-500/20 text-blue-200 border border-blue-400/30">
               {tierDiscounts[item.name] || 'Unknown'}
             </span>
           </div>
@@ -126,14 +126,14 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
       <div className="glass-card rounded-xl p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-48 bg-slate-700/50 rounded animate-pulse" />
+            <div className="h-7 w-48 bg-[var(--surface-3)]/50 rounded animate-pulse" />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="h-[350px] bg-slate-700/30 rounded-xl animate-pulse" />
+          <div className="h-[350px] bg-[var(--surface-3)]/30 rounded-xl animate-pulse" />
           <div className="space-y-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 bg-slate-700/30 rounded-xl animate-pulse" />
+              <div key={i} className="h-20 bg-[var(--surface-3)]/30 rounded-xl animate-pulse" />
             ))}
           </div>
         </div>
@@ -146,7 +146,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     return (
       <div className="glass-card rounded-xl p-6">
         <div className="flex items-center justify-center py-12">
-          <div className="text-red-400 text-sm">{error}</div>
+          <div className="text-[var(--alert-error)] text-sm">{error}</div>
         </div>
       </div>
     );
@@ -157,15 +157,15 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     return (
       <div className="glass-card rounded-xl p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Award className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-bold text-white">Fee Tier Distribution</h3>
+          <Award className="w-5 h-5 text-[var(--alert-warn)]" />
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">Fee Tier Distribution</h3>
           <Tooltip
             content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
             iconOnly
           />
         </div>
         <div className="flex items-center justify-center py-12">
-          <div className="text-slate-400 text-sm">No fee tier data available for the selected time range</div>
+          <div className="text-[var(--text-tertiary)] text-sm">No fee tier data available for the selected time range</div>
         </div>
       </div>
     );
@@ -183,8 +183,8 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     <div className="glass-card rounded-xl p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <Award className="w-5 h-5 text-amber-400" />
-        <h3 className="text-lg font-bold text-white">Fee Tier Distribution</h3>
+        <Award className="w-5 h-5 text-[var(--alert-warn)]" />
+        <h3 className="text-lg font-bold text-[var(--text-primary)]">Fee Tier Distribution</h3>
         <Tooltip
           content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
           iconOnly
@@ -215,7 +215,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left: Donut Chart */}
         <div className="glass-card rounded-xl p-4">
-          <h4 className="text-sm font-medium text-slate-300 mb-4">Users by Tier</h4>
+          <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Users by Tier</h4>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -251,7 +251,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
                 iconType="circle"
                 wrapperStyle={{ fontSize: '10px' }}
                 formatter={(value) => (
-                  <span className="text-slate-300 ml-1 text-[10px] md:text-xs">{value}</span>
+                  <span className="text-[var(--text-secondary)] ml-1 text-[10px] md:text-xs">{value}</span>
                 )}
               />
             </PieChart>
@@ -260,7 +260,7 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
 
         {/* Right: Volume Metrics per Tier */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-slate-300 mb-2">Volume by Tier</h4>
+          <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-2">Volume by Tier</h4>
           <div className="space-y-2 max-h-[340px] overflow-y-auto pr-2">
             {sortedTiers.filter(tier => tier.userCount > 0).map((tier, index) => {
               const volumePercentage = totals.totalVolume > 0
@@ -281,18 +281,18 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: getTierColor(tier.tier, index) }}
                       />
-                      <span className="text-white font-medium text-sm">{tier.tier}</span>
-                      <span className="text-slate-500 text-xs">
+                      <span className="text-[var(--text-primary)] font-medium text-sm">{tier.tier}</span>
+                      <span className="text-[var(--text-tertiary)] text-xs">
                         ({tierDiscounts[tier.tier] || 'Unknown fee'})
                       </span>
                     </div>
-                    <span className="text-slate-400 text-xs">
+                    <span className="text-[var(--text-tertiary)] text-xs">
                       {tier.userCount.toLocaleString()} users ({userPercentage.toFixed(1)}%)
                     </span>
                   </div>
 
                   {/* Volume bar */}
-                  <div className="relative h-2 bg-slate-700/50 rounded-full overflow-hidden mb-1">
+                  <div className="relative h-2 bg-[var(--surface-3)]/50 rounded-full overflow-hidden mb-1">
                     <div
                       className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
                       style={{
@@ -303,13 +303,13 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">
+                    <span className="text-[var(--text-tertiary)]">
                       ${new Intl.NumberFormat('en-US', {
                         notation: 'compact',
                         maximumFractionDigits: 1
                       }).format(tier.totalVolume)}
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-[var(--text-tertiary)]">
                       {volumePercentage.toFixed(1)}% of volume
                     </span>
                   </div>

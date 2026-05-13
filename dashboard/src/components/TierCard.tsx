@@ -20,27 +20,27 @@ const tierColors: Record<string, { gradient: string; border: string; text: strin
         glow: 'drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]',
     },
     Diamond: {
-        gradient: 'from-cyan-400/20 to-blue-400/20',
+        gradient: 'from-[rgba(72,121,253,0.20)] to-[rgba(33,85,223,0.20)]',
         border: 'border-cyan-400/50',
-        text: 'text-cyan-300',
+        text: 'text-[var(--brand-blue-light)]',
         glow: 'drop-shadow-[0_0_8px_rgba(34,211,238,0.4)]',
     },
     Platinum: {
         gradient: 'from-slate-300/20 to-slate-400/20',
         border: 'border-slate-300/50',
-        text: 'text-slate-200',
+        text: 'text-[var(--text-primary)]',
         glow: 'drop-shadow-[0_0_8px_rgba(203,213,225,0.3)]',
     },
     Gold: {
         gradient: 'from-yellow-500/20 to-amber-500/20',
         border: 'border-yellow-500/50',
-        text: 'text-yellow-400',
+        text: 'text-[var(--alert-warn)]',
         glow: 'drop-shadow-[0_0_8px_rgba(234,179,8,0.4)]',
     },
     Silver: {
         gradient: 'from-slate-400/20 to-slate-500/20',
         border: 'border-slate-400/50',
-        text: 'text-slate-300',
+        text: 'text-[var(--text-secondary)]',
         glow: 'drop-shadow-[0_0_8px_rgba(148,163,184,0.3)]',
     },
     Bronze: {
@@ -51,8 +51,8 @@ const tierColors: Record<string, { gradient: string; border: string; text: strin
     },
     None: {
         gradient: 'from-slate-600/20 to-slate-700/20',
-        border: 'border-slate-600/50',
-        text: 'text-slate-500',
+        border: 'border-[var(--border-normal)]/50',
+        text: 'text-[var(--text-tertiary)]',
         glow: '',
     },
 };
@@ -88,28 +88,28 @@ export function TierCard({ tier, count, avgBalance, thorguardBoosted, requiremen
             {/* Holder Count */}
             <div className="flex items-center gap-2 mb-2">
                 <Users className={`w-4 h-4 ${colors.text}`} />
-                <span className="text-2xl font-bold text-white">
+                <span className="text-2xl font-bold text-[var(--text-primary)]">
                     {formatNumber(count)}
                 </span>
-                <span className="text-xs text-slate-400">holders</span>
+                <span className="text-xs text-[var(--text-tertiary)]">holders</span>
             </div>
 
             {/* Average Balance */}
-            <div className="text-sm text-slate-400 mb-2">
-                <span className="text-slate-300">{formatNumber(avgBalance)}</span>
+            <div className="text-sm text-[var(--text-tertiary)] mb-2">
+                <span className="text-[var(--text-secondary)]">{formatNumber(avgBalance)}</span>
                 <span className="ml-1">avg VULT</span>
             </div>
 
             {/* Requirement */}
             {requirement > 0 && (
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-[var(--text-tertiary)]">
                     Requires {formatNumber(requirement)}+ VULT
                 </div>
             )}
 
             {/* THORGuard Boosted */}
             {thorguardBoosted > 0 && (
-                <div className="mt-2 text-xs text-emerald-400/80 flex items-center gap-1">
+                <div className="mt-2 text-xs text-[var(--alert-success)]/80 flex items-center gap-1">
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-400/60" />
                     {thorguardBoosted} boosted by THORGuard
                 </div>

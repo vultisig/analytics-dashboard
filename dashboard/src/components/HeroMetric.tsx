@@ -13,58 +13,27 @@ interface HeroMetricProps {
         value: string;
         direction: 'up' | 'down';
     };
-    color?: 'cyan' | 'blue' | 'teal' | 'purple';
+    /** Visual emphasis. `accent` renders the deep-blue radial gradient (first card in the hero row). */
+    color?: 'accent' | 'default' | 'cyan' | 'blue' | 'teal' | 'purple';
     format?: 'currency' | 'number' | 'percent';
     size?: 'default' | 'large';
     tooltip?: string;
 }
-
-const colorClasses = {
-    cyan: {
-        border: 'border-cyan-500',
-        iconBg: 'bg-cyan-500/10',
-        iconText: 'text-cyan-400',
-        iconGlow: 'drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]',
-    },
-    blue: {
-        border: 'border-blue-500',
-        iconBg: 'bg-blue-500/10',
-        iconText: 'text-blue-400',
-        iconGlow: 'drop-shadow-[0_0_8px_rgba(59,130,246,0.4)]',
-    },
-    teal: {
-        border: 'border-teal-500',
-        iconBg: 'bg-teal-500/10',
-        iconText: 'text-teal-400',
-        iconGlow: 'drop-shadow-[0_0_8px_rgba(45,212,191,0.4)]',
-    },
-    purple: {
-        border: 'border-purple-500',
-        iconBg: 'bg-purple-500/10',
-        iconText: 'text-purple-400',
-        iconGlow: 'drop-shadow-[0_0_8px_rgba(167,139,250,0.4)]',
-    },
-};
 
 export function HeroMetric({
     label,
     value,
     icon: Icon,
     trend,
-    color = 'cyan',
+    color = 'default',
     format = 'currency',
-    size = 'large',
     tooltip,
 }: HeroMetricProps) {
-    const colors = colorClasses[color];
-    const fontSize = size === 'large' ? 'text-2xl sm:text-3xl lg:text-4xl xl:text-5xl' : 'text-xl sm:text-2xl lg:text-3xl';
     const prevValueRef = useRef<number | null>(null);
     const [shouldAnimate, setShouldAnimate] = useState(false);
 
     useEffect(() => {
-        // Only animate if value actually changed (with small tolerance for floating point)
         const hasChanged = prevValueRef.current === null || Math.abs(prevValueRef.current - value) > 0.01;
-
         if (hasChanged) {
             setShouldAnimate(true);
             prevValueRef.current = value;
@@ -73,95 +42,71 @@ export function HeroMetric({
         }
     }, [value]);
 
-    // Smart formatting: use M for millions, K for thousands
     const getFormattedValue = () => {
-        // For percentages, show with 1 decimal and % suffix
         if (format === 'percent') {
-            return {
-                end: value,
-                suffix: '%',
-                decimals: 1
-            };
+            return { end: value, suffix: '%', decimals: 1 };
         }
-        if (value >= 1000000) {
-            return {
-                end: value / 1000000,
-                suffix: 'M',
-                decimals: 2
-            };
-        } else if (value >= 1000) {
-            return {
-                end: value / 1000,
-                suffix: 'K',
-                decimals: 1
-            };
+        if (value >= 1_000_000) {
+            return { end: value / 1_000_000, suffix: 'M', decimals: 2 };
         }
-        return {
-            end: value,
-            suffix: '',
-            decimals: 0
-        };
+        if (value >= 1_000) {
+            return { end: value / 1_000, suffix: 'K', decimals: 1 };
+        }
+        return { end: value, suffix: '', decimals: 0 };
     };
 
-    const formattedValue = getFormattedValue();
+    const fv = getFormattedValue();
+
+    // Legacy color names map to default styling
+    const isAccent = color === 'accent';
 
     return (
-        <div className={`glass-card glass-card-hover will-change-blur rounded-xl p-4 md:p-6 border-t-2 ${colors.border} relative`}>
-            {/* Background gradient effect */}
-            <div className={`absolute top-0 right-0 w-24 md:w-32 h-24 md:h-32 ${colors.iconBg} rounded-full blur-3xl opacity-20`} />
-
-            <div className="relative z-10">
-                {/* Icon positioned at top right */}
-                <div className={`absolute top-0 right-0 ${colors.iconBg} p-2 md:p-3 rounded-lg ${colors.iconGlow}`}>
-                    <Icon className={`w-5 h-5 md:w-6 md:h-6 ${colors.iconText}`} />
+        <div className={`metric-card ${isAccent ? 'metric-card-accent' : ''}`}>
+            <div className="flex items-center justify-between relative z-10">
+                <div className={`icon-badge ${isAccent ? 'icon-badge-brand' : ''}`}>
+                    <Icon className="size-[18px]" />
                 </div>
-
-                {/* Label */}
-                <div className="flex items-center gap-2 mb-2 pr-12 md:pr-14">
-                    <p className="text-slate-400 text-xs md:text-sm font-medium md:whitespace-nowrap">{label}</p>
+            </div>
+            <div className="flex flex-col gap-[14px] relative z-10">
+                <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium leading-[18px] text-[var(--text-secondary)] whitespace-nowrap">
+                        {label}
+                    </p>
                     {tooltip && <Tooltip content={tooltip} iconOnly />}
                 </div>
-
-                {/* Value */}
-                <div className={`${fontSize} font-bold text-white ${colors.iconGlow}`}>
+                <p className="font-display font-medium text-num text-[36px] leading-[37px] tracking-[-0.02em] text-[var(--text-primary)]">
                     {format === 'currency' ? '$' : ''}
                     {shouldAnimate ? (
                         <CountUp
-                            end={formattedValue.end}
+                            end={fv.end}
                             duration={0.8}
                             separator=","
-                            decimals={formattedValue.decimals}
-                            suffix={formattedValue.suffix}
-                            useEasing={true}
-                            easingFn={(t, b, c, d) => {
-                                // easeOutExpo
-                                return t === d ? b + c : c * (-Math.pow(2, -10 * t / d) + 1) + b;
-                            }}
+                            decimals={fv.decimals}
+                            suffix={fv.suffix}
+                            useEasing
+                            easingFn={(t, b, c, d) => (t === d ? b + c : c * (-Math.pow(2, -10 * t / d) + 1) + b)}
                         />
                     ) : (
                         <span>
-                            {formattedValue.end.toLocaleString('en-US', {
-                                minimumFractionDigits: formattedValue.decimals,
-                                maximumFractionDigits: formattedValue.decimals
-                            })}{formattedValue.suffix}
+                            {fv.end.toLocaleString('en-US', {
+                                minimumFractionDigits: fv.decimals,
+                                maximumFractionDigits: fv.decimals,
+                            })}
+                            {fv.suffix}
                         </span>
                     )}
-                </div>
-
-                {/* Trend indicator */}
+                </p>
                 {trend && (
-                    <div className="flex items-center gap-1.5 mt-2">
+                    <div className="flex items-center gap-1.5">
                         {trend.direction === 'up' ? (
-                            <TrendingUp className="w-4 h-4 text-emerald-400" />
+                            <TrendingUp className="size-4 text-[var(--alert-success)]" />
                         ) : (
-                            <TrendingDown className="w-4 h-4 text-red-400" />
+                            <TrendingDown className="size-4 text-[var(--alert-error)]" />
                         )}
-                        <span className={`text-sm font-medium ${
-                            trend.direction === 'up' ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
+                        <span className={`text-sm font-medium ${trend.direction === 'up' ? 'text-[var(--alert-success)]' : 'text-[var(--alert-error)]'}`}>
                             {trend.value}
                         </span>
-                        <span className="text-xs text-slate-500">vs previous period</span>
+                        <span className="text-xs text-[var(--text-tertiary)]">vs previous period</span>
                     </div>
                 )}
             </div>

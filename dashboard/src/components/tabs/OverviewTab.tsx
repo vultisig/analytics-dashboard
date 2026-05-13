@@ -150,7 +150,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (error && !stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error || 'No data available'}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error || 'No data available'}</div>
             </div>
         );
     }
@@ -160,7 +160,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (loading && !stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading overview...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading overview...</div>
             </div>
         );
     }
@@ -169,7 +169,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (!stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -187,42 +187,39 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     return (
         <div className="space-y-6">
             {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Swap Volume"
                     value={stats.totalVolume}
                     icon={DollarSign}
-                    color="cyan"
+                    color="accent"
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Revenue"
                     value={stats.totalRevenue}
                     icon={Wallet}
-                    color="blue"
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Unique Swappers"
                     value={stats.totalUsers}
                     icon={Users}
-                    color="teal"
                     format="number"
                 />
                 <HeroMetric
                     label="Total Swap Count"
                     value={stats.totalSwaps}
                     icon={Hash}
-                    color="purple"
                     format="number"
                 />
             </div>
 
             {/* Annual Projections */}
             <div>
-                <h3 className="text-lg font-semibold text-white mb-4">
+                <h3 className="text-[17px] font-medium leading-5 tracking-[-0.02em] text-[var(--text-primary)] mb-4">
                     Annual Projections
-                    <span className="text-sm text-slate-400 font-normal ml-2">
+                    <span className="text-[13px] text-[var(--text-tertiary)] font-medium ml-2">
                         (Based on {getGranularityLabel()} Average)
                     </span>
                 </h3>
@@ -255,13 +252,14 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                 />
 
                 {/* Average Metrics */}
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-white mb-4">
+                <div className="space-y-3">
+                    <h3 className="text-[17px] font-medium leading-5 tracking-[-0.02em] text-[var(--text-primary)] mb-4">
                         {getGranularityLabel()} Averages
                     </h3>
 
                     <StatsCard
-                        title={`Average Swap Volume (${getGranularityLabel()})`}
+                        title="Average Swap Volume"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageVolume}
@@ -276,7 +274,8 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                     />
 
                     <StatsCard
-                        title={`Average Revenue (${getGranularityLabel()})`}
+                        title="Average Revenue"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageRevenue}
@@ -291,7 +290,8 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                     />
 
                     <StatsCard
-                        title={`Average Swap Count (${getGranularityLabel()})`}
+                        title="Average Swap Count"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageSwaps}
@@ -359,13 +359,13 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                         />
                     )}
                     <div className="flex items-center gap-1.5">
-                        <p className="text-slate-300 text-sm font-medium">{label}</p>
+                        <p className="text-[var(--text-secondary)] text-sm font-medium">{label}</p>
                         <Tooltip content={tooltip} iconOnly />
                     </div>
                 </div>
 
                 <div className="flex items-end justify-between gap-4 flex-wrap">
-                    <p className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                    <p className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight">
                         $<CountUp
                             end={value}
                             duration={0.8}
@@ -390,8 +390,8 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                                         }}
                                     />
                                     <div className="flex flex-col items-start gap-0.5">
-                                        <span className="text-[10px] text-slate-500 leading-tight whitespace-nowrap">{soFarLabel}</span>
-                                        <span className="text-xs font-semibold text-slate-200 leading-tight whitespace-nowrap">
+                                        <span className="text-[10px] text-[var(--text-tertiary)] leading-tight whitespace-nowrap">{soFarLabel}</span>
+                                        <span className="text-xs font-semibold text-[var(--text-primary)] leading-tight whitespace-nowrap">
                                             {formatCompactCurrency(soFarValue!)}
                                         </span>
                                     </div>
