@@ -79,21 +79,22 @@ export function Sidebar() {
                             background: 'linear-gradient(180deg, var(--brand-blue-light), var(--brand-blue-deep))',
                             boxShadow: 'inset 0 0.785px 0.785px 0 rgba(255,255,255,0.35)',
                         }}
+                        aria-hidden="true"
                     >
-                        <svg
-                            viewBox="0 0 24 24"
-                            className="absolute inset-[20%] text-white"
-                            fill="currentColor"
-                            aria-hidden="true"
-                        >
-                            <path d="M12 2 L21 7 L21 17 L12 22 L3 17 L3 7 Z" opacity="0.95" />
-                            <path d="M12 5 L18 8.5 L18 15.5 L12 19 L6 15.5 L6 8.5 Z" fill="var(--brand-blue-deep)" />
-                        </svg>
+                        {/* Vultisig V mark, exported from the design library.
+                            Figma positions a 21.28 px mark inside the 38 px box
+                            at (8.36, 8.36) — centered. */}
+                        <img
+                            src="/vultisig-mark.svg"
+                            alt=""
+                            width={21.28}
+                            height={21.28}
+                            className="absolute left-[8.36px] top-[8.36px] select-none"
+                            draggable={false}
+                        />
                     </div>
                     {!collapsed && (
-                        <p className="font-medium text-[22px] leading-[34px] tracking-[-0.04em] text-[var(--text-primary)] truncate">
-                            Analytics
-                        </p>
+                        <p className="t-title-2 truncate">Analytics</p>
                     )}
                 </div>
                 <button
