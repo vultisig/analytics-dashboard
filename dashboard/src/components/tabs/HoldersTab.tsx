@@ -152,13 +152,13 @@ export function HoldersTab() {
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Holders"
                     value={data.totalHolders}
                     icon={IconPeopleCopy}
-                    color="cyan"
+                    color="accent"
                     format="number"
                     tooltip="Total number of addresses holding VULT tokens"
                 />
@@ -166,7 +166,6 @@ export function HoldersTab() {
                     label="Tiered Holders"
                     value={data.tieredHolders}
                     icon={IconAwardV}
-                    color="purple"
                     format="number"
                     tooltip="Number of holders with Bronze tier or higher"
                 />
@@ -174,7 +173,6 @@ export function HoldersTab() {
                     label="Supply Held"
                     value={supplyHeldPercent}
                     icon={IconAwardV}
-                    color="blue"
                     format="percent"
                     tooltip="Percentage of total supply held by tiered holders (Bronze+)"
                 />
@@ -182,7 +180,6 @@ export function HoldersTab() {
                     label="THORGuard Holders"
                     value={data.thorguardHolders}
                     icon={IconShieldV}
-                    color="teal"
                     format="number"
                     tooltip="Number of VULT holders who also hold a THORGuard NFT"
                 />

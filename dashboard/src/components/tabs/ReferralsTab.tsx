@@ -109,13 +109,13 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Fees Saved"
                     value={allData.totalFeesSaved}
                     icon={IconPigMoneyV}
-                    color="cyan"
+                    color="accent"
                     format="currency"
                     tooltip="User savings from using referral codes vs standard 50 bps fee"
                 />
@@ -123,7 +123,6 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                     label="Referrer Revenue"
                     value={allData.totalReferrerRevenue}
                     icon={IconDollar}
-                    color="blue"
                     format="currency"
                     tooltip="Total revenue earned by referrers (referrer BPS x volume)"
                 />
@@ -131,7 +130,6 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                     label="Referral Swaps"
                     value={allData.totalReferralCount}
                     icon={IconTrendingUpV}
-                    color="teal"
                     format="number"
                     tooltip="Total number of swaps using referral codes"
                 />
@@ -139,7 +137,6 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                     label="Users with Referrals"
                     value={allData.uniqueUsersWithReferrals}
                     icon={IconPeopleCopy}
-                    color="purple"
                     format="number"
                     tooltip="Number of unique users who used a referral code"
                 />
@@ -153,8 +150,8 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
 
             {/* Provider Breakdown */}
             {allData.byProvider && allData.byProvider.length > 0 && (
-                <div className="glass-card rounded-xl p-4 md:p-6">
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Referrals by Provider</h3>
+                <div className="surface-card p-5 md:p-6">
+                    <h3 className="t-title-3 mb-4">Referrals by Provider</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {allData.byProvider.map((provider) => (
                             <div
