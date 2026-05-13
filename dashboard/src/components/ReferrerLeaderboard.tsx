@@ -128,7 +128,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => setIsSearchFocused(true)}
                         onBlur={() => setIsSearchFocused(false)}
-                        placeholder="IconMagnifyingGlass2 referrer code..."
+                        placeholder="Search referrer code..."
                         className="flex-1 bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] placeholder-slate-500 focus:outline-none"
                     />
                     {searchQuery && (
@@ -176,7 +176,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                                 }
                                             </p>
                                             <p className="text-[10px] text-[var(--text-tertiary)]">
-                                                {view === 'revenue' ? 'Revenue' : 'IconPeopleCopy'}
+                                                {view === 'revenue' ? 'Revenue' : 'Users'}
                                             </p>
                                         </div>
                                         {searchResult.pageNumber !== currentPage && (
@@ -251,7 +251,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                     }
                                 </p>
                                 <p className="text-[10px] md:text-xs text-[var(--text-tertiary)]">
-                                    {view === 'revenue' ? 'Revenue' : 'IconPeopleCopy'}
+                                    {view === 'revenue' ? 'Revenue' : 'Users'}
                                 </p>
                             </div>
 
@@ -264,7 +264,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                     }
                                 </p>
                                 <p className="text-xs text-[var(--text-tertiary)]">
-                                    {view === 'revenue' ? 'IconPeopleCopy' : 'Revenue'}
+                                    {view === 'revenue' ? 'Users' : 'Revenue'}
                                 </p>
                             </div>
                         </div>

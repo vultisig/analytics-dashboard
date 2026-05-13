@@ -375,51 +375,66 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <HeroMetric
-                    label="Total Unique IconPeopleCopy"
+                    label="Total Unique Users"
                     value={data.totalUsers}
                     icon={IconPeopleCopy}
-                    color="cyan"
+                    color="accent"
                     format="number"
                 />
                 <HeroMetric
-                    label={`Average Unique IconPeopleCopy (${getGranularityLabel()})`}
+                    label={`Average Unique Users (${getGranularityLabel()})`}
                     value={data.averageUsers}
                     icon={IconTrendingUpV}
-                    color="blue"
                     format="number"
                 />
                 <HeroMetric
-                    label="Projected Annual IconPeopleCopy"
+                    label="Projected Annual Users"
                     value={projectedAnnualUsers}
                     icon={IconWallet4}
-                    color="teal"
                     format="number"
                     tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
                 />
             </div>
 
-            {/* Chart View Toggle and Show/Hide Controls */}
-            <div className="glass-card rounded-xl p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Total Unique Users — header + toggles + chart in one Figma-style card */}
+            <div className="surface-card surface-card-hover p-5 md:p-6 space-y-5">
+                <div className="flex flex-wrap justify-between items-start gap-3">
+                    <div className="min-w-0">
+                        <h3 className="t-title-3 truncate">
+                            {chartView === 'provider'
+                                ? (showNewUsersOnly ? 'New Unique Users' : 'Total Unique Users')
+                                : (showNewUsersOnly ? 'New Unique Users by Platform' : 'Total Unique Users by Platform')}
+                        </h3>
+                        <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
+                            {showNewUsersOnly ? 'First-time users only' : `${getGranularityLabel()} breakdown`}
+                            {chartView === 'platform' ? ' · excludes 1inch' : ''}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <NewUsersToggle enabled={showNewUsersOnly} onToggle={setShowNewUsersOnly} />
+                        <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
-                    {chartView === 'platform' && (
-                        <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-                            <IconCircleInfo className="w-3.5 h-3.5" />
-                            <span>1inch data excluded (no platform info)</span>
+                    {chartView === 'platform' ? (
+                        <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
+                            <IconCircleInfo />
+                            <span>1inch excluded (no platform info)</span>
                         </div>
+                    ) : (
+                        <ProviderToggleControl
+                            providers={data.providers}
+                            visibleProviders={visibleProviders}
+                            onToggleProvider={handleToggleProvider}
+                            colors={providerColors}
+                        />
                     )}
                 </div>
-                {chartView === 'provider' ? (
-                    <ProviderToggleControl
-                        providers={data.providers}
-                        visibleProviders={visibleProviders}
-                        onToggleProvider={handleToggleProvider}
-                        colors={providerColors}
-                    />
-                ) : (
+                {chartView === 'platform' && (
                     <ProviderToggleControl
                         providers={['Android', 'iOS', 'Web', 'Other']}
                         visibleProviders={visiblePlatforms}
@@ -427,34 +442,6 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                         colors={[chainColorMap['android'], chainColorMap['ios'], chainColorMap['web'], '#64748B']}
                     />
                 )}
-            </div>
-
-            {/* Total Unique IconPeopleCopy Chart with Cumulative Toggle */}
-            <div className="glass-card rounded-xl p-6 space-y-4">
-                <div className="flex flex-wrap justify-between items-center gap-2">
-                    <div>
-                        <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                            {chartView === 'provider'
-                                ? (showNewUsersOnly ? 'New Unique IconPeopleCopy by Provider' : 'Total Unique IconPeopleCopy by Provider')
-                                : (showNewUsersOnly ? 'New Unique IconPeopleCopy by Platform' : 'Total Unique IconPeopleCopy by Platform')
-                            }
-                        </h3>
-                        <p className="text-sm text-[var(--text-tertiary)]">
-                            {showNewUsersOnly ? 'First-time users only' : getGranularityLabel() + ' breakdown'}
-                            {chartView === 'platform' ? ' (excludes 1inch)' : ''}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-3 md:gap-4">
-                        <NewUsersToggle
-                            enabled={showNewUsersOnly}
-                            onToggle={setShowNewUsersOnly}
-                        />
-                        <CumulativeToggle
-                            enabled={mainChartCumulative}
-                            onToggle={setMainChartCumulative}
-                        />
-                    </div>
-                </div>
                 {chartView === 'provider' ? (
                     <StackedBarChart
                         title=""
@@ -538,7 +525,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                                         }
 
                                         const hasData = aggregatedData.length > 0 && aggregatedData.some(item => Number(item[provider]) > 0);
-                                        const titlePrefix = isNewUsersMode ? 'New Unique IconPeopleCopy' : 'Total Unique IconPeopleCopy';
+                                        const titlePrefix = isNewUsersMode ? 'New Unique Users' : 'Total Unique Users';
 
                                         return (
                                             <div className="relative">
@@ -583,7 +570,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                                         }
 
                                         const hasData = aggregatedData.length > 0 && platforms.length > 0;
-                                        const titlePrefix = isNewUsersMode ? 'New Unique IconPeopleCopy' : 'Unique IconPeopleCopy';
+                                        const titlePrefix = isNewUsersMode ? 'New Unique Users' : 'Unique Users';
 
                                         return (
                                             <div className="relative">
@@ -606,7 +593,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                                         );
                                     })()}
 
-                                    {/* Single Pie Chart - No Top Paths for IconPeopleCopy */}
+                                    {/* Single Pie Chart - No Top Paths for Users */}
                                     <DonutChart
                                         title={`${isNewUsersMode ? 'New ' : ''}User Distribution by ${platformChainView === 'platform' ? 'Platform' : 'Chain'}`}
                                         data={(() => {

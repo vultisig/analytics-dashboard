@@ -136,7 +136,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                     tooltip="Total number of swaps using referral codes"
                 />
                 <HeroMetric
-                    label="IconPeopleCopy with Referrals"
+                    label="Users with Referrals"
                     value={allData.uniqueUsersWithReferrals}
                     icon={IconPeopleCopy}
                     color="purple"
@@ -193,7 +193,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-[var(--text-tertiary)]">Unique IconPeopleCopy</p>
+                                        <p className="text-[var(--text-tertiary)]">Unique Users</p>
                                         <p className="text-[var(--text-primary)] font-semibold">
                                             {provider.uniqueUsers.toLocaleString()}
                                         </p>
