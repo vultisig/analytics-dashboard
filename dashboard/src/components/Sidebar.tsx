@@ -51,8 +51,10 @@ export function Sidebar() {
 
     useEffect(() => {
         if (!mounted) return;
-        const sidebarWidth = collapsed ? '76px' : '256px';
-        const contentOffset = collapsed ? '116px' : '296px';
+        // Figma: sidebar is 296px wide at left:20, then a 20px gap to
+        // content (main starts at 336px on a 1440-wide frame).
+        const sidebarWidth = collapsed ? '76px' : '296px';
+        const contentOffset = collapsed ? '116px' : '336px';
         document.documentElement.style.setProperty('--sidebar-width', sidebarWidth);
         document.documentElement.style.setProperty('--content-offset', contentOffset);
         localStorage.setItem(STORAGE_KEY, String(collapsed));

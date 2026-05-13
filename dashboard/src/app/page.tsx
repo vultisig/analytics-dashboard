@@ -68,8 +68,8 @@ function DashboardContent() {
         <div className="min-h-screen bg-[var(--bg-page)]">
             <Sidebar />
             <main
-                className="min-h-screen pr-5 py-5 transition-[padding-left] duration-200"
-                style={{ paddingLeft: 'var(--content-offset, 296px)' }}
+                className="min-h-screen pr-5 py-4 transition-[padding-left] duration-200"
+                style={{ paddingLeft: 'var(--content-offset, 336px)' }}
             >
                 <div className="flex flex-col gap-5">
                     {/* Header row */}
@@ -78,12 +78,17 @@ function DashboardContent() {
                             {TitleForTab(activeTab)}
                         </h1>
                         <div className="flex items-center gap-3.5 flex-wrap justify-end">
-                            <div className="search-pill">
+                            <div className="search-pill relative">
                                 <IconMagnifyingGlass2 className="text-[var(--text-tertiary)]" />
+                                {/* Figma: 2 × 20 vertical separator after the search icon */}
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute left-[36px] top-1/2 -translate-y-1/2 h-5 w-0.5 bg-[var(--text-primary)]"
+                                />
                                 <input
                                     type="search"
                                     placeholder="Search"
-                                    className="flex-1 bg-transparent text-[13px] leading-[18px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none"
+                                    className="flex-1 bg-transparent pl-2 text-[13px] leading-[18px] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none"
                                     aria-label="Search"
                                 />
                             </div>
