@@ -161,7 +161,7 @@ class BaseIngestor(ABC):
         """Determine platform from affiliate address suffix"""
         if not affiliate_address:
             return 'Unknown'
-        
+
         affiliate_address = str(affiliate_address).lower()
         if affiliate_address.endswith('vi'):
             return 'iOS'
@@ -171,3 +171,39 @@ class BaseIngestor(ABC):
             return 'Web' # or Desktop/Other
         else:
             return 'Other'
+
+    @staticmethod
+    def reconcile_affiliate_fees_from_memo(
+        affiliate_addresses: List[str],
+        affiliate_fees_bps: List[int],
+        memo: str,
+    ) -> List[int]:
+        """Recover affiliate_fees_bps from the swap memo when Midgard's
+        metadata.swap.affiliateFee collapses a multi-affiliate fee string
+        (e.g. returns "0" for a "PA/vi" address pair whose memo carries
+        "10/15"). Returns the reconciled list, or the input unchanged when
+        the memo cannot be parsed cleanly.
+
+        THORChain / MAYAChain swap memo:
+          SWAP_TYPE:ASSET:DEST:LIM:AFFILIATE_LIST:FEE_LIST[:DEX_AGG:...]
+        """
+        n_addrs = len(affiliate_addresses)
+        if n_addrs <= 1 or n_addrs == len(affiliate_fees_bps):
+            return affiliate_fees_bps
+        if not memo:
+            return affiliate_fees_bps
+
+        parts = memo.split(':')
+        if len(parts) < 6:
+            return affiliate_fees_bps
+
+        memo_fees: List[int] = []
+        for f in parts[5].split('/'):
+            f = f.strip()
+            if not f.isdigit():
+                return affiliate_fees_bps
+            memo_fees.append(int(f))
+
+        if len(memo_fees) != n_addrs:
+            return affiliate_fees_bps
+        return memo_fees
