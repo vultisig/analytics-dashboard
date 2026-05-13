@@ -344,51 +344,60 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <HeroMetric
                     label="Total Revenue"
                     value={data.totalRevenue}
                     icon={IconDollar}
-                    color="cyan"
+                    color="accent"
                     format="currency"
                 />
                 <HeroMetric
                     label={`Average Revenue (${getGranularityLabel()})`}
                     value={data.averageRevenue}
                     icon={IconTrendingUpV}
-                    color="blue"
                     format="currency"
                 />
                 <HeroMetric
                     label="Projected Annual Revenue"
                     value={projectedAnnualRevenue}
                     icon={IconWallet4}
-                    color="teal"
                     format="currency"
                     tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
                 />
             </div>
 
-            {/* Chart View Toggle and Show/Hide Controls */}
-            <div className="glass-card rounded-xl p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Total Revenue — header + toggles + chart in one Figma-style card */}
+            <div className="surface-card surface-card-hover p-5 md:p-6 space-y-5">
+                <div className="flex flex-wrap justify-between items-start gap-3">
+                    <div className="min-w-0">
+                        <h3 className="t-title-3 truncate">
+                            {chartView === 'provider' ? 'Total Revenue' : 'Total Revenue by Platform'}
+                        </h3>
+                        <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch' : ''}
+                        </p>
+                    </div>
+                    <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
-                    {chartView === 'platform' && (
-                        <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-                            <IconCircleInfo className="w-3.5 h-3.5" />
-                            <span>1inch data excluded (no platform info)</span>
+                    {chartView === 'platform' ? (
+                        <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
+                            <IconCircleInfo />
+                            <span>1inch excluded (no platform info)</span>
                         </div>
+                    ) : (
+                        <ProviderToggleControl
+                            providers={data.providers}
+                            visibleProviders={visibleProviders}
+                            onToggleProvider={handleToggleProvider}
+                            colors={providerColors}
+                        />
                     )}
                 </div>
-                {chartView === 'provider' ? (
-                    <ProviderToggleControl
-                        providers={data.providers}
-                        visibleProviders={visibleProviders}
-                        onToggleProvider={handleToggleProvider}
-                        colors={providerColors}
-                    />
-                ) : (
+                {chartView === 'platform' && (
                     <ProviderToggleControl
                         providers={['Android', 'iOS', 'Web', 'Other']}
                         visibleProviders={visiblePlatforms}
@@ -396,24 +405,6 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                         colors={[chainColorMap['android'], chainColorMap['ios'], chainColorMap['web'], '#64748B']}
                     />
                 )}
-            </div>
-
-            {/* Total Revenue Chart with Cumulative Toggle */}
-            <div className="glass-card rounded-xl p-6 space-y-4">
-                <div className="flex flex-wrap justify-between items-center gap-2">
-                    <div>
-                        <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                            {chartView === 'provider' ? 'Total Revenue by Provider' : 'Total Revenue by Platform'}
-                        </h3>
-                        <p className="text-sm text-[var(--text-tertiary)]">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' (excludes 1inch)' : ''}
-                        </p>
-                    </div>
-                    <CumulativeToggle
-                        enabled={mainChartCumulative}
-                        onToggle={setMainChartCumulative}
-                    />
-                </div>
                 {chartView === 'provider' ? (
                     <StackedBarChart
                         title=""
