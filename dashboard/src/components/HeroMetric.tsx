@@ -65,6 +65,20 @@ export function HeroMetric({
 
     return (
         <div className={`metric-card ${isAccent ? 'metric-card-accent' : ''}`}>
+            {isAccent && (
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[20px]">
+                    {/* MagicPattern decorative overlay (Figma asset).
+                        Sits behind the card content, opacity 50%,
+                        rotated 180° to match the design. */}
+                    <img
+                        src="/figma/magic-pattern.png"
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute right-[-22%] bottom-[-13px] h-[170px] w-[406px] rotate-180 opacity-50 select-none"
+                        draggable={false}
+                    />
+                </div>
+            )}
             <div className="flex items-center justify-between relative z-10">
                 <div className={`icon-badge ${isAccent ? 'icon-badge-brand' : ''}`}>
                     <Icon size={18} />
@@ -77,7 +91,7 @@ export function HeroMetric({
                     </p>
                     {tooltip && <Tooltip content={tooltip} iconOnly />}
                 </div>
-                <p className="font-display font-medium text-num text-[36px] leading-[37px] tracking-[-0.02em] text-[var(--text-primary)]">
+                <p className="font-display font-medium text-num text-[36px] leading-[37px] tracking-[-0.72px] text-[var(--text-primary)]">
                     {format === 'currency' ? '$' : ''}
                     {shouldAnimate ? (
                         <CountUp

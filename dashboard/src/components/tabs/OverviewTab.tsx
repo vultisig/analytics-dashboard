@@ -339,43 +339,32 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
     const progressPercent = showProgress && value > 0
         ? Math.min(100, Math.max(0, (soFarValue / value) * 100))
         : 0;
+    const Icon = variant === 'volume' ? IconArrowUpRightV : IconCalculatorV;
 
     return (
-        <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative min-h-[150px]">
+        <div className="surface-card surface-card-hover relative h-[152px] p-5 overflow-hidden">
             {variant === 'volume' && (
-                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-                    <img
-                        src="/figma/projection-chart.svg"
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute right-0 bottom-0 w-[60%] max-w-[340px] h-auto select-none"
-                    />
-                </div>
+                <img
+                    src="/figma/projection-chart.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none select-none absolute right-0 bottom-0 w-[60%] max-w-[355px] h-auto z-0"
+                />
             )}
 
-            <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+            <div className="relative z-10 flex h-full flex-col justify-between">
                 <div className="flex items-center gap-3">
-                    {variant === 'volume' ? (
-                        <div className="w-8 h-8 rounded-[10px] bg-[#11284A] flex items-center justify-center flex-shrink-0">
-                            <IconArrowUpRightV className="text-[var(--text-tertiary)]" />
-                        </div>
-                    ) : (
-                        <img
-                            src="/figma/treasure-chest.svg"
-                            alt=""
-                            width={32}
-                            height={32}
-                            className="w-8 h-8 flex-shrink-0"
-                        />
-                    )}
+                    <div className="icon-badge">
+                        <Icon />
+                    </div>
                     <div className="flex items-center gap-1.5">
-                        <p className="text-[var(--text-secondary)] text-sm font-medium">{label}</p>
+                        <p className="t-body-s text-[var(--text-secondary)]">{label}</p>
                         <Tooltip content={tooltip} iconOnly />
                     </div>
                 </div>
 
                 <div className="flex items-end justify-between gap-4 flex-wrap">
-                    <p className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] tracking-tight">
+                    <p className="font-display font-medium text-num text-[32px] leading-[37px] tracking-[-0.64px] text-[var(--text-primary)]">
                         $<CountUp
                             end={value}
                             duration={0.8}
@@ -386,7 +375,8 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                     </p>
 
                     {showProgress && (
-                        <div className="flex-1 min-w-[180px] max-w-[280px] pb-1">
+                        <div className="relative w-[222px] pb-1">
+                            {/* Label + white tip indicator above the progress bar */}
                             <div className="relative h-9 mb-1">
                                 <div
                                     className="absolute top-1 flex items-start gap-1.5"
@@ -396,23 +386,37 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                                         aria-hidden="true"
                                         className="block w-px h-8 flex-shrink-0"
                                         style={{
-                                            background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+                                            background:
+                                                'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
                                         }}
                                     />
                                     <div className="flex flex-col items-start gap-0.5">
-                                        <span className="text-[10px] text-[var(--text-tertiary)] leading-tight whitespace-nowrap">{soFarLabel}</span>
-                                        <span className="text-xs font-semibold text-[var(--text-primary)] leading-tight whitespace-nowrap">
+                                        <span className="text-[8px] font-medium text-[var(--text-tertiary)] leading-[16px] whitespace-nowrap">
+                                            {soFarLabel}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-num text-[var(--text-secondary)] leading-[16px] whitespace-nowrap">
                                             {formatCompactCurrency(soFarValue!)}
                                         </span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="relative w-full h-[7px] rounded-full bg-[#11284A] overflow-hidden">
+                            {/* Track + filled bar (Figma: 15.41deg gradient + 4.1px blur shadow) */}
+                            <div className="relative h-[7px] rounded-[12px] bg-[var(--border-light)] overflow-visible">
                                 <div
-                                    className="h-full rounded-full transition-[width] duration-700 ease-out"
+                                    className="absolute inset-y-0 left-0 rounded-[12px] transition-[width] duration-700 ease-out"
                                     style={{
                                         width: `${progressPercent}%`,
-                                        background: 'linear-gradient(109deg, #11284A 0%, #2155DF 29%, #FFFFFF 98%)',
+                                        backgroundImage:
+                                            'linear-gradient(15.407deg, #11284A 13.791%, #2155DF 42.744%, #FFFFFF 111.83%)',
+                                    }}
+                                />
+                                <div
+                                    aria-hidden="true"
+                                    className="absolute inset-y-0 left-0 rounded-[12px] blur-[4.1px] transition-[width] duration-700 ease-out"
+                                    style={{
+                                        width: `${progressPercent}%`,
+                                        backgroundImage:
+                                            'linear-gradient(15.407deg, #11284A 13.791%, #2155DF 42.744%, #FFFFFF 111.83%)',
                                     }}
                                 />
                             </div>
