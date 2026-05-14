@@ -97,19 +97,24 @@ export function Sidebar() {
                         }}
                         aria-hidden="true"
                     >
-                        {/* Vultisig V mark, exported from the design library.
-                            Figma positions a 21.28 px mark inside the 38 px box
-                            at (8.36, 8.36) — centered. */}
+                        {/* Vultisig V mark. The SVG's natural ratio is
+                            21.33 × 18.55 (wider than tall), so render it
+                            with explicit non-square dimensions and centre
+                            it inside the 38 px square. */}
                         <img
                             src="/vultisig-mark.svg"
                             alt=""
-                            width={21.28}
-                            height={21.28}
-                            className="absolute left-[8.36px] top-[8.36px] select-none"
+                            width={21.33}
+                            height={18.55}
+                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none"
                             draggable={false}
                         />
                     </div>
-                    {!collapsed && <p className="t-title-2 truncate">Analytics</p>}
+                    {!collapsed && (
+                        <p className="font-medium text-[18px] leading-[22px] tracking-[-0.3px] text-[var(--text-primary)] truncate">
+                            Vultisig Analytics
+                        </p>
+                    )}
                 </div>
                 {!collapsed && (
                     <button
