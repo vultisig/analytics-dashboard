@@ -74,10 +74,6 @@ const nextConfig: NextConfig = {
   // BACKEND_URL must only be set in the server environment (not NEXT_PUBLIC_),
   // so it is never exposed to the browser.
   async rewrites() {
-    // MOCK_API=true skips the backend rewrite so requests fall through
-    // to the in-repo `src/app/api/*` route handlers that serve seeded
-    // mock data. Useful for local UI work without the Python backend.
-    if (process.env.MOCK_API === 'true') return [];
     const backendUrl = process.env.BACKEND_URL || 'http://backend:8080';
     return [
       {
