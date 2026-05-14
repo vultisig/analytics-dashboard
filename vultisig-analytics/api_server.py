@@ -1122,6 +1122,8 @@ def get_revenue():
                 COALESCE(SUM(actual_fee_usd), 0) as value
             FROM dex_aggregator_revenue
             WHERE protocol = '1inch'
+                AND token_in_symbol IS NOT NULL
+                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
         """
 
@@ -1232,6 +1234,8 @@ def get_revenue():
                     FROM dex_aggregator_revenue
                     WHERE protocol = '1inch'
                         AND chain IS NOT NULL
+                        AND token_in_symbol IS NOT NULL
+                        AND token_out_symbol IS NOT NULL
                         {date_filter_arkham}
                     GROUP BY 1
                     ORDER BY value DESC
