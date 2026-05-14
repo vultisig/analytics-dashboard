@@ -1,37 +1,59 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { IconCalendar3, IconChevronDownSmall } from '@/icons';
 import { DateRangeType } from '@/lib/dateUtils';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
-// Map short values back to DateRangeType for compatibility
 const SHORT_TO_DATE_RANGE: Record<string, DateRangeType> = {
-  [SHORT_VALUES.RANGE_ALL]: 'all',
-  [SHORT_VALUES.RANGE_1D]: '1d',
-  [SHORT_VALUES.RANGE_7D]: '7d',
-  [SHORT_VALUES.RANGE_30D]: '30d',
-  [SHORT_VALUES.RANGE_90D]: '90d',
-  [SHORT_VALUES.RANGE_YTD]: 'ytd',
-  [SHORT_VALUES.RANGE_1Y]: '1y',
-  [SHORT_VALUES.RANGE_CUSTOM]: 'custom',
+    [SHORT_VALUES.RANGE_ALL]: 'all',
+    [SHORT_VALUES.RANGE_1D]: '1d',
+    [SHORT_VALUES.RANGE_7D]: '7d',
+    [SHORT_VALUES.RANGE_30D]: '30d',
+    [SHORT_VALUES.RANGE_90D]: '90d',
+    [SHORT_VALUES.RANGE_YTD]: 'ytd',
+    [SHORT_VALUES.RANGE_1Y]: '1y',
+    [SHORT_VALUES.RANGE_CUSTOM]: 'custom',
 };
 
 const DATE_RANGE_TO_SHORT: Record<DateRangeType, string> = Object.fromEntries(
-  Object.entries(SHORT_TO_DATE_RANGE).map(([k, v]) => [v, k])
+    Object.entries(SHORT_TO_DATE_RANGE).map(([k, v]) => [v, k])
 ) as Record<DateRangeType, string>;
+
+const PRESETS: { label: string; value: DateRangeType }[] = [
+    { label: 'All time', value: 'all' },
+    { label: 'Last 24 hours', value: '1d' },
+    { label: 'Last 7 days', value: '7d' },
+    { label: 'Last 30 days', value: '30d' },
+    { label: 'Last 90 days', value: '90d' },
+    { label: 'Year to date', value: 'ytd' },
+    { label: 'Last year', value: '1y' },
+];
+
+const SHORT_LABELS: Record<DateRangeType, string> = {
+    all: 'All',
+    '1d': '1D',
+    '7d': '7D',
+    '30d': '30D',
+    '90d': '90D',
+    ytd: 'YTD',
+    '1y': '1Y',
+    custom: 'Custom',
+};
 
 export function DateRangeSelector() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const [, startTransition] = useTransition();
+    const containerRef = useRef<HTMLDivElement>(null);
+
     const currentRangeShort = getParam(searchParams, SHORT_PARAMS.RANGE) || SHORT_VALUES.RANGE_ALL;
     const currentRange = SHORT_TO_DATE_RANGE[currentRangeShort] || 'all';
     const startDateParam = getParam(searchParams, SHORT_PARAMS.START_DATE);
     const endDateParam = getParam(searchParams, SHORT_PARAMS.END_DATE);
 
-    const [isCustomOpen, setIsCustomOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
     const [customStart, setCustomStart] = useState('');
     const [customEnd, setCustomEnd] = useState('');
 
@@ -40,160 +62,122 @@ export function DateRangeSelector() {
         if (endDateParam) setCustomEnd(endDateParam.split('T')[0]);
     }, [startDateParam, endDateParam]);
 
-    const ranges: { label: string; value: DateRangeType }[] = [
-        { label: 'All', value: 'all' },
-        { label: '1D', value: '1d' },
-        { label: '7D', value: '7d' },
-        { label: '30D', value: '30d' },
-        { label: '90D', value: '90d' },
-        { label: 'YTD', value: 'ytd' },
-        { label: '1Y', value: '1y' },
-    ];
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        if (isOpen) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [isOpen]);
 
-    const handleCustomApply = () => {
-        if (!customStart || !customEnd) return;
-
+    const applyRange = (value: DateRangeType, opts?: { startDate?: string; endDate?: string }) => {
         startTransition(() => {
-            // Get current params
-            const currentParams = paramsToObject(searchParams);
+            const current = paramsToObject(searchParams);
+            const rangeShort = DATE_RANGE_TO_SHORT[value];
 
-            // Build new params preserving tab and granularity
-            const newParams = buildParams({
-                [SHORT_PARAMS.TAB]: currentParams[SHORT_PARAMS.TAB],
-                [SHORT_PARAMS.GRANULARITY]: currentParams[SHORT_PARAMS.GRANULARITY],
-                [SHORT_PARAMS.RANGE]: SHORT_VALUES.RANGE_CUSTOM,
-                [SHORT_PARAMS.START_DATE]: customStart,
-                [SHORT_PARAMS.END_DATE]: customEnd,
-            });
+            let newGranularity = current[SHORT_PARAMS.GRANULARITY];
+            if (rangeShort === SHORT_VALUES.RANGE_1D) newGranularity = SHORT_VALUES.GRAN_HOUR;
+            else if (
+                rangeShort === SHORT_VALUES.RANGE_90D ||
+                rangeShort === SHORT_VALUES.RANGE_YTD ||
+                rangeShort === SHORT_VALUES.RANGE_1Y ||
+                rangeShort === SHORT_VALUES.RANGE_ALL
+            ) newGranularity = SHORT_VALUES.GRAN_WEEK;
+            else if (
+                rangeShort === SHORT_VALUES.RANGE_7D ||
+                rangeShort === SHORT_VALUES.RANGE_30D
+            ) newGranularity = SHORT_VALUES.GRAN_DAY;
 
-            router.replace(`?${newParams.toString()}`, { scroll: false });
+            const next: Record<string, string | undefined> = {
+                [SHORT_PARAMS.TAB]: current[SHORT_PARAMS.TAB],
+                [SHORT_PARAMS.GRANULARITY]: newGranularity,
+                [SHORT_PARAMS.RANGE]: rangeShort,
+            };
+            if (value === 'custom') {
+                next[SHORT_PARAMS.START_DATE] = opts?.startDate;
+                next[SHORT_PARAMS.END_DATE] = opts?.endDate;
+            }
+
+            router.replace(`?${buildParams(next).toString()}`, { scroll: false });
         });
-        setIsCustomOpen(false);
+        setIsOpen(false);
     };
 
+    const buttonLabel = currentRange === 'custom'
+        ? `${customStart || '…'} → ${customEnd || '…'}`
+        : SHORT_LABELS[currentRange];
+
     return (
-        <div className="flex items-center gap-2 relative">
-            <div className="glass-card p-0.5 md:p-1 rounded-lg will-change-blur z-50">
-                <div className="flex items-center gap-1 md:gap-2">
-                    <div className="px-1.5 md:px-3 py-1 md:py-1.5 text-slate-400 flex items-center gap-1 md:gap-2 border-r border-slate-700/50 shrink-0">
-                        <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                        <span className="text-xs md:text-sm font-medium hidden sm:inline">Period</span>
-                    </div>
-                    <div className="flex items-center gap-0.5 md:gap-1 p-0.5 md:p-1">
-                    {ranges.map((range) => {
-                    const handleRangeChange = () => {
-                        startTransition(() => {
-                            const currentParams = paramsToObject(searchParams);
-                            const rangeShort = DATE_RANGE_TO_SHORT[range.value];
+        <div className="relative" ref={containerRef}>
+            <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
+                onClick={() => setIsOpen((v) => !v)}
+                className="pill"
+            >
+                <IconCalendar3 />
+                <span>Period: <span className="text-[var(--text-primary)]">{buttonLabel}</span></span>
+                <IconChevronDownSmall className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-                            // Auto-adjust granularity based on selected range
-                            let newGranularity = currentParams[SHORT_PARAMS.GRANULARITY];
-                            if (rangeShort === SHORT_VALUES.RANGE_1D) {
-                                // 1D period -> default to hourly
-                                newGranularity = SHORT_VALUES.GRAN_HOUR;
-                            } else if (
-                                rangeShort === SHORT_VALUES.RANGE_90D ||
-                                rangeShort === SHORT_VALUES.RANGE_YTD ||
-                                rangeShort === SHORT_VALUES.RANGE_1Y ||
-                                rangeShort === SHORT_VALUES.RANGE_ALL
-                            ) {
-                                // Long periods -> default to weekly
-                                newGranularity = SHORT_VALUES.GRAN_WEEK;
-                            } else if (
-                                rangeShort === SHORT_VALUES.RANGE_7D ||
-                                rangeShort === SHORT_VALUES.RANGE_30D
-                            ) {
-                                // Medium periods -> default to daily
-                                newGranularity = SHORT_VALUES.GRAN_DAY;
-                            }
-
-                            const newParams = buildParams({
-                                [SHORT_PARAMS.TAB]: currentParams[SHORT_PARAMS.TAB],
-                                [SHORT_PARAMS.GRANULARITY]: newGranularity,
-                                [SHORT_PARAMS.RANGE]: rangeShort,
-                                // Don't include startDate/endDate for preset ranges
-                            });
-
-                            router.replace(`?${newParams.toString()}`, { scroll: false });
-                        });
-                    };
-
-                    return (
-                        <button
-                            key={range.value}
-                            type="button"
-                            onClick={handleRangeChange}
-                            className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all ${currentRange === range.value
-                                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-sm shadow-cyan-500/10'
-                                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            {isOpen && (
+                <div
+                    role="listbox"
+                    className="absolute right-0 top-full mt-2 z-50 w-[280px] rounded-2xl border border-[var(--border-normal)] bg-[var(--surface-1)] shadow-2xl p-2"
+                >
+                    {PRESETS.map((preset) => {
+                        const isActive = currentRange === preset.value;
+                        return (
+                            <button
+                                key={preset.value}
+                                type="button"
+                                role="option"
+                                aria-selected={isActive}
+                                onClick={() => applyRange(preset.value)}
+                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                                    isActive
+                                        ? 'bg-[var(--brand-blue)] text-[var(--text-primary)]'
+                                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]'
                                 }`}
-                        >
-                            {range.label}
-                        </button>
-                    );
-                })}
-
-                <div className="relative">
-                    <button
-                        type="button"
-                        onClick={() => setIsCustomOpen(!isCustomOpen)}
-                        className={`px-1.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-md transition-all flex items-center gap-0.5 md:gap-1 ${currentRange === 'custom'
-                            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-sm shadow-cyan-500/10'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                            }`}
-                        aria-label="Select custom date range"
-                    >
-                        Custom <ChevronDown className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                    </button>
-
-                    {isCustomOpen && (
-                        <div className="absolute top-full right-0 mt-2 p-4 glass-card rounded-xl shadow-xl z-50 w-72">
-                            <div className="space-y-4">
-                                <div>
-                                    <label htmlFor="custom-start-date" className="block text-xs text-slate-400 mb-1">Start Date</label>
-                                    <input
-                                        id="custom-start-date"
-                                        type="date"
-                                        value={customStart}
-                                        onChange={(e) => setCustomStart(e.target.value)}
-                                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                                        aria-label="Custom date range start date"
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="custom-end-date" className="block text-xs text-slate-400 mb-1">End Date</label>
-                                    <input
-                                        id="custom-end-date"
-                                        type="date"
-                                        value={customEnd}
-                                        onChange={(e) => setCustomEnd(e.target.value)}
-                                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
-                                        aria-label="Custom date range end date"
-                                    />
-                                </div>
-                                <div className="flex justify-end gap-2 pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsCustomOpen(false)}
-                                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleCustomApply}
-                                        className="px-3 py-1.5 text-xs bg-cyan-500 hover:bg-cyan-600 text-white rounded"
-                                    >
-                                        Apply
-                                    </button>
-                                </div>
-                            </div>
+                            >
+                                <span>{preset.label}</span>
+                                <span className="text-xs text-[var(--text-tertiary)]">{SHORT_LABELS[preset.value]}</span>
+                            </button>
+                        );
+                    })}
+                    <div className="my-2 border-t border-[var(--border-light)]" />
+                    <div className="px-2 py-1.5 space-y-2">
+                        <p className="text-xs text-[var(--text-tertiary)]">Custom range</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                type="date"
+                                value={customStart}
+                                onChange={(e) => setCustomStart(e.target.value)}
+                                aria-label="Start date"
+                                className="w-full rounded-md border border-[var(--border-light)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--brand-blue)] focus:outline-none"
+                            />
+                            <input
+                                type="date"
+                                value={customEnd}
+                                onChange={(e) => setCustomEnd(e.target.value)}
+                                aria-label="End date"
+                                className="w-full rounded-md border border-[var(--border-light)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--brand-blue)] focus:outline-none"
+                            />
                         </div>
-                    )}
+                        <button
+                            type="button"
+                            onClick={() => customStart && customEnd && applyRange('custom', { startDate: customStart, endDate: customEnd })}
+                            disabled={!customStart || !customEnd}
+                            className="w-full rounded-md bg-[var(--brand-blue)] py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--brand-blue-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Apply
+                        </button>
+                    </div>
                 </div>
-                </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 }

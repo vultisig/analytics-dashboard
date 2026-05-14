@@ -3,7 +3,7 @@
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChartCard } from './ChartCard';
 import { formatProviderName } from '@/lib/providerUtils';
-import { glassTooltipStyle, providerColorMap, chainColorMap, fallbackChainColors } from '@/lib/chartStyles';
+import { providerColorMap, chainColorMap, fallbackChainColors } from '@/lib/chartStyles';
 
 interface DonutChartProps {
     title: string;
@@ -33,11 +33,23 @@ function CustomTooltip({ active, payload, total, currency }: CustomTooltipProps)
     const name = formatProviderName(String(item.name ?? ''));
     const percentage = ((value / total) * 100).toFixed(1);
 
+    // Figma: w-[134px] p-[12px] rounded-[12px], rgba(17,40,74,0.5) bg
+    // with backdrop-blur-[2px] and border #1b3f73.
     return (
-        <div style={glassTooltipStyle} className="p-3">
-            <p className="text-slate-200 font-semibold mb-1">{name}</p>
-            <p className="text-white font-bold">{formatValue(value, currency)}</p>
-            <p className="text-slate-400 text-sm mt-1">{percentage}%</p>
+        <div
+            className="w-[134px] flex flex-col gap-1 rounded-[12px] p-3 backdrop-blur-[2px]"
+            style={{
+                background: 'rgba(17,40,74,0.5)',
+                border: '1px solid var(--border-normal)',
+            }}
+        >
+            <div className="flex items-center pb-1.5">
+                <p className="t-body-s text-[var(--text-secondary)]">{name}</p>
+            </div>
+            <p className="font-display font-medium text-num text-[16px] leading-[20px] tracking-[0.2px] text-[var(--text-primary)]">
+                {formatValue(value, currency)}
+            </p>
+            <p className="t-footnote text-[var(--text-tertiary)]">{percentage}%</p>
         </div>
     );
 }
@@ -59,9 +71,9 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
     return (
         <ChartCard title={title} subtitle={subtitle}>
             {hasData ? (
-                <div className="flex flex-col gap-10">
+                <div className="flex flex-col gap-14">
                     <div className="w-full flex justify-center">
-                        <div className="w-full max-w-[360px] aspect-[2/1]">
+                        <div className="w-full max-w-[329px] aspect-[329/155]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                     <Pie
@@ -83,29 +95,34 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
                                             />
                                         ))}
                                     </Pie>
-                                    <Tooltip content={(props) => <CustomTooltip {...props} total={total} currency={currency} />} />
+                                    <Tooltip
+                                        content={(props) => <CustomTooltip {...props} total={total} currency={currency} />}
+                                        wrapperStyle={{ outline: 'none' }}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
-                    <div className="flex flex-wrap justify-center gap-x-8 gap-y-3 px-1">
+                    {/* Figma: 4-column legend, each cell flex-1, py-13 between dot row
+                       and value, 8 px dot/label gap, Satoshi 18 / 20 / 0.2 px values. */}
+                    <div className="flex w-full items-stretch gap-2.5">
                         {sortedData.map((entry, index) => {
                             const percentage = ((entry.value / total) * 100).toFixed(1);
                             return (
-                                <div key={entry.name} className="flex flex-col gap-1 min-w-[110px]">
-                                    <div className="flex items-center gap-2 min-w-0">
+                                <div key={entry.name} className="flex flex-1 min-w-0 flex-col gap-1">
+                                    <div className="flex items-center gap-2 py-3 min-w-0">
                                         <span
-                                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                                            className="size-2.5 shrink-0 rounded-full"
                                             style={{ backgroundColor: colorFor(entry.name, index) }}
                                         />
-                                        <span className="text-sm text-slate-300 truncate">
+                                        <span className="t-body-s text-[var(--text-secondary)] truncate">
                                             {formatProviderName(entry.name)}
                                         </span>
                                     </div>
-                                    <span className="text-base md:text-lg font-semibold text-white truncate">
+                                    <p className="font-display font-medium text-num text-[18px] leading-[20px] tracking-[0.2px] text-[var(--text-primary)] truncate">
                                         {formatValue(entry.value, currency)}
-                                    </span>
-                                    <span className="text-xs text-slate-400">{percentage}%</span>
+                                    </p>
+                                    <p className="t-footnote text-[var(--text-tertiary)]">{percentage}%</p>
                                 </div>
                             );
                         })}
@@ -114,7 +131,7 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
             ) : (
                 <div className="flex items-center justify-center h-[300px] w-full">
                     <div className="text-center">
-                        <p className="text-slate-400 text-sm">No data available for the selected time range</p>
+                        <p className="text-[var(--text-tertiary)] text-sm">No data available for the selected time range</p>
                     </div>
                 </div>
             )}

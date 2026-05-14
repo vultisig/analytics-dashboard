@@ -5,7 +5,17 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { DonutChart } from '@/components/DonutChart';
 import { StatsCard } from '@/components/StatsCard';
 import { Tooltip } from '@/components/Tooltip';
-import { ArrowUpRight, DollarSign, Users, Hash, TrendingUp, Activity, Wallet } from 'lucide-react';
+import {
+    IconArrowUpRightV,
+    IconDollar,
+    IconVault,
+    IconPeopleAdded,
+    IconHashtag,
+    IconChart4,
+    IconReceiptCheck,
+    IconArrowsRepeatLR,
+    IconCalculatorV,
+} from '@/icons';
 import { providerColors } from '@/lib/chartStyles';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
@@ -150,7 +160,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (error && !stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error || 'No data available'}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error || 'No data available'}</div>
             </div>
         );
     }
@@ -160,7 +170,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (loading && !stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading overview...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading overview...</div>
             </div>
         );
     }
@@ -169,7 +179,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     if (!stats) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -187,42 +197,39 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
     return (
         <div className="space-y-6">
             {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Swap Volume"
                     value={stats.totalVolume}
-                    icon={DollarSign}
-                    color="cyan"
+                    icon={IconDollar}
+                    color="accent"
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Revenue"
                     value={stats.totalRevenue}
-                    icon={Wallet}
-                    color="blue"
+                    icon={IconVault}
                     format="currency"
                 />
                 <HeroMetric
                     label="Total Unique Swappers"
                     value={stats.totalUsers}
-                    icon={Users}
-                    color="teal"
+                    icon={IconPeopleAdded}
                     format="number"
                 />
                 <HeroMetric
                     label="Total Swap Count"
                     value={stats.totalSwaps}
-                    icon={Hash}
-                    color="purple"
+                    icon={IconHashtag}
                     format="number"
                 />
             </div>
 
             {/* Annual Projections */}
             <div>
-                <h3 className="text-lg font-semibold text-white mb-4">
+                <h3 className="text-[17px] font-medium leading-5 tracking-[-0.02em] text-[var(--text-primary)] mb-4">
                     Annual Projections
-                    <span className="text-sm text-slate-400 font-normal ml-2">
+                    <span className="text-[13px] text-[var(--text-tertiary)] font-medium ml-2">
                         (Based on {getGranularityLabel()} Average)
                     </span>
                 </h3>
@@ -255,13 +262,14 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                 />
 
                 {/* Average Metrics */}
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-white mb-4">
+                <div className="space-y-3">
+                    <h3 className="text-[17px] font-medium leading-5 tracking-[-0.02em] text-[var(--text-primary)] mb-4">
                         {getGranularityLabel()} Averages
                     </h3>
 
                     <StatsCard
-                        title={`Average Swap Volume (${getGranularityLabel()})`}
+                        title="Average Swap Volume"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageVolume}
@@ -272,11 +280,12 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={TrendingUp}
+                        icon={IconChart4}
                     />
 
                     <StatsCard
-                        title={`Average Revenue (${getGranularityLabel()})`}
+                        title="Average Revenue"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageRevenue}
@@ -287,11 +296,12 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={Wallet}
+                        icon={IconReceiptCheck}
                     />
 
                     <StatsCard
-                        title={`Average Swap Count (${getGranularityLabel()})`}
+                        title="Average Swap Count"
+                        caption={getGranularityLabel()}
                         value={
                             <CountUp
                                 end={stats.averageSwaps}
@@ -301,7 +311,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                                 useEasing={true}
                             />
                         }
-                        icon={Activity}
+                        icon={IconArrowsRepeatLR}
                     />
                 </div>
             </div>
@@ -329,43 +339,32 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
     const progressPercent = showProgress && value > 0
         ? Math.min(100, Math.max(0, (soFarValue / value) * 100))
         : 0;
+    const Icon = variant === 'volume' ? IconArrowUpRightV : IconCalculatorV;
 
     return (
-        <div className="glass-card glass-card-hover will-change-blur rounded-2xl p-5 relative min-h-[150px]">
+        <div className="surface-card surface-card-hover relative h-[152px] p-5 overflow-hidden">
             {variant === 'volume' && (
-                <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-                    <img
-                        src="/figma/projection-chart.svg"
-                        alt=""
-                        aria-hidden="true"
-                        className="absolute right-0 bottom-0 w-[60%] max-w-[340px] h-auto select-none"
-                    />
-                </div>
+                <img
+                    src="/figma/projection-chart.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="pointer-events-none select-none absolute right-0 bottom-0 w-[60%] max-w-[355px] h-auto z-0"
+                />
             )}
 
-            <div className="relative z-10 flex flex-col h-full justify-between gap-6">
+            <div className="relative z-10 flex h-full flex-col justify-between">
                 <div className="flex items-center gap-3">
-                    {variant === 'volume' ? (
-                        <div className="w-8 h-8 rounded-[10px] bg-[#11284A] flex items-center justify-center flex-shrink-0">
-                            <ArrowUpRight className="w-4 h-4 text-[#8295AE]" strokeWidth={1.75} />
-                        </div>
-                    ) : (
-                        <img
-                            src="/figma/treasure-chest.svg"
-                            alt=""
-                            width={32}
-                            height={32}
-                            className="w-8 h-8 flex-shrink-0"
-                        />
-                    )}
+                    <div className="icon-badge">
+                        <Icon />
+                    </div>
                     <div className="flex items-center gap-1.5">
-                        <p className="text-slate-300 text-sm font-medium">{label}</p>
+                        <p className="t-body-s text-[var(--text-secondary)]">{label}</p>
                         <Tooltip content={tooltip} iconOnly />
                     </div>
                 </div>
 
                 <div className="flex items-end justify-between gap-4 flex-wrap">
-                    <p className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                    <p className="font-display font-medium text-num text-[32px] leading-[37px] tracking-[-0.64px] text-[var(--text-primary)]">
                         $<CountUp
                             end={value}
                             duration={0.8}
@@ -376,33 +375,64 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                     </p>
 
                     {showProgress && (
-                        <div className="flex-1 min-w-[180px] max-w-[280px] pb-1">
+                        <div className="relative w-[222px] pb-1 overflow-visible">
+                            {/* Label + white tip indicator above the progress bar.
+                                The tip stays at the progress edge; the label flips
+                                to the left of the tip past 55 % so it can't overflow
+                                the card on near-full bars. */}
                             <div className="relative h-9 mb-1">
-                                <div
-                                    className="absolute top-1 flex items-start gap-1.5"
-                                    style={{ left: `${progressPercent}%` }}
-                                >
-                                    <span
-                                        aria-hidden="true"
-                                        className="block w-px h-8 flex-shrink-0"
-                                        style={{
-                                            background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
-                                        }}
-                                    />
-                                    <div className="flex flex-col items-start gap-0.5">
-                                        <span className="text-[10px] text-slate-500 leading-tight whitespace-nowrap">{soFarLabel}</span>
-                                        <span className="text-xs font-semibold text-slate-200 leading-tight whitespace-nowrap">
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute top-1 block w-px h-8"
+                                    style={{
+                                        left: `${progressPercent}%`,
+                                        background:
+                                            'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+                                    }}
+                                />
+                                {progressPercent > 55 ? (
+                                    <div
+                                        className="absolute top-1 flex flex-col items-end gap-0.5 pr-1.5 text-right"
+                                        style={{ right: `${100 - progressPercent}%` }}
+                                    >
+                                        <span className="text-[8px] font-medium text-[var(--text-tertiary)] leading-[16px] whitespace-nowrap">
+                                            {soFarLabel}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-num text-[var(--text-secondary)] leading-[16px] whitespace-nowrap">
                                             {formatCompactCurrency(soFarValue!)}
                                         </span>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div
+                                        className="absolute top-1 flex flex-col items-start gap-0.5 pl-1.5"
+                                        style={{ left: `${progressPercent}%` }}
+                                    >
+                                        <span className="text-[8px] font-medium text-[var(--text-tertiary)] leading-[16px] whitespace-nowrap">
+                                            {soFarLabel}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-num text-[var(--text-secondary)] leading-[16px] whitespace-nowrap">
+                                            {formatCompactCurrency(soFarValue!)}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
-                            <div className="relative w-full h-[7px] rounded-full bg-[#11284A] overflow-hidden">
+                            {/* Track + filled bar (Figma: 15.41deg gradient + 4.1px blur shadow) */}
+                            <div className="relative h-[7px] rounded-[12px] bg-[var(--border-light)] overflow-visible">
                                 <div
-                                    className="h-full rounded-full transition-[width] duration-700 ease-out"
+                                    className="absolute inset-y-0 left-0 rounded-[12px] transition-[width] duration-700 ease-out"
                                     style={{
                                         width: `${progressPercent}%`,
-                                        background: 'linear-gradient(109deg, #11284A 0%, #2155DF 29%, #FFFFFF 98%)',
+                                        backgroundImage:
+                                            'linear-gradient(15.407deg, #11284A 13.791%, #2155DF 42.744%, #FFFFFF 111.83%)',
+                                    }}
+                                />
+                                <div
+                                    aria-hidden="true"
+                                    className="absolute inset-y-0 left-0 rounded-[12px] blur-[4.1px] transition-[width] duration-700 ease-out"
+                                    style={{
+                                        width: `${progressPercent}%`,
+                                        backgroundImage:
+                                            'linear-gradient(15.407deg, #11284A 13.791%, #2155DF 42.744%, #FFFFFF 111.83%)',
                                     }}
                                 />
                             </div>

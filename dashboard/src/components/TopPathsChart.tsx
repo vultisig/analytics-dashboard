@@ -82,10 +82,10 @@ export function TopPathsChart({
                                 title={`${item.name} - Click to toggle between % and $ value`}
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="truncate text-xs md:text-sm text-slate-300">
+                                    <span className="truncate text-xs md:text-sm text-[var(--text-secondary)]">
                                         {hoveredIndex === index ? item.name : cleanedLabel}
                                     </span>
-                                    <span className="ml-auto text-xs md:text-sm font-medium text-slate-400">
+                                    <span className="ml-auto text-xs md:text-sm font-medium text-[var(--text-tertiary)]">
                                         {showPercentage
                                             ? `${percentage}%`
                                             : dataKey === 'count'
@@ -110,7 +110,7 @@ export function TopPathsChart({
             ) : (
                 <div className="flex items-center justify-center h-[300px] w-full">
                     <div className="text-center">
-                        <p className="text-slate-400 text-sm">No swap paths available for the selected time range</p>
+                        <p className="text-[var(--text-tertiary)] text-sm">No swap paths available for the selected time range</p>
                     </div>
                 </div>
             )}

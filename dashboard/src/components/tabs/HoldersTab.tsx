@@ -5,8 +5,8 @@ import { HeroMetric } from '@/components/HeroMetric';
 import { ChartCard } from '@/components/ChartCard';
 import { TierCard } from '@/components/TierCard';
 import { TierLookup } from '@/components/TierLookup';
-import { Users, Shield, Award, Search, Info, ExternalLink } from 'lucide-react';
 import { fetchHolders } from '@/lib/api';
+import { IconAwardV, IconCircleInfo, IconExternalLinkV, IconMagnifyingGlass2, IconPeopleCopy, IconShieldV } from '@/icons';
 
 interface TierData {
     tier: string;
@@ -120,7 +120,7 @@ export function HoldersTab() {
     if (error && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error}</div>
             </div>
         );
     }
@@ -129,7 +129,7 @@ export function HoldersTab() {
     if (loading && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading holders data...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading holders data...</div>
             </div>
         );
     }
@@ -138,7 +138,7 @@ export function HoldersTab() {
     if (!data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -152,37 +152,34 @@ export function HoldersTab() {
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Holders"
                     value={data.totalHolders}
-                    icon={Users}
-                    color="cyan"
+                    icon={IconPeopleCopy}
+                    color="accent"
                     format="number"
                     tooltip="Total number of addresses holding VULT tokens"
                 />
                 <HeroMetric
                     label="Tiered Holders"
                     value={data.tieredHolders}
-                    icon={Award}
-                    color="purple"
+                    icon={IconAwardV}
                     format="number"
                     tooltip="Number of holders with Bronze tier or higher"
                 />
                 <HeroMetric
                     label="Supply Held"
                     value={supplyHeldPercent}
-                    icon={Award}
-                    color="blue"
+                    icon={IconAwardV}
                     format="percent"
                     tooltip="Percentage of total supply held by tiered holders (Bronze+)"
                 />
                 <HeroMetric
                     label="THORGuard Holders"
                     value={data.thorguardHolders}
-                    icon={Shield}
-                    color="teal"
+                    icon={IconShieldV}
                     format="number"
                     tooltip="Number of VULT holders who also hold a THORGuard NFT"
                 />
@@ -192,7 +189,7 @@ export function HoldersTab() {
             <ChartCard
                 title="Tier Distribution"
                 subtitle="Holders by discount tier"
-                icon={Award}
+                icon={IconAwardV}
             >
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     {tiersWithHolders.map((tier) => (
@@ -213,21 +210,21 @@ export function HoldersTab() {
             <ChartCard
                 title="Check Your Tier"
                 subtitle="Enter your Ethereum address to see your VULT tier"
-                icon={Search}
+                icon={IconMagnifyingGlass2}
             >
                 <TierLookup />
             </ChartCard>
 
             {/* Update Notice */}
-            <div className="flex flex-col items-center gap-1 text-xs text-slate-500">
+            <div className="flex flex-col items-center gap-1 text-xs text-[var(--text-tertiary)]">
                 <div className="flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5" />
+                    <IconCircleInfo className="w-3.5 h-3.5" />
                     <span>Data updates daily at {showUTC ? '00:00 UTC' : getNextUpdateLocal()}</span>
                 </div>
                 <button
                     type="button"
                     onClick={() => setShowUTC(!showUTC)}
-                    className="text-slate-400 hover:text-cyan-400 transition-colors underline decoration-dotted underline-offset-2"
+                    className="text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors underline decoration-dotted underline-offset-2"
                     title={`Click to show in ${showUTC ? 'local time' : 'UTC'}`}
                 >
                     Last updated: {showUTC ? formatTimeUTC(data.lastUpdated) : formatTimeLocal(data.lastUpdated)}
@@ -240,10 +237,10 @@ export function HoldersTab() {
                     href="https://docs.vultisig.com/vultisig-token/vult/in-app-utility"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-400 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors"
                 >
                     Learn about $VULT discount tiers
-                    <ExternalLink className="w-3 h-3" />
+                    <IconExternalLinkV className="w-3 h-3" />
                 </a>
             </div>
         </div>

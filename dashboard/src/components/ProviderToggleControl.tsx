@@ -1,8 +1,8 @@
 'use client';
 
-import { Eye, EyeOff } from 'lucide-react';
 import { providerColorMap } from '@/lib/chartStyles';
 import { formatProviderName } from '@/lib/providerUtils';
+import { IconEyeOffV, IconEyeV } from '@/icons';
 
 
 interface ProviderToggleControlProps {
@@ -28,7 +28,7 @@ export function ProviderToggleControl({
 }: ProviderToggleControlProps) {
     return (
         <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
-            <span className="text-[10px] md:text-xs font-medium text-slate-400 mr-1 md:mr-2">Show/Hide:</span>
+            <span className="text-[10px] md:text-xs font-medium text-[var(--text-tertiary)] mr-1 md:mr-2">Show/Hide:</span>
             {providers.map((provider, index) => {
                 const isVisible = visibleProviders.includes(provider);
                 const color = providerColorMap[provider.toLowerCase()] || getColor(colors, provider, index);
@@ -42,8 +42,8 @@ export function ProviderToggleControl({
                             inline-flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-medium
                             transition-all will-change-blur
                             ${isVisible
-                                ? 'glass-card glass-card-hover text-white'
-                                : 'bg-slate-800/50 text-slate-500 hover:bg-slate-800'
+                                ? 'glass-card glass-card-hover text-[var(--text-primary)]'
+                                : 'bg-[var(--surface-2)]/60 text-[var(--text-tertiary)] hover:bg-[var(--surface-2)]'
                             }
                         `}
                         aria-label={`${isVisible ? 'Hide' : 'Show'} ${provider}`}
@@ -55,9 +55,9 @@ export function ProviderToggleControl({
                         />
                         <span>{formatProviderName(provider)}</span>
                         {isVisible ? (
-                            <Eye className="w-3 h-3" />
+                            <IconEyeV className="w-3 h-3" />
                         ) : (
-                            <EyeOff className="w-3 h-3" />
+                            <IconEyeOffV className="w-3 h-3" />
                         )}
                     </button>
                 );

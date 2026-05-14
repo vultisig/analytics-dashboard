@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { ChartCard } from './ChartCard';
 import { LeaderboardToggle } from './LeaderboardToggle';
-import { Trophy, DollarSign, Users, TrendingUp, ChevronLeft, ChevronRight, Search, X, ExternalLink } from 'lucide-react';
+import { IconChevronLeftV, IconChevronRightV, IconDollar, IconExternalLinkV, IconMagnifyingGlass2, IconPeopleCopy, IconTrendingUpV, IconTrophyV, IconXV } from '@/icons';
 
 interface ReferrerData {
     referrerCode: string;
@@ -38,13 +38,13 @@ function formatNumber(value: number): string {
 function getRankColor(index: number): string {
     switch (index) {
         case 0:
-            return 'from-yellow-500/30 to-amber-500/30 text-yellow-400'; // Gold
+            return 'from-yellow-500/30 to-amber-500/30 text-[var(--alert-warn)]'; // Gold
         case 1:
-            return 'from-slate-400/30 to-slate-500/30 text-slate-300'; // Silver
+            return 'from-slate-400/30 to-slate-500/30 text-[var(--text-secondary)]'; // Silver
         case 2:
             return 'from-orange-600/30 to-amber-700/30 text-orange-400'; // Bronze
         default:
-            return 'from-cyan-500/20 to-teal-500/20 text-cyan-400';
+            return 'from-[rgba(33,85,223,0.20)] to-[rgba(33,85,223,0.20)] text-[var(--brand-blue-light)]';
     }
 }
 
@@ -99,9 +99,9 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
             <ChartCard
                 title="Referrer Leaderboard"
                 subtitle="Top performing referrers"
-                icon={Trophy}
+                icon={IconTrophyV}
             >
-                <div className="flex items-center justify-center h-48 text-slate-400">
+                <div className="flex items-center justify-center h-48 text-[var(--text-tertiary)]">
                     No referral data available for this period
                 </div>
             </ChartCard>
@@ -112,16 +112,16 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
         <ChartCard
             title="Referrer Leaderboard"
             subtitle={view === 'revenue' ? 'Ranked by total revenue earned' : 'Ranked by unique users referred'}
-            icon={Trophy}
+            icon={IconTrophyV}
             action={<LeaderboardToggle view={view} onViewChange={handleViewChange} />}
         >
-            {/* Search Input */}
+            {/* IconMagnifyingGlass2 Input */}
             <div className="mt-4 mb-3">
                 <div className={`
                     relative flex items-center rounded-lg bg-white/5 border transition-all
-                    ${isSearchFocused ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : 'border-white/10'}
+                    ${isSearchFocused ? 'border-[rgba(33,85,223,0.50)] ring-1 ring-[rgba(33,85,223,0.20)]' : 'border-white/10'}
                 `}>
-                    <Search className="w-4 h-4 text-slate-400 ml-3 shrink-0" />
+                    <IconMagnifyingGlass2 className="w-4 h-4 text-[var(--text-tertiary)] ml-3 shrink-0" />
                     <input
                         type="text"
                         value={searchQuery}
@@ -129,25 +129,25 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                         onFocus={() => setIsSearchFocused(true)}
                         onBlur={() => setIsSearchFocused(false)}
                         placeholder="Search referrer code..."
-                        className="flex-1 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none"
+                        className="flex-1 bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] placeholder-slate-500 focus:outline-none"
                     />
                     {searchQuery && (
                         <button
                             type="button"
                             onClick={clearSearch}
-                            className="p-1.5 mr-1 text-slate-400 hover:text-white transition-colors"
+                            className="p-1.5 mr-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                             aria-label="Clear search"
                         >
-                            <X className="w-4 h-4" />
+                            <IconXV className="w-4 h-4" />
                         </button>
                     )}
                 </div>
 
-                {/* Search Result Card */}
+                {/* IconMagnifyingGlass2 Result Card */}
                 {searchQuery && (
                     <div className="mt-2">
                         {searchResult ? (
-                            <div className="p-3 rounded-lg bg-gradient-to-r from-cyan-500/10 to-teal-500/10 border border-cyan-500/20">
+                            <div className="p-3 rounded-lg bg-gradient-to-r from-[rgba(33,85,223,0.10)] to-[rgba(33,85,223,0.10)] border border-[rgba(33,85,223,0.20)]">
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <div className={`
@@ -159,23 +159,23 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                             </span>
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-white font-medium truncate text-sm">
+                                            <p className="text-[var(--text-primary)] font-medium truncate text-sm">
                                                 {searchResult.item.referrerCode}
                                             </p>
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-xs text-[var(--text-tertiary)]">
                                                 Rank #{searchResult.rank} of {data.length}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 shrink-0">
                                         <div className="text-right">
-                                            <p className="text-sm font-bold text-cyan-400">
+                                            <p className="text-sm font-bold text-[var(--brand-blue-light)]">
                                                 {view === 'revenue'
                                                     ? formatCurrency(searchResult.item.totalRevenue)
                                                     : formatNumber(searchResult.item.uniqueUsers)
                                                 }
                                             </p>
-                                            <p className="text-[10px] text-slate-400">
+                                            <p className="text-[10px] text-[var(--text-tertiary)]">
                                                 {view === 'revenue' ? 'Revenue' : 'Users'}
                                             </p>
                                         </div>
@@ -183,7 +183,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                             <button
                                                 type="button"
                                                 onClick={jumpToResult}
-                                                className="px-2 py-1 text-xs font-medium rounded bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                                                className="px-2 py-1 text-xs font-medium rounded bg-[rgba(33,85,223,0.20)] text-[var(--brand-blue-light)] hover:bg-[rgba(33,85,223,0.30)] transition-colors"
                                             >
                                                 Go to page {searchResult.pageNumber}
                                             </button>
@@ -192,7 +192,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-sm text-slate-500 px-1">
+                            <p className="text-sm text-[var(--text-tertiary)] px-1">
                                 No referrer found matching "{searchQuery}"
                             </p>
                         )}
@@ -210,7 +210,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             className={`
                                 flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg transition-colors
                                 ${isSearchMatch
-                                    ? 'bg-cyan-500/20 ring-1 ring-cyan-500/40'
+                                    ? 'bg-[rgba(33,85,223,0.20)] ring-1 ring-[rgba(33,85,223,0.40)]'
                                     : 'bg-white/5 hover:bg-white/10'
                                 }
                             `}
@@ -227,16 +227,16 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
 
                             {/* Referrer Code + Stats */}
                             <div className="flex-1 min-w-0 overflow-hidden">
-                                <p className="text-white font-medium truncate text-sm md:text-base">
+                                <p className="text-[var(--text-primary)] font-medium truncate text-sm md:text-base">
                                     {item.referrerCode}
                                 </p>
-                                <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-slate-400">
+                                <div className="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs text-[var(--text-tertiary)]">
                                     <span className="flex items-center gap-0.5 md:gap-1">
-                                        <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
+                                        <IconTrendingUpV className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
                                         <span className="truncate">{formatNumber(item.referralCount)}</span>
                                     </span>
                                     <span className="flex items-center gap-0.5 md:gap-1">
-                                        <DollarSign className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
+                                        <IconDollar className="w-2.5 h-2.5 md:w-3 md:h-3 shrink-0" />
                                         <span className="truncate">{formatCurrency(item.totalVolume)}</span>
                                     </span>
                                 </div>
@@ -244,26 +244,26 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
 
                             {/* Primary Metric */}
                             <div className="text-right shrink-0">
-                                <p className="text-sm md:text-lg font-bold text-cyan-400">
+                                <p className="text-sm md:text-lg font-bold text-[var(--brand-blue-light)]">
                                     {view === 'revenue'
                                         ? formatCurrency(item.totalRevenue)
                                         : formatNumber(item.uniqueUsers)
                                     }
                                 </p>
-                                <p className="text-[10px] md:text-xs text-slate-400">
+                                <p className="text-[10px] md:text-xs text-[var(--text-tertiary)]">
                                     {view === 'revenue' ? 'Revenue' : 'Users'}
                                 </p>
                             </div>
 
                             {/* Secondary Metric - hidden on mobile */}
                             <div className="hidden sm:block text-right shrink-0 w-16">
-                                <p className="text-sm font-medium text-slate-300">
+                                <p className="text-sm font-medium text-[var(--text-secondary)]">
                                     {view === 'revenue'
                                         ? formatNumber(item.uniqueUsers)
                                         : formatCurrency(item.totalRevenue)
                                     }
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-[var(--text-tertiary)]">
                                     {view === 'revenue' ? 'Users' : 'Revenue'}
                                 </p>
                             </div>
@@ -275,7 +275,7 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
             {/* Pagination Controls */}
             {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[var(--text-tertiary)]">
                         Showing {startIndex + 1}-{Math.min(endIndex, data.length)} of {data.length} referrers
                     </p>
                     <div className="flex items-center gap-2">
@@ -286,13 +286,13 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             className={`
                                 p-1.5 rounded-md transition-all
                                 ${currentPage === 1
-                                    ? 'text-slate-600 cursor-not-allowed'
-                                    : 'text-slate-400 hover:text-white hover:bg-white/10'
+                                    ? 'text-[var(--text-tertiary)] cursor-not-allowed'
+                                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-white/10'
                                 }
                             `}
                             aria-label="Previous page"
                         >
-                            <ChevronLeft className="w-4 h-4" />
+                            <IconChevronLeftV className="w-4 h-4" />
                         </button>
                         <div className="flex items-center gap-1">
                             {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
@@ -303,8 +303,8 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                                     className={`
                                         w-7 h-7 rounded-md text-xs font-medium transition-all
                                         ${page === currentPage
-                                            ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white'
-                                            : 'text-slate-400 hover:text-white hover:bg-white/10'
+                                            ? 'bg-gradient-to-r from-[var(--brand-blue)] to-[var(--brand-blue-light)] text-[var(--text-primary)]'
+                                            : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-white/10'
                                         }
                                     `}
                                 >
@@ -319,13 +319,13 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                             className={`
                                 p-1.5 rounded-md transition-all
                                 ${currentPage === totalPages
-                                    ? 'text-slate-600 cursor-not-allowed'
-                                    : 'text-slate-400 hover:text-white hover:bg-white/10'
+                                    ? 'text-[var(--text-tertiary)] cursor-not-allowed'
+                                    : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-white/10'
                                 }
                             `}
                             aria-label="Next page"
                         >
-                            <ChevronRight className="w-4 h-4" />
+                            <IconChevronRightV className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
@@ -337,10 +337,10 @@ export function ReferrerLeaderboard({ dataByRevenue, dataByReferrals }: Referrer
                     href="https://docs.vultisig.com/vultisig-app-actions/vultisig-referrals"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-cyan-400 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--brand-blue-light)] transition-colors"
                 >
                     Learn how to become a referrer
-                    <ExternalLink className="w-3 h-3" />
+                    <IconExternalLinkV className="w-3 h-3" />
                 </a>
             </div>
         </ChartCard>

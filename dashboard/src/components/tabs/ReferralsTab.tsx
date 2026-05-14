@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { HeroMetric } from '@/components/HeroMetric';
 import { ReferrerLeaderboard } from '@/components/ReferrerLeaderboard';
-import { PiggyBank, DollarSign, Users, TrendingUp, Info } from 'lucide-react';
 import { providerColors } from '@/lib/chartStyles';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
+import { IconCircleInfo, IconDollar, IconPeopleCopy, IconPigMoneyV, IconTrendingUpV } from '@/icons';
 
 interface ReferralsTabProps {
     range: string;
@@ -84,7 +84,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
     if (error && !allData) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error}</div>
             </div>
         );
     }
@@ -93,7 +93,7 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
     if (loading && !allData) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading referrals data...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading referrals data...</div>
             </div>
         );
     }
@@ -102,44 +102,41 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
     if (!allData) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <HeroMetric
                     label="Total Fees Saved"
                     value={allData.totalFeesSaved}
-                    icon={PiggyBank}
-                    color="cyan"
+                    icon={IconPigMoneyV}
+                    color="accent"
                     format="currency"
                     tooltip="User savings from using referral codes vs standard 50 bps fee"
                 />
                 <HeroMetric
                     label="Referrer Revenue"
                     value={allData.totalReferrerRevenue}
-                    icon={DollarSign}
-                    color="blue"
+                    icon={IconDollar}
                     format="currency"
                     tooltip="Total revenue earned by referrers (referrer BPS x volume)"
                 />
                 <HeroMetric
                     label="Referral Swaps"
                     value={allData.totalReferralCount}
-                    icon={TrendingUp}
-                    color="teal"
+                    icon={IconTrendingUpV}
                     format="number"
                     tooltip="Total number of swaps using referral codes"
                 />
                 <HeroMetric
                     label="Users with Referrals"
                     value={allData.uniqueUsersWithReferrals}
-                    icon={Users}
-                    color="purple"
+                    icon={IconPeopleCopy}
                     format="number"
                     tooltip="Number of unique users who used a referral code"
                 />
@@ -153,8 +150,8 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
 
             {/* Provider Breakdown */}
             {allData.byProvider && allData.byProvider.length > 0 && (
-                <div className="glass-card rounded-xl p-4 md:p-6">
-                    <h3 className="text-lg font-semibold text-white mb-4">Referrals by Provider</h3>
+                <div className="surface-card p-5 md:p-6">
+                    <h3 className="t-title-3 mb-4">Referrals by Provider</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {allData.byProvider.map((provider) => (
                             <div
@@ -169,32 +166,32 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
                                                 provider.provider === 'mayachain' ? providerColors[1] : '#64748B'
                                         }}
                                     />
-                                    <span className="text-white font-medium capitalize">
+                                    <span className="text-[var(--text-primary)] font-medium capitalize">
                                         {provider.provider}
                                     </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div>
-                                        <p className="text-slate-400">Referrer Revenue</p>
-                                        <p className="text-cyan-400 font-semibold">
+                                        <p className="text-[var(--text-tertiary)]">Referrer Revenue</p>
+                                        <p className="text-[var(--brand-blue-light)] font-semibold">
                                             ${provider.referrerRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-slate-400">Fees Saved</p>
-                                        <p className="text-teal-400 font-semibold">
+                                        <p className="text-[var(--text-tertiary)]">Fees Saved</p>
+                                        <p className="text-[var(--alert-success)] font-semibold">
                                             ${provider.feesSaved.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-slate-400">Referral Swaps</p>
-                                        <p className="text-white font-semibold">
+                                        <p className="text-[var(--text-tertiary)]">Referral Swaps</p>
+                                        <p className="text-[var(--text-primary)] font-semibold">
                                             {provider.referralCount.toLocaleString()}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-slate-400">Unique Users</p>
-                                        <p className="text-white font-semibold">
+                                        <p className="text-[var(--text-tertiary)]">Unique Users</p>
+                                        <p className="text-[var(--text-primary)] font-semibold">
                                             {provider.uniqueUsers.toLocaleString()}
                                         </p>
                                     </div>
@@ -206,8 +203,8 @@ export function ReferralsTab({ range, startDate, endDate, granularity }: Referra
             )}
 
             {/* Footer Note */}
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-                <Info className="w-3.5 h-3.5" />
+            <div className="flex items-center justify-center gap-2 text-xs text-[var(--text-tertiary)]">
+                <IconCircleInfo className="w-3.5 h-3.5" />
                 <span>Referral data is only available for THORChain and MAYAChain swaps</span>
             </div>
         </div>

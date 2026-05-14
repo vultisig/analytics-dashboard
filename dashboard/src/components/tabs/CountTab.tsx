@@ -9,12 +9,12 @@ import { ProviderSection } from '@/components/ProviderSection';
 import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
 import { CumulativeToggle } from '@/components/CumulativeToggle';
-import { TrendingUp, Hash, Wallet, Info } from 'lucide-react';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import { sortProviders } from '@/lib/providerUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
+import { IconCircleInfo, IconHashtag, IconTrendingUpV, IconWallet4 } from '@/icons';
 
 interface CountTabProps {
     range: string;
@@ -284,7 +284,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
     if (error && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-red-400 text-lg">{error || 'No data available'}</div>
+                <div className="text-[var(--alert-error)] text-lg">{error || 'No data available'}</div>
             </div>
         );
     }
@@ -294,7 +294,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
     if (loading && !data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">Loading swap count data...</div>
+                <div className="text-[var(--text-tertiary)] text-lg">Loading swap count data...</div>
             </div>
         );
     }
@@ -303,7 +303,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
     if (!data) {
         return (
             <div className="flex items-center justify-center py-20">
-                <div className="text-slate-400 text-lg">No data available</div>
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
@@ -334,51 +334,60 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
 
     return (
         <div className="space-y-6">
-            {/* Hero Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Hero Metrics — first card gets the Figma accent gradient */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <HeroMetric
                     label="Total Swap Count"
                     value={data.totalCount}
-                    icon={Hash}
-                    color="cyan"
+                    icon={IconHashtag}
+                    color="accent"
                     format="number"
                 />
                 <HeroMetric
                     label={`Average Swap Count (${getGranularityLabel()})`}
                     value={data.averageCount}
-                    icon={TrendingUp}
-                    color="blue"
+                    icon={IconTrendingUpV}
                     format="number"
                 />
                 <HeroMetric
                     label="Projected Annual Count"
                     value={projectedAnnualCount}
-                    icon={Wallet}
-                    color="teal"
+                    icon={IconWallet4}
                     format="number"
                     tooltip={`Based on ${getGranularityLabel()} average of selected date range`}
                 />
             </div>
 
-            {/* Chart View Toggle and Provider/Platform Controls */}
-            <div className="glass-card rounded-xl p-4 space-y-4">
-                <div className="flex flex-wrap items-center gap-4">
+            {/* Total Swap Count — header + toggles + chart in one Figma-style card */}
+            <div className="surface-card surface-card-hover p-5 md:p-6 space-y-5">
+                <div className="flex flex-wrap justify-between items-start gap-3">
+                    <div className="min-w-0">
+                        <h3 className="t-title-3 truncate">
+                            Total Swap Count{chartView === 'platform' ? ' by Platform' : ''}
+                        </h3>
+                        <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch' : ''}
+                        </p>
+                    </div>
+                    <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <ChartViewToggle view={chartView} onViewChange={setChartView} />
-                    {chartView === 'platform' && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                            <Info className="w-3.5 h-3.5" />
-                            <span>1inch data excluded (no platform info)</span>
+                    {chartView === 'platform' ? (
+                        <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
+                            <IconCircleInfo />
+                            <span>1inch excluded (no platform info)</span>
                         </div>
+                    ) : (
+                        <ProviderToggleControl
+                            providers={data.providers}
+                            visibleProviders={visibleProviders}
+                            onToggleProvider={handleToggleProvider}
+                            colors={providerColors}
+                        />
                     )}
                 </div>
-                {chartView === 'provider' ? (
-                    <ProviderToggleControl
-                        providers={data.providers}
-                        visibleProviders={visibleProviders}
-                        onToggleProvider={handleToggleProvider}
-                        colors={providerColors}
-                    />
-                ) : (
+                {chartView === 'platform' && (
                     <ProviderToggleControl
                         providers={['Android', 'iOS', 'Web', 'Other']}
                         visibleProviders={visiblePlatforms}
@@ -386,22 +395,6 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                         colors={chainColorMap}
                     />
                 )}
-            </div>
-
-            {/* Total Swap Count Chart with Cumulative Toggle */}
-            <div className="glass-card rounded-xl p-6 space-y-4">
-                <div className="flex flex-wrap justify-between items-center gap-2">
-                    <div>
-                        <h3 className="text-lg font-bold text-white">
-                            Total Swap Count by {chartView === 'provider' ? 'Provider' : 'Platform'}
-                        </h3>
-                        <p className="text-sm text-slate-400">{getGranularityLabel()} breakdown</p>
-                    </div>
-                    <CumulativeToggle
-                        enabled={mainChartCumulative}
-                        onToggle={setMainChartCumulative}
-                    />
-                </div>
                 {chartView === 'provider' ? (
                     <StackedBarChart
                         title=""
@@ -495,9 +488,9 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                                                     currency={false}
                                                 />
                                                 {!hasData && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-1)]/80 backdrop-blur-sm rounded-xl">
                                                         <div className="text-center">
-                                                            <p className="text-slate-400 text-sm">No activity within this date range</p>
+                                                            <p className="text-[var(--text-tertiary)] text-sm">No activity within this date range</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -538,9 +531,9 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                                                     currency={false}
                                                 />
                                                 {!hasData && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-1)]/80 backdrop-blur-sm rounded-xl">
                                                         <div className="text-center">
-                                                            <p className="text-slate-400 text-sm">No activity within this date range</p>
+                                                            <p className="text-[var(--text-tertiary)] text-sm">No activity within this date range</p>
                                                         </div>
                                                     </div>
                                                 )}

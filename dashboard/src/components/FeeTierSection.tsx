@@ -1,14 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Pie, PieChart, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from 'recharts';
-import { HeroMetric } from './HeroMetric';
+import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { StatsCard } from './StatsCard';
 import { Tooltip } from './Tooltip';
-import { Users, TrendingUp, Award } from 'lucide-react';
-import { getTierColor, glassTooltipStyle } from '@/lib/chartStyles';
+import { getTierColor } from '@/lib/chartStyles';
+import { IconAwardV, IconPeopleCopy, IconTrendingUpV } from '@/icons';
 
 // Fee tier discount percentages for tooltip
-// These match the backend BPS values in api_server.py
 const tierDiscounts: Record<string, string> = {
   'Ultimate': '0%',
   'Diamond': '0.15%',
@@ -39,7 +38,6 @@ interface FeeTierSectionProps {
   error?: string | null;
 }
 
-// Custom tooltip component - defined outside to avoid re-creation during render
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{
@@ -54,86 +52,100 @@ interface CustomTooltipProps {
 }
 
 function CustomTooltipContent({ active, payload, totalUsers }: CustomTooltipProps) {
-  if (active && payload && payload.length) {
-    const item = payload[0].payload;
-    const percentage = totalUsers > 0
-      ? ((item.value / totalUsers) * 100).toFixed(1)
-      : '0';
+  if (!active || !payload || !payload.length) return null;
+  const item = payload[0].payload;
+  const percentage = totalUsers > 0 ? ((item.value / totalUsers) * 100).toFixed(1) : '0';
 
-    return (
-      <div style={glassTooltipStyle} className="p-3 min-w-[180px]">
-        <div className="flex items-center gap-2 mb-2">
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: getTierColor(item.name) }}
-          />
-          <p className="text-slate-200 font-semibold">{item.name}</p>
-        </div>
-        <div className="space-y-1 text-sm">
-          <p className="text-white">
-            <span className="text-slate-400">Users:</span>{' '}
-            {new Intl.NumberFormat('en-US').format(item.value)} ({percentage}%)
-          </p>
-          <p className="text-white">
-            <span className="text-slate-400">Volume:</span>{' '}
-            ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.volume)}
-          </p>
-          <p className="text-white">
-            <span className="text-slate-400">Avg/User:</span>{' '}
-            ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.avgVolume)}
-          </p>
-          <div className="mt-2 pt-2 border-t border-slate-600 flex items-center gap-2">
-            <span className="text-slate-400 text-xs">Fee:</span>
-            <span className="px-2 py-1 rounded-md text-xs font-semibold bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-200 border border-blue-400/30">
-              {tierDiscounts[item.name] || 'Unknown'}
-            </span>
-          </div>
-        </div>
+  return (
+    <div
+      className="w-[180px] flex flex-col gap-1 rounded-[12px] p-3 backdrop-blur-[2px]"
+      style={{
+        background: 'rgba(17,40,74,0.5)',
+        border: '1px solid var(--border-normal)',
+      }}
+    >
+      <div className="flex items-center gap-2 pb-1.5 border-b border-[var(--border-light)]">
+        <span
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: getTierColor(item.name) }}
+        />
+        <p className="t-body-s text-[var(--text-primary)]">{item.name}</p>
       </div>
-    );
-  }
-  return null;
+      <p className="t-footnote text-[var(--text-tertiary)]">
+        Users: <span className="text-[var(--text-secondary)] text-num">
+          {new Intl.NumberFormat('en-US').format(item.value)} ({percentage}%)
+        </span>
+      </p>
+      <p className="t-footnote text-[var(--text-tertiary)]">
+        Volume: <span className="text-[var(--text-secondary)] text-num">
+          ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.volume)}
+        </span>
+      </p>
+      <p className="t-footnote text-[var(--text-tertiary)]">
+        Avg/User: <span className="text-[var(--text-secondary)] text-num">
+          ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(item.avgVolume)}
+        </span>
+      </p>
+      <p className="t-footnote text-[var(--alert-info)] mt-1">
+        Fee: {tierDiscounts[item.name] || 'Unknown'}
+      </p>
+    </div>
+  );
+}
+
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+
+function formatCompactCurrency(value: number): string {
+  return `$${formatCompactNumber(value)}`;
 }
 
 export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
-  // Process data for donut chart
   const chartData = useMemo(() => {
     if (!data?.tierDistribution) return [];
     return data.tierDistribution
-      .filter(item => item.userCount > 0)
-      .map(item => ({
+      .filter((item) => item.userCount > 0)
+      .map((item) => ({
         name: item.tier,
         value: item.userCount,
         volume: item.totalVolume,
-        avgVolume: item.avgVolumePerUser
+        avgVolume: item.avgVolumePerUser,
       }));
   }, [data]);
 
-  // Calculate totals
   const totals = useMemo(() => {
     if (!data?.tierDistribution) {
       return { totalUsers: 0, totalVolume: 0, avgVolumePerUser: 0 };
     }
-    const totalUsers = data.totalUsers || data.tierDistribution.reduce((sum, item) => sum + item.userCount, 0);
-    const totalVolume = data.totalVolume || data.tierDistribution.reduce((sum, item) => sum + item.totalVolume, 0);
+    const totalUsers = data.totalUsers || data.tierDistribution.reduce((s, i) => s + i.userCount, 0);
+    const totalVolume = data.totalVolume || data.tierDistribution.reduce((s, i) => s + i.totalVolume, 0);
     const avgVolumePerUser = totalUsers > 0 ? totalVolume / totalUsers : 0;
     return { totalUsers, totalVolume, avgVolumePerUser };
   }, [data]);
 
-  // Render loading skeleton
+  const header = (
+    <div className="flex items-center gap-2.5">
+      <div className="icon-badge">
+        <IconAwardV />
+      </div>
+      <h3 className="t-title-3">Fee Tier Distribution</h3>
+      <Tooltip
+        content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0–50 basis points)."
+        iconOnly
+      />
+    </div>
+  );
+
   if (loading && !data) {
     return (
-      <div className="glass-card rounded-xl p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-7 w-48 bg-slate-700/50 rounded animate-pulse" />
-          </div>
-        </div>
+      <div className="surface-card p-6 space-y-6">
+        {header}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="h-[350px] bg-slate-700/30 rounded-xl animate-pulse" />
+          <div className="h-[350px] bg-[var(--surface-3)]/30 rounded-xl animate-pulse" />
           <div className="space-y-4">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 bg-slate-700/30 rounded-xl animate-pulse" />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 bg-[var(--surface-3)]/30 rounded-xl animate-pulse" />
             ))}
           </div>
         </div>
@@ -141,81 +153,55 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
     );
   }
 
-  // Render error state
   if (error) {
     return (
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-red-400 text-sm">{error}</div>
+      <div className="surface-card p-6 space-y-4">
+        {header}
+        <div className="flex items-center justify-center py-12 text-[var(--alert-error)] text-sm">
+          {error}
         </div>
       </div>
     );
   }
 
-  // Render empty state
   if (!data || chartData.length === 0) {
     return (
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Award className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-bold text-white">Fee Tier Distribution</h3>
-          <Tooltip
-            content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
-            iconOnly
-          />
-        </div>
-        <div className="flex items-center justify-center py-12">
-          <div className="text-slate-400 text-sm">No fee tier data available for the selected time range</div>
+      <div className="surface-card p-6 space-y-4">
+        {header}
+        <div className="flex items-center justify-center py-12 t-footnote text-[var(--text-tertiary)]">
+          No fee tier data available for the selected time range
         </div>
       </div>
     );
   }
 
-  // Order tiers for display (highest to lowest)
   const tierOrder = ['Ultimate', 'Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze', 'Standard', 'Old Tiers', 'Unknown'];
   const sortedTiers = [...data.tierDistribution].sort((a, b) => {
-    const indexA = tierOrder.indexOf(a.tier);
-    const indexB = tierOrder.indexOf(b.tier);
-    return indexA - indexB;
+    return tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier);
   });
 
   return (
-    <div className="glass-card rounded-xl p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Award className="w-5 h-5 text-amber-400" />
-        <h3 className="text-lg font-bold text-white">Fee Tier Distribution</h3>
-        <Tooltip
-          content="User fee tiers based on VULT token holdings. Higher tiers pay lower fees (0-50 basis points)."
-          iconOnly
+    <div className="surface-card p-6 space-y-6">
+      {header}
+
+      {/* Summary metrics — two compact StatsCards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <StatsCard
+          title="Total Users"
+          icon={IconPeopleCopy}
+          value={new Intl.NumberFormat('en-US').format(totals.totalUsers)}
+        />
+        <StatsCard
+          title="Avg Volume/User"
+          icon={IconTrendingUpV}
+          value={`$${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(totals.avgVolumePerUser)}`}
         />
       </div>
 
-      {/* Summary Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <HeroMetric
-          label="Total Users"
-          value={totals.totalUsers}
-          icon={Users}
-          color="cyan"
-          format="number"
-          size="default"
-        />
-        <HeroMetric
-          label="Avg Volume/User"
-          value={totals.avgVolumePerUser}
-          icon={TrendingUp}
-          color="blue"
-          format="currency"
-          size="default"
-        />
-      </div>
-
-      {/* Main Content - Two Column Layout */}
+      {/* Two-column: donut + Volume by Tier list */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Donut Chart */}
-        <div className="glass-card rounded-xl p-4">
-          <h4 className="text-sm font-medium text-slate-300 mb-4">Users by Tier</h4>
+        <div className="rounded-[16px] border border-[var(--border-light)] bg-[var(--surface-2)]/40 p-4">
+          <h4 className="t-footnote text-[var(--text-secondary)] mb-3">Users by Tier</h4>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
@@ -243,79 +229,72 @@ export function FeeTierSection({ data, loading, error }: FeeTierSectionProps) {
                     totalUsers={totals.totalUsers}
                   />
                 )}
-              />
-              <Legend
-                verticalAlign="bottom"
-                height={36}
-                iconSize={8}
-                iconType="circle"
-                wrapperStyle={{ fontSize: '10px' }}
-                formatter={(value) => (
-                  <span className="text-slate-300 ml-1 text-[10px] md:text-xs">{value}</span>
-                )}
+                wrapperStyle={{ outline: 'none' }}
               />
             </PieChart>
           </ResponsiveContainer>
+          {/* Inline legend (matches Figma — chips below the donut) */}
+          <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1.5 px-2">
+            {chartData.map((entry, index) => (
+              <div key={entry.name} className="flex items-center gap-1.5">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: getTierColor(entry.name, index) }}
+                />
+                <span className="text-[11px] text-[var(--text-secondary)]">{entry.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Right: Volume Metrics per Tier */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-slate-300 mb-2">Volume by Tier</h4>
-          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-2">
-            {sortedTiers.filter(tier => tier.userCount > 0).map((tier, index) => {
-              const volumePercentage = totals.totalVolume > 0
-                ? (tier.totalVolume / totals.totalVolume) * 100
-                : 0;
-              const userPercentage = totals.totalUsers > 0
-                ? (tier.userCount / totals.totalUsers) * 100
-                : 0;
+        <div className="flex flex-col">
+          <h4 className="t-footnote text-[var(--text-secondary)] mb-3">Volume by Tier</h4>
+          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+            {sortedTiers
+              .filter((tier) => tier.userCount > 0)
+              .map((tier, index) => {
+                const volumePct = totals.totalVolume > 0 ? (tier.totalVolume / totals.totalVolume) * 100 : 0;
+                const userPct = totals.totalUsers > 0 ? (tier.userCount / totals.totalUsers) * 100 : 0;
+                const color = getTierColor(tier.tier, index);
 
-              return (
-                <div
-                  key={tier.tier}
-                  className="glass-card rounded-lg p-3 hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: getTierColor(tier.tier, index) }}
-                      />
-                      <span className="text-white font-medium text-sm">{tier.tier}</span>
-                      <span className="text-slate-500 text-xs">
-                        ({tierDiscounts[tier.tier] || 'Unknown fee'})
+                return (
+                  <div
+                    key={tier.tier}
+                    className="rounded-[14px] border border-[var(--border-light)] bg-[var(--surface-2)]/40 p-3 hover:border-[var(--border-normal)] transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-2 gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="t-body-s text-[var(--text-primary)] truncate">{tier.tier}</span>
+                        <span className="t-footnote text-[var(--text-tertiary)] shrink-0">
+                          {tierDiscounts[tier.tier] || ''}
+                        </span>
+                      </div>
+                      <span className="t-footnote text-num text-[var(--text-tertiary)] shrink-0">
+                        {tier.userCount.toLocaleString()} · {userPct.toFixed(1)}%
                       </span>
                     </div>
-                    <span className="text-slate-400 text-xs">
-                      {tier.userCount.toLocaleString()} users ({userPercentage.toFixed(1)}%)
-                    </span>
-                  </div>
 
-                  {/* Volume bar */}
-                  <div className="relative h-2 bg-slate-700/50 rounded-full overflow-hidden mb-1">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(volumePercentage, 100)}%`,
-                        backgroundColor: getTierColor(tier.tier, index)
-                      }}
-                    />
-                  </div>
+                    <div className="relative h-1.5 rounded-full bg-[var(--surface-3)]/50 overflow-hidden mb-1">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
+                        style={{
+                          width: `${Math.min(volumePct, 100)}%`,
+                          backgroundColor: color,
+                        }}
+                      />
+                    </div>
 
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">
-                      ${new Intl.NumberFormat('en-US', {
-                        notation: 'compact',
-                        maximumFractionDigits: 1
-                      }).format(tier.totalVolume)}
-                    </span>
-                    <span className="text-slate-500">
-                      {volumePercentage.toFixed(1)}% of volume
-                    </span>
+                    <div className="flex items-center justify-between text-num text-[11px] text-[var(--text-tertiary)]">
+                      <span>{formatCompactCurrency(tier.totalVolume)}</span>
+                      <span>{volumePct.toFixed(1)}% of volume</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       </div>

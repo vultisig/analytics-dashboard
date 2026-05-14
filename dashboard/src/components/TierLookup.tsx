@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, X, Shield, Award, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import { buildApiUrl } from '@/lib/api';
+import { IconAlertCircleV, IconAwardV, IconLoader2V, IconMagnifyingGlass2, IconShieldV, IconTrendingUpV, IconXV } from '@/icons';
 
 interface LookupResult {
     found: boolean;
@@ -20,12 +20,12 @@ interface LookupResult {
 // Tier color configurations
 const tierColors: Record<string, { text: string; bg: string }> = {
     Ultimate: { text: 'text-purple-400', bg: 'bg-purple-500/20' },
-    Diamond: { text: 'text-cyan-300', bg: 'bg-cyan-400/20' },
-    Platinum: { text: 'text-slate-200', bg: 'bg-slate-300/20' },
-    Gold: { text: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-    Silver: { text: 'text-slate-300', bg: 'bg-slate-400/20' },
+    Diamond: { text: 'text-[var(--brand-blue-light)]', bg: 'bg-cyan-400/20' },
+    Platinum: { text: 'text-[var(--text-primary)]', bg: 'bg-slate-300/20' },
+    Gold: { text: 'text-[var(--alert-warn)]', bg: 'bg-yellow-500/20' },
+    Silver: { text: 'text-[var(--text-secondary)]', bg: 'bg-slate-400/20' },
     Bronze: { text: 'text-orange-400', bg: 'bg-orange-600/20' },
-    None: { text: 'text-slate-500', bg: 'bg-slate-600/20' },
+    None: { text: 'text-[var(--text-tertiary)]', bg: 'bg-slate-600/20' },
 };
 
 function formatNumber(value: number): string {
@@ -100,12 +100,12 @@ export function TierLookup() {
 
     return (
         <div className="space-y-4">
-            {/* Search Input */}
+            {/* IconMagnifyingGlass2 Input */}
             <div className={`
                 relative flex items-center rounded-lg bg-white/5 border transition-all
-                ${isFocused ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : 'border-white/10'}
+                ${isFocused ? 'border-[rgba(33,85,223,0.50)] ring-1 ring-[rgba(33,85,223,0.20)]' : 'border-white/10'}
             `}>
-                <Search className="w-5 h-5 text-slate-400 ml-4 shrink-0" />
+                <IconMagnifyingGlass2 className="w-5 h-5 text-[var(--text-tertiary)] ml-4 shrink-0" />
                 <input
                     type="text"
                     value={address}
@@ -114,16 +114,16 @@ export function TierLookup() {
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     placeholder="Enter Ethereum address (0x...)"
-                    className="flex-1 bg-transparent px-3 py-3 text-sm text-white placeholder-slate-500 focus:outline-none font-mono"
+                    className="flex-1 bg-transparent px-3 py-3 text-sm text-[var(--text-primary)] placeholder-slate-500 focus:outline-none font-mono"
                 />
                 {address && (
                     <button
                         type="button"
                         onClick={clearSearch}
-                        className="p-2 mr-1 text-slate-400 hover:text-white transition-colors"
+                        className="p-2 mr-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                         aria-label="Clear search"
                     >
-                        <X className="w-4 h-4" />
+                        <IconXV className="w-4 h-4" />
                     </button>
                 )}
                 <button
@@ -133,13 +133,13 @@ export function TierLookup() {
                     className={`
                         px-4 py-2 mr-2 rounded-md text-sm font-medium transition-all
                         ${isLoading || !address.trim()
-                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:from-cyan-600 hover:to-teal-600'
+                            ? 'bg-[var(--surface-3)] text-[var(--text-tertiary)] cursor-not-allowed'
+                            : 'bg-gradient-to-r from-[var(--brand-blue)] to-[var(--brand-blue-light)] text-[var(--text-primary)] hover:from-[var(--brand-blue-hover)] hover:to-[var(--brand-blue-light)]'
                         }
                     `}
                 >
                     {isLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <IconLoader2V className="w-4 h-4 animate-spin" />
                     ) : (
                         'Lookup'
                     )}
@@ -148,8 +148,8 @@ export function TierLookup() {
 
             {/* Error Message */}
             {error && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-[var(--alert-error)] text-sm">
+                    <IconAlertCircleV className="w-4 h-4 shrink-0" />
                     {error}
                 </div>
             )}
@@ -160,15 +160,15 @@ export function TierLookup() {
                     p-4 rounded-lg border transition-all
                     ${result.found
                         ? `bg-gradient-to-r ${tierColor.bg} border-white/10`
-                        : 'bg-slate-800/50 border-slate-700/50'
+                        : 'bg-[var(--surface-2)]/60 border-[var(--border-normal)]/50'
                     }
                 `}>
                     {result.found ? (
                         <div className="space-y-4">
                             {/* Address */}
                             <div>
-                                <p className="text-xs text-slate-500 mb-1">Address</p>
-                                <p className="text-sm font-mono text-slate-300 break-all">
+                                <p className="text-xs text-[var(--text-tertiary)] mb-1">Address</p>
+                                <p className="text-sm font-mono text-[var(--text-secondary)] break-all">
                                     {result.address}
                                 </p>
                             </div>
@@ -177,15 +177,15 @@ export function TierLookup() {
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {/* Tier */}
                                 <div>
-                                    <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                                        <Award className="w-3 h-3" />
+                                    <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                                        <IconAwardV className="w-3 h-3" />
                                         Tier
                                     </p>
                                     <p className={`text-xl font-bold ${tierColor.text}`}>
                                         {result.effectiveTier}
                                     </p>
                                     {result.baseTier !== result.effectiveTier && (
-                                        <p className="text-xs text-emerald-400 mt-0.5">
+                                        <p className="text-xs text-[var(--alert-success)] mt-0.5">
                                             Boosted from {result.baseTier}
                                         </p>
                                     )}
@@ -193,34 +193,34 @@ export function TierLookup() {
 
                                 {/* VULT Balance */}
                                 <div>
-                                    <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
-                                        <TrendingUp className="w-3 h-3" />
+                                    <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                                        <IconTrendingUpV className="w-3 h-3" />
                                         Balance
                                     </p>
-                                    <p className="text-xl font-bold text-white">
+                                    <p className="text-xl font-bold text-[var(--text-primary)]">
                                         {formatNumber(result.vultBalance || 0)}
                                     </p>
-                                    <p className="text-xs text-slate-500">VULT</p>
+                                    <p className="text-xs text-[var(--text-tertiary)]">VULT</p>
                                 </div>
 
                                 {/* Discount */}
                                 <div>
-                                    <p className="text-xs text-slate-500 mb-1">Discount</p>
-                                    <p className="text-xl font-bold text-cyan-400">
+                                    <p className="text-xs text-[var(--text-tertiary)] mb-1">Discount</p>
+                                    <p className="text-xl font-bold text-[var(--brand-blue-light)]">
                                         {result.discount || 0} bps
                                     </p>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-[var(--text-tertiary)]">
                                         {result.discount === 50 ? '100% off' : `${((result.discount || 0) / 50 * 100).toFixed(0)}% off`}
                                     </p>
                                 </div>
 
                                 {/* Rank */}
                                 <div>
-                                    <p className="text-xs text-slate-500 mb-1">Rank</p>
-                                    <p className="text-xl font-bold text-white">
+                                    <p className="text-xs text-[var(--text-tertiary)] mb-1">Rank</p>
+                                    <p className="text-xl font-bold text-[var(--text-primary)]">
                                         #{result.rank?.toLocaleString()}
                                     </p>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-[var(--text-tertiary)]">
                                         of {result.totalHolders?.toLocaleString()}
                                     </p>
                                 </div>
@@ -229,11 +229,11 @@ export function TierLookup() {
                             {/* THORGuard Badge */}
                             {result.hasThorguard && (
                                 <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                    <Shield className="w-4 h-4 text-emerald-400" />
-                                    <span className="text-sm text-emerald-400 font-medium">
+                                    <IconShieldV className="w-4 h-4 text-[var(--alert-success)]" />
+                                    <span className="text-sm text-[var(--alert-success)] font-medium">
                                         THORGuard NFT Holder
                                     </span>
-                                    <span className="text-xs text-emerald-400/70">
+                                    <span className="text-xs text-[var(--alert-success)]/70">
                                         (+1 tier boost applied)
                                     </span>
                                 </div>
@@ -241,14 +241,14 @@ export function TierLookup() {
                         </div>
                     ) : (
                         <div className="text-center py-4">
-                            <p className="text-slate-400">{result.message}</p>
+                            <p className="text-[var(--text-tertiary)]">{result.message}</p>
                         </div>
                     )}
                 </div>
             )}
 
             {/* Helper Text */}
-            <p className="text-xs text-slate-500 text-center">
+            <p className="text-xs text-[var(--text-tertiary)] text-center">
                 Enter your Ethereum address to check your VULT tier and discount level.
             </p>
         </div>

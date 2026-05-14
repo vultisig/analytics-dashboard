@@ -7,34 +7,22 @@ interface ChartViewToggleProps {
 
 export function ChartViewToggle({ view, onViewChange }: ChartViewToggleProps) {
     return (
-        <div className="inline-flex items-center gap-1 glass-card rounded-lg p-1 will-change-blur">
+        <div className="toggle-group" role="group">
             <button
                 type="button"
                 onClick={() => onViewChange('provider')}
-                className={`
-                    px-3 py-1.5 rounded-md text-xs font-semibold transition-all
-                    ${view === 'provider'
-                        ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-lg shadow-cyan-500/30'
-                        : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
-                    }
-                `}
-                aria-label="View by provider"
                 aria-pressed={view === 'provider'}
+                data-active={view === 'provider'}
+                className="toggle-group-item"
             >
                 By Provider
             </button>
             <button
                 type="button"
                 onClick={() => onViewChange('platform')}
-                className={`
-                    px-3 py-1.5 rounded-md text-xs font-semibold transition-all
-                    ${view === 'platform'
-                        ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-lg shadow-cyan-500/30'
-                        : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
-                    }
-                `}
-                aria-label="View by platform"
                 aria-pressed={view === 'platform'}
+                data-active={view === 'platform'}
+                className="toggle-group-item"
             >
                 By Platform
             </button>
