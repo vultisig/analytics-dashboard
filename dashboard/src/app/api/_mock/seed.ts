@@ -305,9 +305,12 @@ export function holders() {
         discount: t.tier === 'Ultimate' ? 50 : t.tier === 'Diamond' ? 35 : t.tier === 'Platinum' ? 25 : t.tier === 'Gold' ? 20 : t.tier === 'Silver' ? 10 : t.tier === 'Bronze' ? 5 : 0,
     }));
     const totalHolders = tiers.reduce((s, t) => s + t.count, 0);
+    const tieredHolders = tiers
+        .filter((t) => t.tier !== 'None')
+        .reduce((s, t) => s + t.count, 0);
     const totalSupplyHeld = tiers.reduce((s, t) => s + t.count * t.avgBalance, 0);
     const thorguardHolders = tiers.reduce((s, t) => s + t.thorguardBoosted, 0);
-    return { tiers, totalHolders, totalSupplyHeld, totalSupply, thorguardHolders };
+    return { tiers, totalHolders, tieredHolders, totalSupplyHeld, totalSupply, thorguardHolders };
 }
 
 // ----- Referrers --------------------------------------------------------

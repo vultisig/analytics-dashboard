@@ -32,30 +32,33 @@ export function HeroMetric({
     format = 'currency',
     tooltip,
 }: HeroMetricProps) {
+    // Coerce null / undefined / NaN to 0 so a missing field on the API
+    // response degrades to "$0" instead of a runtime crash.
+    const safeValue = Number.isFinite(value) ? value : 0;
     const prevValueRef = useRef<number | null>(null);
     const [shouldAnimate, setShouldAnimate] = useState(false);
 
     useEffect(() => {
-        const hasChanged = prevValueRef.current === null || Math.abs(prevValueRef.current - value) > 0.01;
+        const hasChanged = prevValueRef.current === null || Math.abs(prevValueRef.current - safeValue) > 0.01;
         if (hasChanged) {
             setShouldAnimate(true);
-            prevValueRef.current = value;
+            prevValueRef.current = safeValue;
         } else {
             setShouldAnimate(false);
         }
-    }, [value]);
+    }, [safeValue]);
 
     const getFormattedValue = () => {
         if (format === 'percent') {
-            return { end: value, suffix: '%', decimals: 1 };
+            return { end: safeValue, suffix: '%', decimals: 1 };
         }
-        if (value >= 1_000_000) {
-            return { end: value / 1_000_000, suffix: 'M', decimals: 2 };
+        if (safeValue >= 1_000_000) {
+            return { end: safeValue / 1_000_000, suffix: 'M', decimals: 2 };
         }
-        if (value >= 1_000) {
-            return { end: value / 1_000, suffix: 'K', decimals: 1 };
+        if (safeValue >= 1_000) {
+            return { end: safeValue / 1_000, suffix: 'K', decimals: 1 };
         }
-        return { end: value, suffix: '', decimals: 0 };
+        return { end: safeValue, suffix: '', decimals: 0 };
     };
 
     const fv = getFormattedValue();
