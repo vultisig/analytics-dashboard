@@ -375,22 +375,26 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                     </p>
 
                     {showProgress && (
-                        <div className="relative w-[222px] pb-1">
-                            {/* Label + white tip indicator above the progress bar */}
+                        <div className="relative w-[222px] pb-1 overflow-visible">
+                            {/* Label + white tip indicator above the progress bar.
+                                The tip stays at the progress edge; the label flips
+                                to the left of the tip past 55 % so it can't overflow
+                                the card on near-full bars. */}
                             <div className="relative h-9 mb-1">
-                                <div
-                                    className="absolute top-1 flex items-start gap-1.5"
-                                    style={{ left: `${progressPercent}%` }}
-                                >
-                                    <span
-                                        aria-hidden="true"
-                                        className="block w-px h-8 flex-shrink-0"
-                                        style={{
-                                            background:
-                                                'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
-                                        }}
-                                    />
-                                    <div className="flex flex-col items-start gap-0.5">
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute top-1 block w-px h-8"
+                                    style={{
+                                        left: `${progressPercent}%`,
+                                        background:
+                                            'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+                                    }}
+                                />
+                                {progressPercent > 55 ? (
+                                    <div
+                                        className="absolute top-1 flex flex-col items-end gap-0.5 pr-1.5 text-right"
+                                        style={{ right: `${100 - progressPercent}%` }}
+                                    >
                                         <span className="text-[8px] font-medium text-[var(--text-tertiary)] leading-[16px] whitespace-nowrap">
                                             {soFarLabel}
                                         </span>
@@ -398,7 +402,19 @@ function ProjectionCard({ variant, label, tooltip, value, soFarLabel, soFarValue
                                             {formatCompactCurrency(soFarValue!)}
                                         </span>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div
+                                        className="absolute top-1 flex flex-col items-start gap-0.5 pl-1.5"
+                                        style={{ left: `${progressPercent}%` }}
+                                    >
+                                        <span className="text-[8px] font-medium text-[var(--text-tertiary)] leading-[16px] whitespace-nowrap">
+                                            {soFarLabel}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-num text-[var(--text-secondary)] leading-[16px] whitespace-nowrap">
+                                            {formatCompactCurrency(soFarValue!)}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                             {/* Track + filled bar (Figma: 15.41deg gradient + 4.1px blur shadow) */}
                             <div className="relative h-[7px] rounded-[12px] bg-[var(--border-light)] overflow-visible">
