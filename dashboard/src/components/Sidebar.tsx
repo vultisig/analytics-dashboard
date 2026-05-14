@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ComponentType } from 'react';
+import type { ComponentType, MouseEvent } from 'react';
 import {
     IconSquareGridCircle,
     IconArrowLeftRight,
@@ -12,7 +12,6 @@ import {
     IconPeopleAdded,
     IconTrophyV,
     IconLayoutLeft,
-    IconLayoutLeftExpand,
 } from '@/icons';
 import SystemStatus from './SystemStatus';
 import { getParam, paramsToObject, buildParams, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
@@ -51,8 +50,10 @@ export function Sidebar() {
 
     useEffect(() => {
         if (!mounted) return;
-        // Figma: sidebar is 296px wide at left:20, then a 20px gap to
-        // content (main starts at 336px on a 1440-wide frame).
+        // Figma: sidebar is 296 px wide at left:20, then a 20 px gap to
+        // content (main starts at 336 px on a 1440-wide frame). Collapsed
+        // sticks to a 76 px chassis that fits a 44 px nav-button square
+        // (44 + 2 × 16 = 76) plus 16 px padding.
         const sidebarWidth = collapsed ? '76px' : '296px';
         const contentOffset = collapsed ? '116px' : '336px';
         document.documentElement.style.setProperty('--sidebar-width', sidebarWidth);
@@ -66,15 +67,28 @@ export function Sidebar() {
         router.push(`?${next.toString()}`);
     };
 
+    // When collapsed, clicking anywhere on the aside that isn't a real
+    // interactive element re-expands the panel. Buttons stopPropagation
+    // so nav clicks still route normally.
+    const handleSurfaceClick = (e: MouseEvent<HTMLElement>) => {
+        if (!collapsed) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('button, a, input, [role="tab"]')) return;
+        setCollapsed(false);
+    };
+
     return (
         <aside
-            className="fixed left-5 top-5 bottom-5 z-30 flex flex-col rounded-[20px] border border-[var(--border-light)] bg-[var(--surface-1)] p-5 transition-[width] duration-200"
-            style={{ width: 'var(--sidebar-width, 256px)' }}
+            className={`fixed left-5 top-5 bottom-5 z-30 flex flex-col rounded-[20px] border border-[var(--border-light)] bg-[var(--surface-1)] py-5 transition-[width] duration-200 ${collapsed ? 'px-4 cursor-pointer' : 'px-5'}`}
+            style={{ width: 'var(--sidebar-width, 296px)' }}
             aria-label="Primary"
+            onClick={handleSurfaceClick}
+            role={collapsed ? 'button' : undefined}
+            aria-expanded={!collapsed}
         >
-            {/* Logo + collapse */}
-            <div className="flex items-center justify-between gap-[52px]">
-                <div className="flex flex-1 min-w-0 items-center gap-[14px]">
+            {/* Logo + collapse — collapse button shown only when expanded */}
+            <div className={`flex items-center gap-[14px] ${collapsed ? 'justify-center' : 'justify-between'}`}>
+                <div className={`flex min-w-0 items-center gap-[14px] ${collapsed ? '' : 'flex-1'}`}>
                     <div
                         className="relative size-[38px] shrink-0 rounded-[12.56px]"
                         style={{
@@ -95,24 +109,29 @@ export function Sidebar() {
                             draggable={false}
                         />
                     </div>
-                    {!collapsed && (
-                        <p className="t-title-2 truncate">Analytics</p>
-                    )}
+                    {!collapsed && <p className="t-title-2 truncate">Analytics</p>}
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setCollapsed((v) => !v)}
-                    aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                    className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                    {collapsed
-                        ? <IconLayoutLeftExpand size={20} />
-                        : <IconLayoutLeft size={20} />}
-                </button>
+                {!collapsed && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setCollapsed(true);
+                        }}
+                        aria-label="Collapse sidebar"
+                        className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                        <IconLayoutLeft size={20} />
+                    </button>
+                )}
             </div>
 
             {/* Nav */}
-            <nav role="tablist" aria-orientation="vertical" className="mt-[52px] flex-1 flex flex-col gap-2">
+            <nav
+                role="tablist"
+                aria-orientation="vertical"
+                className={`mt-[52px] flex flex-1 flex-col gap-2 ${collapsed ? 'items-center' : ''}`}
+            >
                 {NAV_ITEMS.map((item) => {
                     const Icon = item.icon;
                     const isActive = activeTab === item.id;
@@ -123,20 +142,26 @@ export function Sidebar() {
                             role="tab"
                             aria-selected={isActive}
                             aria-controls={`${item.id}-panel`}
-                            onClick={() => handleNav(item.id)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleNav(item.id);
+                            }}
                             title={collapsed ? item.label : undefined}
                             className={`
-                                relative flex items-center gap-[10px] rounded-[12px] p-[14px] transition-colors
+                                relative flex items-center rounded-[12px] transition-colors
                                 ${isActive
                                     ? 'bg-[var(--brand-blue)] text-[var(--text-primary)]'
                                     : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]'
                                 }
-                                ${collapsed ? 'justify-center' : ''}
+                                ${collapsed
+                                    ? 'size-11 shrink-0 justify-center'
+                                    : 'w-full gap-[10px] p-[14px]'
+                                }
                             `}
                         >
                             <Icon className="size-4 shrink-0" />
                             {!collapsed && (
-                                <span className="text-sm font-medium leading-[18px]">{item.label}</span>
+                                <span className="t-button-s">{item.label}</span>
                             )}
                         </button>
                     );

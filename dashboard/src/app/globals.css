@@ -1,7 +1,37 @@
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap');
-@import url('https://fonts.cdnfonts.com/css/brockmann');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
+
+/* Brockmann — Vultisig brand UI font. Self-hosted from the core repo
+   (vultisig-windows/core/ui/public/fonts) so the dashboard renders the
+   exact same glyphs as the wallet apps. */
+@font-face {
+  font-family: 'Brockmann';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Brockmann-Regular.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Brockmann';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/Brockmann-Medium.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Brockmann';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/Brockmann-SemiBold.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Brockmann';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Brockmann-Bold.otf') format('opentype');
+}
 
 :root {
   /* Vultisig App — Figma tokens */

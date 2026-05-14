@@ -1,5 +1,6 @@
-import { IconPeopleCopy } from '@/icons';
 'use client';
+
+import { IconPeopleCopy } from '@/icons';
 
 
 interface TierCardProps {

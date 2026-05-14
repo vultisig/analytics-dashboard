@@ -1,5 +1,6 @@
-import { IconDollar, IconPeopleCopy } from '@/icons';
 'use client';
+
+import { IconDollar, IconPeopleCopy } from '@/icons';
 
 
 interface LeaderboardToggleProps {
