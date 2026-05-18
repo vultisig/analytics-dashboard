@@ -132,11 +132,12 @@ class ArkhamIngestor:
                             if transfer_time <= latest_timestamp:
                                 # We've reached transfers we already have, stop fetching
                                 logger.info(f"Reached existing transfers at {transfer_time}, stopping fetch")
+                                all_transfers.extend(new_transfers)
                                 return all_transfers
                         except:
                             pass
                     new_transfers.append(transfer)
-                
+
                 all_transfers.extend(new_transfers)
                 logger.info(f"Fetched {len(new_transfers)} new transfers (offset {offset})")
                 
