@@ -124,11 +124,7 @@ class SyncService:
                                 found_existing_data = True
                                 break
                             swap_records.append(parsed_swap)
-                    
-                    # Stop if we found existing data
-                    if found_existing_data:
-                        break
-                    
+
                     # Insert into database
                     if swap_records:
                         inserted_count = db_manager.insert_swaps(swap_records)
@@ -180,7 +176,10 @@ class SyncService:
                         update_params['latest_data_timestamp'] = latest_data_ts
 
                     db_manager.update_sync_status(source_name, **update_params)
-                    
+
+                    if found_existing_data:
+                        break
+
                     if not next_token:
                         break
 
