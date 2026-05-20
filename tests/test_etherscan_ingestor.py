@@ -47,19 +47,20 @@ RECEIVER = "0x8E247a480449c84a5fDD25974A8501f3EFa4ABb9"
 
 
 def _make_ingestor():
-    with patch.dict(os.environ, {
-        "ETHERSCAN_API_KEY": "test-key-12345",
-        "DATABASE_URL": "postgresql://test",
-    }):
-        from ingestors.etherscan_ingestor import EtherscanIngestor
-        ing = EtherscanIngestor(
-            integrators=[("kyberswap", RECEIVER)],
-            chains=[(1, "Ethereum")],
-        )
-        mock_conn = MagicMock()
-        mock_conn.closed = False
-        ing.db = mock_conn
-        return ing, mock_conn
+    """Build an EtherscanIngestor with module-level config patched (the
+    module reads ETHERSCAN_API_KEY / DATABASE_URL at import time so an
+    os.environ.patch is too late)."""
+    from ingestors import etherscan_ingestor as mod
+    mod.ETHERSCAN_API_KEY = "test-key-12345"
+    mod.DATABASE_URL = "postgresql://test"
+    ing = mod.EtherscanIngestor(
+        integrators=[("kyberswap", RECEIVER)],
+        chains=[(1, "Ethereum")],
+    )
+    mock_conn = MagicMock()
+    mock_conn.closed = False
+    ing.db = mock_conn
+    return ing, mock_conn
 
 
 # ---------------------------------------------------------------------------
