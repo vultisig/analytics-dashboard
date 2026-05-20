@@ -79,7 +79,9 @@ class TestBuildRow(unittest.TestCase):
         self.assertEqual(named['protocol'], 'kyberswap')
         self.assertEqual(named['fee_token_symbol'], 'VULT')
         self.assertEqual(named['fee_data_source'], 'etherscan')
-        self.assertIsNone(named['actual_fee_usd'])  # left for enricher
+        # actual_fee_usd is 0 as a placeholder — column is NOT NULL on the
+        # existing schema; the enricher pass overwrites with the real value.
+        self.assertEqual(named['actual_fee_usd'], 0)
 
     def test_outbound_transfer_filtered(self):
         from ingestors.etherscan_ingestor import _build_row
@@ -128,7 +130,7 @@ class TestFetchChainPage(unittest.TestCase):
         self.assertIsNone(err)
 
     @patch("ingestors.etherscan_ingestor.requests.get")
-    def test_empty_chain_is_clean(self, mock_get):
+    def test_empty_chain_no_transactions_found(self, mock_get):
         resp = MagicMock()
         resp.json.return_value = {"status": "0", "message": "No transactions found", "result": []}
         resp.raise_for_status = MagicMock()
@@ -138,19 +140,42 @@ class TestFetchChainPage(unittest.TestCase):
         self.assertIsNone(err)
 
     @patch("ingestors.etherscan_ingestor.requests.get")
-    def test_real_failure_propagates_error(self, mock_get):
-        """Arkham 402 silent-failure regression: a non-OK API response with a
-        non-empty result envelope must surface as an error, never an empty OK."""
+    def test_empty_chain_notok_variant(self, mock_get):
+        """Empirical Etherscan V2 variant: status=0, message='NOTOK', result
+        also 'NOTOK' (string). Observed live on BSC/Optimism/Base/Avalanche
+        for the kyber fee receiver. Must NOT bubble as an error or the sync
+        treats every empty chain as a failure (1.0.9 production regression)."""
         resp = MagicMock()
-        # status=0 + a real-looking result payload (auth error envelope) — NOT
-        # the empty list of a clean "no transactions" response.
-        resp.json.return_value = {"status": "0", "message": "Invalid API Key", "result": "NOTOK"}
+        resp.json.return_value = {"status": "0", "message": "NOTOK", "result": "NOTOK"}
+        resp.raise_for_status = MagicMock()
+        mock_get.return_value = resp
+        transfers, err = self.ing.fetch_chain_page(56, RECEIVER, 0, 1)
+        self.assertEqual(transfers, [])
+        self.assertIsNone(err)
+
+    @patch("ingestors.etherscan_ingestor.requests.get")
+    def test_real_failure_propagates_error(self, mock_get):
+        """Arkham 402 silent-failure regression: specific error messages
+        (Invalid API Key, Max rate limit) must surface as errors, never as
+        clean empty results."""
+        resp = MagicMock()
+        resp.json.return_value = {"status": "0", "message": "Invalid API Key", "result": "Invalid API Key"}
         resp.raise_for_status = MagicMock()
         mock_get.return_value = resp
         transfers, err = self.ing.fetch_chain_page(1, RECEIVER, 0, 1)
         self.assertEqual(transfers, [])
         self.assertIsNotNone(err)
         self.assertIn("Invalid API Key", err)
+
+    @patch("ingestors.etherscan_ingestor.requests.get")
+    def test_rate_limit_propagates_error(self, mock_get):
+        resp = MagicMock()
+        resp.json.return_value = {"status": "0", "message": "Max rate limit reached", "result": "Max rate limit reached"}
+        resp.raise_for_status = MagicMock()
+        mock_get.return_value = resp
+        _, err = self.ing.fetch_chain_page(1, RECEIVER, 0, 1)
+        self.assertIsNotNone(err)
+        self.assertIn("Max rate limit", err)
 
     @patch("ingestors.etherscan_ingestor.requests.get")
     def test_http_exception_returns_error(self, mock_get):
