@@ -10,6 +10,7 @@ from ingestors.thorchain import THORChainIngestor
 from ingestors.mayachain import MayaChainIngestor
 from ingestors.lifi import LiFiIngestor
 from ingestors.etherscan_ingestor import EtherscanIngestor
+from ingestors.router_source_classifier import reclassify_all as reclassify_etherscan_rows
 from ingestors.vult_holders import VultHoldersIngestor
 
 # Setup logging
@@ -62,6 +63,16 @@ class SyncService:
                         error_count=0 if r['error'] is None else 1,
                         last_error=r['error'],
                     )
+
+                # Router-source classifier: verify each fresh row's tx.to
+                # against the known-router set for its tagged protocol;
+                # demote non-router transfers to 'other'. Fail-open on API
+                # errors — unclassified rows retry on the next sync.
+                try:
+                    with db_manager.get_connection() as conn:
+                        reclassify_etherscan_rows(ingestor.api_key, conn)
+                except Exception as e:
+                    logger.error(f"Router-source classifier crashed: {e}")
                 return
 
             sync_status = None
