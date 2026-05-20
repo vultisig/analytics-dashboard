@@ -63,11 +63,23 @@ class DatabaseManager:
                 conn.commit()
                 return cursor.rowcount
     
+    # Columns callers may set on sync_status via update_sync_status. Anything
+    # else is rejected — the method interpolates column names as raw SQL
+    # identifiers (psycopg2 has no parameterized identifier substitution), so
+    # an attacker-controlled kwarg name would otherwise be a SQL injection.
+    _SYNC_STATUS_COLUMNS = frozenset({
+        'next_page_token', 'last_synced_timestamp', 'latest_data_timestamp',
+        'last_synced_block', 'is_active', 'error_count', 'last_error',
+    })
+
     def update_sync_status(self, source, **kwargs):
-        """Upsert sync_status row for `source`. UNIQUE(source) means a missing
-        row would silently no-op an UPDATE; ON CONFLICT lets a brand-new
-        source create its row on first sync.
-        """
+        """Upsert sync_status row for `source`. UNIQUE(source) means an UPDATE
+        would silently no-op for a brand-new source; ON CONFLICT creates the
+        row on first sync."""
+        unknown = set(kwargs) - self._SYNC_STATUS_COLUMNS
+        if unknown:
+            raise ValueError(f"update_sync_status: disallowed columns {sorted(unknown)}")
+
         params = {'source': source, **kwargs}
         cols = ['source'] + list(kwargs.keys())
         insert_cols = ', '.join(cols)
