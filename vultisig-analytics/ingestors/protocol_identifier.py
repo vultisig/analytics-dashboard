@@ -31,6 +31,8 @@ KNOWN_ROUTERS = {
     'kyberswap': [
         # Meta Aggregation Router v2 — same CREATE2 address across EVM chains
         '0x6131b5fae19ea4f9d964eac0408e4408b66337b5',
+        # Meta Aggregation Router v1 (predecessor; still seen on legacy paths)
+        '0x617dee16b86534a5d792a4d7a62fb491b544111e',
     ],
 }
 
