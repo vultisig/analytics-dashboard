@@ -49,7 +49,8 @@ class Config:
         'thorchain': 1.5,   # 40 req/min (under 100 limit)
         'mayachain': 1.5,   # 40 req/min (under 100 limit)
         'lifi': 0.8,        # 75 req/min (under 200 limit with API key)
-        'arkham': 0.1       # 600 req/min (under 1200 limit)
+        'arkham': 0.1,      # 600 req/min (under 1200 limit) — kept for parity with retained ArkhamIngestor
+        'etherscan': 0.25,  # 4 req/s — under the V2 free-tier 5 req/s shared budget
     }
     MAX_RETRIES = 5
     REQUEST_TIMEOUT = 120  # Increased for slow vanaheimex responses

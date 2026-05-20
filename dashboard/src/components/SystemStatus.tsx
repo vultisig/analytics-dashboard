@@ -147,8 +147,9 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
     };
 
     const SOURCE_LABELS: Record<string, string> = {
-        arkham: '1inch (Arkham)',
-        kyberswap: 'KyberSwap (Arkham)',
+        arkham: '1inch (Arkham)', // legacy row; replaced by '1inch' once Etherscan ingest writes the new key
+        '1inch': '1inch',
+        kyberswap: 'KyberSwap',
         thorchain: 'THORChain',
         mayachain: 'MAYAChain',
         lifi: 'LI.FI',

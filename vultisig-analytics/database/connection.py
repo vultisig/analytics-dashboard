@@ -63,22 +63,36 @@ class DatabaseManager:
                 conn.commit()
                 return cursor.rowcount
     
+    # Columns callers may set on sync_status via update_sync_status. Anything
+    # else is rejected — the method interpolates column names as raw SQL
+    # identifiers (psycopg2 has no parameterized identifier substitution), so
+    # an attacker-controlled kwarg name would otherwise be a SQL injection.
+    _SYNC_STATUS_COLUMNS = frozenset({
+        'next_page_token', 'last_synced_timestamp', 'latest_data_timestamp',
+        'last_synced_block', 'is_active', 'error_count', 'last_error',
+    })
+
     def update_sync_status(self, source, **kwargs):
-        set_clauses = []
-        params = {'source': source}
-        
-        for key, value in kwargs.items():
-            set_clauses.append(f"{key} = %({key})s")
-            params[key] = value
-        
+        """Upsert sync_status row for `source`. UNIQUE(source) means an UPDATE
+        would silently no-op for a brand-new source; ON CONFLICT creates the
+        row on first sync."""
+        unknown = set(kwargs) - self._SYNC_STATUS_COLUMNS
+        if unknown:
+            raise ValueError(f"update_sync_status: disallowed columns {sorted(unknown)}")
+
+        params = {'source': source, **kwargs}
+        cols = ['source'] + list(kwargs.keys())
+        insert_cols = ', '.join(cols)
+        insert_vals = ', '.join(f"%({c})s" for c in cols)
+        set_clauses = [f"{k} = EXCLUDED.{k}" for k in kwargs.keys()]
         set_clauses.append("updated_at = NOW()")
-        
+
         query = f"""
-        UPDATE sync_status 
+        INSERT INTO sync_status ({insert_cols})
+        VALUES ({insert_vals})
+        ON CONFLICT (source) DO UPDATE
         SET {', '.join(set_clauses)}
-        WHERE source = %(source)s
         """
-        
         return self.execute_query(query, params)
     
     def get_sync_status(self, source):

@@ -9,7 +9,7 @@ from config import config
 from ingestors.thorchain import THORChainIngestor
 from ingestors.mayachain import MayaChainIngestor
 from ingestors.lifi import LiFiIngestor
-from ingestors.arkham_ingestor import ArkhamIngestor
+from ingestors.etherscan_ingestor import EtherscanIngestor
 from ingestors.vult_holders import VultHoldersIngestor
 
 # Setup logging
@@ -27,38 +27,36 @@ logger = logging.getLogger(__name__)
 class SyncService:
     def __init__(self):
         self.ingestors = {
-            'arkham': ArkhamIngestor(),
+            'etherscan': EtherscanIngestor(),
             'thorchain': THORChainIngestor(),
             'mayachain': MayaChainIngestor(),
             'lifi': LiFiIngestor(),
         }
-    
+
     def sync_source(self, source_name: str):
         """Sync data from a specific source"""
         logger.info(f"Starting sync for {source_name}")
-        
+
         try:
             ingestor = self.ingestors[source_name]
-            
-            # Special handling for Arkham which has its own ingestion logic.
-            # ArkhamIngestor.ingest() runs per-integrator (1inch, kyberswap) and
-            # returns one result per source — each gets its own sync_status row.
-            # Display-name mapping: '1inch' → sync_status key 'arkham' (legacy),
-            # 'kyberswap' → 'kyberswap'.
-            if source_name == 'arkham':
+
+            # EtherscanIngestor (replaces Arkham) iterates the configured
+            # fee receivers and returns one result per (sub-)source. Each
+            # gets its own sync_status row so the SystemStatus widget can
+            # show per-aggregator health.
+            if source_name == 'etherscan':
                 try:
                     results = ingestor.ingest()
-                    logger.info(f"Completed Arkham sync: {results}")
+                    logger.info(f"Completed Etherscan sync: {results}")
                 except Exception as e:
-                    logger.error(f"Arkham sync orchestrator crashed: {e}")
+                    logger.error(f"Etherscan orchestrator crashed: {e}")
                     results = [
                         {'source': src, 'inserted': 0, 'error': str(e)}
                         for src, _addr in ingestor.integrators
                     ]
                 for r in results:
-                    sync_key = 'arkham' if r['source'] == '1inch' else r['source']
                     db_manager.update_sync_status(
-                        sync_key,
+                        r['source'],
                         next_page_token=None,
                         last_synced_timestamp=datetime.utcnow(),
                         error_count=0 if r['error'] is None else 1,
@@ -212,7 +210,7 @@ class SyncService:
             
         except Exception as e:
             logger.error(f"Sync failed for {source_name}: {e}")
-            if source_name != 'arkham':
+            if source_name != 'etherscan':
                 db_manager.update_sync_status(
                     source_name,
                     error_count=sync_status.get('error_count', 0) + 1,
