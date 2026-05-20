@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatProviderName } from '@/lib/providerUtils';
+import { formatProviderName, isArkhamProvider } from '@/lib/providerUtils';
 import { IconChevronDownSmall } from '@/icons';
 
 interface ProviderSectionProps {
@@ -19,8 +19,8 @@ export function ProviderSection({
 }: ProviderSectionProps) {
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
 
-    // Determine view based on provider: 1inch uses 'chain', others use 'platform'
-    const view = provider.toLowerCase() === '1inch' ? 'chain' : 'platform';
+    // Arkham-sourced aggregators only carry chain info (no platform attribution).
+    const view = isArkhamProvider(provider) ? 'chain' : 'platform';
 
     // Persist expansion state to localStorage
     useEffect(() => {

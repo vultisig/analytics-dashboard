@@ -13,7 +13,7 @@ import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { FeeTierSection } from '@/components/FeeTierSection';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders } from '@/lib/providerUtils';
+import { sortProviders, getKnownProviders } from '@/lib/providerUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconPeopleCopy, IconTrendingUpV, IconWallet4 } from '@/icons';
 
@@ -70,7 +70,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                 const paramsString = params.toString();
 
                 // Define all known providers upfront
-                const allKnownProviders = ['thorchain', 'mayachain', 'lifi', '1inch'];
+                const allKnownProviders = getKnownProviders();
 
                 // Fetch main users data, all provider data, and fee tiers in parallel
                 const [usersRes, feeTiersRes, ...providerResponses] = await Promise.all([
@@ -410,7 +410,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
                             {showNewUsersOnly ? 'First-time users only' : `${getGranularityLabel()} breakdown`}
-                            {chartView === 'platform' ? ' · excludes 1inch' : ''}
+                            {chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -423,7 +423,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch excluded (no platform info)</span>
+                            <span>1inch + KyberSwap excluded (no platform info)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import config  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -306,14 +309,14 @@ class VolumeEnricher:
             SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd
             FROM dex_aggregator_revenue
             WHERE (token_in_symbol IS NULL OR token_out_symbol IS NULL)
-              AND protocol = '1inch'
+              AND protocol IN %s
             ORDER BY swap_volume_usd DESC NULLS LAST
         """
 
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query)
+        cursor.execute(query, (config.ARKHAM_PROVIDERS,))
         records = cursor.fetchall()
 
         if not records:

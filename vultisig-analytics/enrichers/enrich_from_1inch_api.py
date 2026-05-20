@@ -20,6 +20,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import config  # noqa: E402
+
 DATABASE_URL = os.getenv('DATABASE_URL')
 ONEINCH_API_KEY = os.getenv('ONEINCH_API_KEY')
 ONEINCH_BASE = 'https://api.1inch.dev'
@@ -209,14 +212,14 @@ class OneInchEnricher:
             FROM dex_aggregator_revenue
             WHERE swap_volume_usd IS NULL
               AND fee_data_source = 'arkham'
-              AND protocol = '1inch'
+              AND protocol IN %s
             ORDER BY timestamp DESC
         """
 
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query)
+        cursor.execute(query, (config.ARKHAM_PROVIDERS,))
         records = cursor.fetchall()
 
         if not records:

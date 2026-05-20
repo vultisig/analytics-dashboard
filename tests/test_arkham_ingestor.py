@@ -542,7 +542,7 @@ class TestFetchAllTransfers(unittest.TestCase):
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
-        result = self.ing.fetch_all_transfers()
+        result = self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         self.assertEqual(len(result), 2)
         self.assertEqual(
             result[0]["transactionHash"],
@@ -556,7 +556,7 @@ class TestFetchAllTransfers(unittest.TestCase):
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
-        result = self.ing.fetch_all_transfers()
+        result = self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         self.assertEqual(result, [])
 
     @patch("ingestors.arkham_ingestor.requests.get")
@@ -566,7 +566,7 @@ class TestFetchAllTransfers(unittest.TestCase):
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
-        self.ing.fetch_all_transfers()
+        self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         _, kwargs = mock_get.call_args
         self.assertEqual(kwargs["headers"]["API-Key"], "test-key-12345")
 
@@ -587,7 +587,7 @@ class TestFetchAllTransfers(unittest.TestCase):
 
         mock_get.side_effect = [mock_resp1, mock_resp2]
 
-        result = self.ing.fetch_all_transfers()
+        result = self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         self.assertEqual(len(result), 1001)
         self.assertEqual(mock_get.call_count, 2)
 
@@ -608,7 +608,7 @@ class TestFetchAllTransfers(unittest.TestCase):
             "transfers": [_clone(TRANSFER_NO_ENTITY)] * 1000
         }
 
-        result = self.ing.fetch_all_transfers()
+        result = self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         # Should have page 1 results, page 2 failed
         self.assertEqual(len(result), 1000)
 
@@ -630,7 +630,7 @@ class TestFetchAllTransfers(unittest.TestCase):
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
-        result = self.ing.fetch_all_transfers()
+        result = self.ing.fetch_all_transfers("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269")
         # The old transfer should trigger early return
         self.assertEqual(len(result), 0)
 
@@ -642,6 +642,12 @@ class TestFetchAllTransfers(unittest.TestCase):
 class TestIngest(unittest.TestCase):
     def setUp(self):
         self.ing, self.mock_conn = _make_ingestor()
+        # Scope orchestration tests to a single integrator so commit/rollback
+        # counts are deterministic. Multi-source orchestration runs against
+        # the real DEFAULT_INTEGRATORS list in production.
+        self.ing.integrators = [
+            ("1inch", "0xA4a4f610e89488EB4ECc6c63069f241a54485269"),
+        ]
 
     def test_ingest_commits_and_closes(self):
         with patch.object(

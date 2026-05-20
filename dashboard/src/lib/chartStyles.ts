@@ -8,10 +8,10 @@ export const providerColors = [
   '#8B5CF6', // Purple - MAYAChain
   '#10B981', // Emerald - LI.FI
   '#F59E0B', // Amber - 1inch
+  '#31CB9E', // KyberSwap green
   '#EF4444', // Red
   '#3B82F6', // Blue
   '#EC4899', // Pink
-  '#14B8A6', // Teal
 ];
 
 // Provider color map (by name)
@@ -20,6 +20,7 @@ export const providerColorMap: Record<string, string> = {
   mayachain: '#8B5CF6',
   lifi: '#10B981',
   '1inch': '#F59E0B',
+  kyberswap: '#31CB9E',
 };
 
 // Chain/Platform color map

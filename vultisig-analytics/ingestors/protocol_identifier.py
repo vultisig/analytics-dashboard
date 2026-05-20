@@ -28,6 +28,10 @@ KNOWN_ROUTERS = {
     '0x': [
         '0xdef1c0ded9bec7f1a1670819833240f027b25eff',  # 0x Exchange Proxy
     ],
+    'kyberswap': [
+        # Meta Aggregation Router v2 — same CREATE2 address across EVM chains
+        '0x6131b5fae19ea4f9d964eac0408e4408b66337b5',
+    ],
 }
 
 class ProtocolIdentifier:
