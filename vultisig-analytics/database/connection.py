@@ -64,21 +64,23 @@ class DatabaseManager:
                 return cursor.rowcount
     
     def update_sync_status(self, source, **kwargs):
-        set_clauses = []
-        params = {'source': source}
-        
-        for key, value in kwargs.items():
-            set_clauses.append(f"{key} = %({key})s")
-            params[key] = value
-        
-        set_clauses.append("updated_at = NOW()")
-        
-        query = f"""
-        UPDATE sync_status 
-        SET {', '.join(set_clauses)}
-        WHERE source = %(source)s
+        """Upsert sync_status row for `source`. UNIQUE(source) means a missing
+        row would silently no-op an UPDATE; ON CONFLICT lets a brand-new
+        source create its row on first sync.
         """
-        
+        params = {'source': source, **kwargs}
+        cols = ['source'] + list(kwargs.keys())
+        insert_cols = ', '.join(cols)
+        insert_vals = ', '.join(f"%({c})s" for c in cols)
+        set_clauses = [f"{k} = EXCLUDED.{k}" for k in kwargs.keys()]
+        set_clauses.append("updated_at = NOW()")
+
+        query = f"""
+        INSERT INTO sync_status ({insert_cols})
+        VALUES ({insert_vals})
+        ON CONFLICT (source) DO UPDATE
+        SET {', '.join(set_clauses)}
+        """
         return self.execute_query(query, params)
     
     def get_sync_status(self, source):
