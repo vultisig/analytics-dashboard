@@ -1067,8 +1067,8 @@ def get_revenue():
             SELECT COALESCE(SUM(actual_fee_usd), 0) as total_revenue
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
         """
 
@@ -1097,8 +1097,8 @@ def get_revenue():
                 COALESCE(SUM(actual_fee_usd), 0) as revenue
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY 1, 2
             ORDER BY 1 ASC
@@ -1129,8 +1129,8 @@ def get_revenue():
                 COALESCE(SUM(actual_fee_usd), 0) as value
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol
         """
@@ -1202,8 +1202,8 @@ def get_revenue():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_revenue DESC
@@ -1242,8 +1242,8 @@ def get_revenue():
                     FROM dex_aggregator_revenue
                     WHERE protocol = %s
                         AND chain IS NOT NULL
-                        AND token_in_symbol IS NOT NULL
-                        AND token_out_symbol IS NOT NULL
+                        AND (fee_data_source = 'etherscan'
+                             OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                         {date_filter_arkham}
                     GROUP BY 1
                     ORDER BY value DESC
@@ -1308,8 +1308,8 @@ def get_revenue_by_provider(provider):
                     COALESCE(SUM(actual_fee_usd), 0) as revenue
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY DATE_TRUNC('{granularity}', timestamp)
                 ORDER BY DATE_TRUNC('{granularity}', timestamp) ASC
@@ -1323,8 +1323,8 @@ def get_revenue_by_provider(provider):
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
                     AND chain IS NOT NULL
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY DATE_TRUNC('{granularity}', timestamp), chain
                 ORDER BY DATE_TRUNC('{granularity}', timestamp) ASC
@@ -1425,8 +1425,8 @@ def get_swap_volume():
                 COUNT(*) as total_swaps
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
         """
 
@@ -1458,8 +1458,8 @@ def get_swap_volume():
                 COALESCE(SUM(swap_volume_usd), 0) as volume
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY time_period, protocol
             ORDER BY time_period ASC
@@ -1492,8 +1492,8 @@ def get_swap_volume():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol
         """
@@ -1566,8 +1566,8 @@ def get_swap_volume():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_volume DESC
@@ -1592,8 +1592,8 @@ def get_swap_volume():
                     FROM dex_aggregator_revenue
                     WHERE protocol = %s
                         AND chain IS NOT NULL
-                        AND token_in_symbol IS NOT NULL
-                        AND token_out_symbol IS NOT NULL
+                        AND (fee_data_source = 'etherscan'
+                             OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                         {date_filter_arkham}
                     GROUP BY chain
                     ORDER BY volume DESC
@@ -1687,8 +1687,8 @@ def get_swap_volume_by_provider(provider):
                     COALESCE(SUM(swap_volume_usd), 0) as volume
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period
                 ORDER BY time_period ASC
@@ -1702,8 +1702,8 @@ def get_swap_volume_by_provider(provider):
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
                     AND chain IS NOT NULL
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period, chain
                 ORDER BY time_period ASC
@@ -1814,8 +1814,8 @@ def get_swap_count():
             SELECT COUNT(*) as total_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
         """
 
@@ -1844,8 +1844,8 @@ def get_swap_count():
                 COUNT(*) as count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY 1, 2
             ORDER BY 1 ASC
@@ -1892,8 +1892,8 @@ def get_swap_count():
                 COUNT(*) as value
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol
         """
@@ -1935,8 +1935,8 @@ def get_swap_count():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
+                AND (fee_data_source = 'etherscan'
+                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY swap_count DESC
@@ -1975,8 +1975,8 @@ def get_swap_count():
                     FROM dex_aggregator_revenue
                     WHERE protocol = %s
                         AND chain IS NOT NULL
-                        AND token_in_symbol IS NOT NULL
-                        AND token_out_symbol IS NOT NULL
+                        AND (fee_data_source = 'etherscan'
+                             OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                         {date_filter_arkham}
                     GROUP BY 1
                     ORDER BY value DESC
@@ -2040,8 +2040,8 @@ def get_swap_count_by_provider(provider):
                     COUNT(*) as count
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period
                 ORDER BY time_period ASC
@@ -2055,8 +2055,8 @@ def get_swap_count_by_provider(provider):
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
                     AND chain IS NOT NULL
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period, chain
                 ORDER BY time_period ASC
@@ -2163,8 +2163,8 @@ def get_users():
                 UNION
                 SELECT from_address as user_address FROM dex_aggregator_revenue
                 WHERE 1=1
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
             ) combined_users
         """
@@ -2183,8 +2183,8 @@ def get_users():
                     SELECT timestamp as date, protocol as source, from_address as user_address
                     FROM dex_aggregator_revenue
                     WHERE protocol IN %s
-                        AND token_in_symbol IS NOT NULL
-                        AND token_out_symbol IS NOT NULL
+                        AND (fee_data_source = 'etherscan'
+                             OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                         {date_filter_arkham}
                 ) combined_swaps
                 GROUP BY 1, 2
@@ -2202,8 +2202,8 @@ def get_users():
                     SELECT DATE(timestamp) as date, protocol as source, from_address as user_address
                     FROM dex_aggregator_revenue
                     WHERE protocol IN %s
-                        AND token_in_symbol IS NOT NULL
-                        AND token_out_symbol IS NOT NULL
+                        AND (fee_data_source = 'etherscan'
+                             OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                         {date_filter_arkham}
                 ) combined_swaps
                 GROUP BY 1, 2
@@ -2322,7 +2322,7 @@ def get_users():
                         SELECT timestamp as date, protocol as source, from_address as user_address
                         FROM dex_aggregator_revenue
                         WHERE protocol IN %s
-                            AND token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
+                            AND (fee_data_source = 'etherscan' OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     ) all_swaps
                     GROUP BY user_address
                 )
@@ -2348,7 +2348,7 @@ def get_users():
                         SELECT DATE(timestamp) as date, protocol as source, from_address as user_address
                         FROM dex_aggregator_revenue
                         WHERE protocol IN %s
-                            AND token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
+                            AND (fee_data_source = 'etherscan' OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     ) all_swaps
                     GROUP BY user_address
                 )
@@ -2426,8 +2426,8 @@ def get_users_by_provider(provider):
                     COUNT(DISTINCT from_address) as users
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period
                 ORDER BY time_period ASC
@@ -2441,8 +2441,8 @@ def get_users_by_provider(provider):
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
                     AND chain IS NOT NULL
-                    AND token_in_symbol IS NOT NULL
-                    AND token_out_symbol IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
                 GROUP BY time_period, chain
                 ORDER BY time_period ASC
