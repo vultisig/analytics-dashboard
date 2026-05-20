@@ -17,6 +17,9 @@ import json
 
 load_dotenv()
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import config  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -446,7 +449,7 @@ class ExplorerEnricher:
             FROM dex_aggregator_revenue
             WHERE swap_volume_usd IS NULL
               AND fee_data_source = 'arkham'
-              AND protocol = '1inch'
+              AND protocol IN %s
               AND chain IN ({placeholders})
             ORDER BY timestamp DESC
         """
@@ -454,7 +457,7 @@ class ExplorerEnricher:
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query, available_chains)
+        cursor.execute(query, (config.ARKHAM_PROVIDERS,) + tuple(available_chains))
         records = cursor.fetchall()
 
         if not records:

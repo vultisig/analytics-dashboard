@@ -28,6 +28,21 @@ class Config:
     LIFI_API_KEY = os.getenv("LIFI_API_KEY", "")
     ARKHAM_API_KEY = os.getenv("ARKHAM_API_KEY", "")
 
+    # Arkham-sourced aggregator fee receivers
+    # (source_name, evm_address) — Arkham crawls ERC20 transfers TO these.
+    # Single source of truth: ingestor + api_server + enrichers all read here.
+    ARKHAM_FEE_RECEIVERS = [
+        ("1inch", os.getenv(
+            "ONEINCH_FEE_RECEIVER",
+            "0xA4a4f610e89488EB4ECc6c63069f241a54485269",
+        )),
+        ("kyberswap", os.getenv(
+            "KYBER_FEE_RECEIVER",
+            "0x8E247a480449c84a5fDD25974A8501f3EFa4ABb9",
+        )),
+    ]
+    ARKHAM_PROVIDERS = tuple(name for name, _ in ARKHAM_FEE_RECEIVERS)
+
     # Rate limiting - Per-source delays (seconds between requests)
     API_DELAY_SECONDS = 2  # Default fallback
     API_DELAYS = {

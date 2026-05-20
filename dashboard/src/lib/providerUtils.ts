@@ -8,10 +8,20 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   mayachain: 'MAYAChain',
   lifi: 'LI.FI',
   '1inch': '1inch',
+  kyberswap: 'KyberSwap',
 };
 
+// Providers fed by the shared Arkham ingestor (rows live in
+// dex_aggregator_revenue, not the `swaps` table). Mirrors the backend
+// `config.ARKHAM_PROVIDERS` tuple.
+export const ARKHAM_PROVIDERS: readonly string[] = ['1inch', 'kyberswap'];
+
+export function isArkhamProvider(name: string): boolean {
+  return ARKHAM_PROVIDERS.includes(name.toLowerCase());
+}
+
 // Preferred provider order for sorting
-const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch'];
+const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap'];
 
 /**
  * Format a provider name for display.

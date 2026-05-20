@@ -17,6 +17,7 @@ import {
     IconCalculatorV,
 } from '@/icons';
 import { providerColors } from '@/lib/chartStyles';
+import { getKnownProviders } from '@/lib/providerUtils';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
@@ -97,7 +98,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
 
         // Use direct API totals (not calculated from time-series)
         // This ensures totals are independent of granularity
-        const providers = ['thorchain', 'mayachain', 'lifi', '1inch'];
+        const providers = getKnownProviders();
 
         const totalVolume = Number(allData.globalStats?.total_volume || 0);
         const totalRevenue = Number(allData.totalRevenue || 0);

@@ -14,12 +14,19 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from database.connection import db_manager
+from config import config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+# Providers whose rows live in dex_aggregator_revenue (via Arkham ingest), not
+# in the `swaps` table. Derived from config.ARKHAM_FEE_RECEIVERS so adding a
+# new Vultisig fee receiver is a single-site change.
+ARKHAM_PROVIDERS = config.ARKHAM_PROVIDERS
+KNOWN_PROVIDERS = ('thorchain', 'mayachain', 'lifi') + ARKHAM_PROVIDERS
 
 
 @app.errorhandler(ValueError)
@@ -1059,14 +1066,14 @@ def get_revenue():
         arkham_revenue_query = f"""
             SELECT COALESCE(SUM(actual_fee_usd), 0) as total_revenue
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
         """
 
         swaps_total = db_manager.execute_query(swaps_revenue_query, fetch=True)[0]
-        arkham_total = db_manager.execute_query(arkham_revenue_query, fetch=True)[0]
+        arkham_total = db_manager.execute_query(arkham_revenue_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
 
         total_revenue_value = safe_float(swaps_total['total_revenue']) + safe_float(arkham_total['total_revenue'])
 
@@ -1086,19 +1093,19 @@ def get_revenue():
         arkham_over_time_query = f"""
             SELECT
                 to_char(date_trunc('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
-                '1inch' as source,
+                protocol as source,
                 COALESCE(SUM(actual_fee_usd), 0) as revenue
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY 1
+            GROUP BY 1, 2
             ORDER BY 1 ASC
         """
 
         swaps_over_time = db_manager.execute_query(swaps_over_time_query, fetch=True)
-        arkham_over_time = db_manager.execute_query(arkham_over_time_query, fetch=True)
+        arkham_over_time = db_manager.execute_query(arkham_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         revenue_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
@@ -1118,17 +1125,18 @@ def get_revenue():
 
         arkham_by_provider_query = f"""
             SELECT
-                '1inch' as name,
+                protocol as name,
                 COALESCE(SUM(actual_fee_usd), 0) as value
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
+            GROUP BY protocol
         """
 
         swaps_by_provider = db_manager.execute_query(swaps_by_provider_query, fetch=True)
-        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, fetch=True)
+        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         revenue_by_provider = sorted(
             list(swaps_by_provider) + list(arkham_by_provider),
@@ -1188,31 +1196,31 @@ def get_revenue():
 
         arkham_paths_query = f"""
             SELECT
-                '1inch' as source,
+                protocol as source,
                 token_in_symbol || ' -> ' || token_out_symbol as swap_path,
                 COALESCE(SUM(actual_fee_usd), 0) as total_revenue,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY token_in_symbol, token_out_symbol
+            GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_revenue DESC
             LIMIT 10
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
         # 7. Provider-specific Data
-        providers_list = ['thorchain', 'mayachain', 'lifi', '1inch']
+        providers_list = list(KNOWN_PROVIDERS)
         provider_data = {}
 
         for provider in providers_list:
-            if provider != '1inch':
+            if provider not in ARKHAM_PROVIDERS:
                 platform_expr = get_platform_expression(provider)
                 platform_query = f"""
                     SELECT
@@ -1232,7 +1240,7 @@ def get_revenue():
                         chain as chain_id,
                         SUM(actual_fee_usd) as value
                     FROM dex_aggregator_revenue
-                    WHERE protocol = '1inch'
+                    WHERE protocol = %s
                         AND chain IS NOT NULL
                         AND token_in_symbol IS NOT NULL
                         AND token_out_symbol IS NOT NULL
@@ -1240,7 +1248,7 @@ def get_revenue():
                     GROUP BY 1
                     ORDER BY value DESC
                 """
-                chain_result = db_manager.execute_query(chain_query, fetch=True)
+                chain_result = db_manager.execute_query(chain_query, (provider,), fetch=True)
                 provider_data[provider] = {'chains': list(chain_result)}
 
         return jsonify({
@@ -1292,14 +1300,14 @@ def get_revenue_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider == '1inch':
+        if provider in ARKHAM_PROVIDERS:
             # Fetch from dex_aggregator_revenue
             time_series_query = f"""
                 SELECT
                     to_char(DATE_TRUNC('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
                     COALESCE(SUM(actual_fee_usd), 0) as revenue
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
                     {date_filter_arkham}
@@ -1313,7 +1321,7 @@ def get_revenue_by_provider(provider):
                     chain,
                     COALESCE(SUM(actual_fee_usd), 0) as revenue
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND chain IS NOT NULL
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
@@ -1322,11 +1330,11 @@ def get_revenue_by_provider(provider):
                 ORDER BY DATE_TRUNC('{granularity}', timestamp) ASC
             """
 
-            time_series = db_manager.execute_query(time_series_query, fetch=True)
-            chain_breakdown = db_manager.execute_query(chain_breakdown_query, fetch=True)
+            time_series = db_manager.execute_query(time_series_query, (provider,), fetch=True)
+            chain_breakdown = db_manager.execute_query(chain_breakdown_query, (provider,), fetch=True)
 
             return jsonify({
-                'provider': '1inch',
+                'provider': provider,
                 'totalRevenue': [
                     {'date': r['date'], 'revenue': safe_float(r['revenue'])}
                     for r in time_series
@@ -1416,14 +1424,14 @@ def get_swap_volume():
                 COALESCE(SUM(COALESCE(swap_volume_usd, 0)), 0) as total_volume,
                 COUNT(*) as total_swaps
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
         """
 
         swaps_stats = db_manager.execute_query(swaps_stats_query, fetch=True)[0]
-        arkham_stats = db_manager.execute_query(arkham_stats_query, fetch=True)[0]
+        arkham_stats = db_manager.execute_query(arkham_stats_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
 
         global_stats = {
             'total_volume': safe_float(swaps_stats['total_volume']) + safe_float(arkham_stats['total_volume']),
@@ -1446,19 +1454,19 @@ def get_swap_volume():
         arkham_time_query = f"""
             SELECT
                 DATE_TRUNC('{granularity}', timestamp) as time_period,
-                '1inch' as source,
+                protocol as source,
                 COALESCE(SUM(swap_volume_usd), 0) as volume
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY time_period
+            GROUP BY time_period, protocol
             ORDER BY time_period ASC
         """
 
         swaps_time = db_manager.execute_query(swaps_time_query, fetch=True)
-        arkham_time = db_manager.execute_query(arkham_time_query, fetch=True)
+        arkham_time = db_manager.execute_query(arkham_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         volume_over_time = sorted(
             list(swaps_time) + list(arkham_time),
@@ -1479,18 +1487,19 @@ def get_swap_volume():
 
         arkham_provider_query = f"""
             SELECT
-                '1inch' as source,
+                protocol as source,
                 COALESCE(SUM(swap_volume_usd), 0) as total_volume,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
+            GROUP BY protocol
         """
 
         swaps_provider = db_manager.execute_query(swaps_provider_query, fetch=True)
-        arkham_provider = db_manager.execute_query(arkham_provider_query, fetch=True)
+        arkham_provider = db_manager.execute_query(arkham_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         volume_by_provider = sorted(
             list(swaps_provider) + list(arkham_provider),
@@ -1551,37 +1560,37 @@ def get_swap_volume():
 
         arkham_paths_query = f"""
             SELECT
-                '1inch' as source,
+                protocol as source,
                 token_in_symbol || ' -> ' || token_out_symbol as swap_path,
                 COALESCE(SUM(swap_volume_usd), 0) as total_volume,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY token_in_symbol, token_out_symbol
+            GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_volume DESC
             LIMIT 10
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
         # 7. Provider-specific data
-        providers = ['thorchain', 'mayachain', 'lifi', '1inch']
+        providers = list(KNOWN_PROVIDERS)
         provider_data = {}
 
         for prov in providers:
-            if prov == '1inch':
+            if prov in ARKHAM_PROVIDERS:
                 chain_query = f"""
                     SELECT
                         chain,
                         COALESCE(SUM(swap_volume_usd), 0) as volume
                     FROM dex_aggregator_revenue
-                    WHERE protocol = '1inch'
+                    WHERE protocol = %s
                         AND chain IS NOT NULL
                         AND token_in_symbol IS NOT NULL
                         AND token_out_symbol IS NOT NULL
@@ -1589,7 +1598,7 @@ def get_swap_volume():
                     GROUP BY chain
                     ORDER BY volume DESC
                 """
-                chain_result = db_manager.execute_query(chain_query, fetch=True)
+                chain_result = db_manager.execute_query(chain_query, (prov,), fetch=True)
                 provider_data[prov] = {'chains': list(chain_result)}
             else:
                 platform_expr = get_platform_expression(prov)
@@ -1671,13 +1680,13 @@ def get_swap_volume_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider == '1inch':
+        if provider in ARKHAM_PROVIDERS:
             time_series_query = f"""
                 SELECT
                     DATE_TRUNC('{granularity}', timestamp) as time_period,
                     COALESCE(SUM(swap_volume_usd), 0) as volume
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
                     {date_filter_arkham}
@@ -1691,7 +1700,7 @@ def get_swap_volume_by_provider(provider):
                     chain,
                     COALESCE(SUM(swap_volume_usd), 0) as volume
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND chain IS NOT NULL
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
@@ -1700,11 +1709,11 @@ def get_swap_volume_by_provider(provider):
                 ORDER BY time_period ASC
             """
 
-            time_series = db_manager.execute_query(time_series_query, fetch=True)
-            chain_breakdown = db_manager.execute_query(chain_breakdown_query, fetch=True)
+            time_series = db_manager.execute_query(time_series_query, (provider,), fetch=True)
+            chain_breakdown = db_manager.execute_query(chain_breakdown_query, (provider,), fetch=True)
 
             return jsonify({
-                'provider': '1inch',
+                'provider': provider,
                 'totalVolume': [
                     {
                         'date': r['time_period'].isoformat() if r['time_period'] else None,
@@ -1804,14 +1813,14 @@ def get_swap_count():
         arkham_count_query = f"""
             SELECT COUNT(*) as total_count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
         """
 
         swaps_total = db_manager.execute_query(swaps_count_query, fetch=True)[0]
-        arkham_total = db_manager.execute_query(arkham_count_query, fetch=True)[0]
+        arkham_total = db_manager.execute_query(arkham_count_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
 
         total_count = safe_int(swaps_total['total_count']) + safe_int(arkham_total['total_count'])
 
@@ -1831,19 +1840,19 @@ def get_swap_count():
         arkham_over_time_query = f"""
             SELECT
                 to_char(date_trunc('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
-                '1inch' as source,
+                protocol as source,
                 COUNT(*) as count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY 1
+            GROUP BY 1, 2
             ORDER BY 1 ASC
         """
 
         swaps_over_time = db_manager.execute_query(swaps_over_time_query, fetch=True)
-        arkham_over_time = db_manager.execute_query(arkham_over_time_query, fetch=True)
+        arkham_over_time = db_manager.execute_query(arkham_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         count_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
@@ -1879,17 +1888,18 @@ def get_swap_count():
 
         arkham_by_provider_query = f"""
             SELECT
-                '1inch' as name,
+                protocol as name,
                 COUNT(*) as value
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
+            GROUP BY protocol
         """
 
         swaps_by_provider = db_manager.execute_query(swaps_by_provider_query, fetch=True)
-        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, fetch=True)
+        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         count_by_provider = sorted(
             list(swaps_by_provider) + list(arkham_by_provider),
@@ -1919,31 +1929,31 @@ def get_swap_count():
 
         arkham_paths_query = f"""
             SELECT
-                '1inch' as source,
+                protocol as source,
                 token_in_symbol || ' -> ' || token_out_symbol as swap_path,
                 COALESCE(SUM(swap_volume_usd), 0) as total_volume,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
-            WHERE protocol = '1inch'
+            WHERE protocol IN %s
                 AND token_in_symbol IS NOT NULL
                 AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY token_in_symbol, token_out_symbol
+            GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY swap_count DESC
             LIMIT 10
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
         # 6. Provider-specific data
-        providers_list = ['thorchain', 'mayachain', 'lifi', '1inch']
+        providers_list = list(KNOWN_PROVIDERS)
         provider_data = {}
 
         for prov in providers_list:
-            if prov != '1inch':
+            if prov not in ARKHAM_PROVIDERS:
                 platform_expr = get_platform_expression(prov)
                 platform_query = f"""
                     SELECT
@@ -1963,7 +1973,7 @@ def get_swap_count():
                         chain as chain_id,
                         COUNT(*) as value
                     FROM dex_aggregator_revenue
-                    WHERE protocol = '1inch'
+                    WHERE protocol = %s
                         AND chain IS NOT NULL
                         AND token_in_symbol IS NOT NULL
                         AND token_out_symbol IS NOT NULL
@@ -1971,7 +1981,7 @@ def get_swap_count():
                     GROUP BY 1
                     ORDER BY value DESC
                 """
-                chain_result = db_manager.execute_query(chain_query, fetch=True)
+                chain_result = db_manager.execute_query(chain_query, (prov,), fetch=True)
                 provider_data[prov] = {'chains': list(chain_result)}
 
         return jsonify({
@@ -2023,13 +2033,13 @@ def get_swap_count_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider == '1inch':
+        if provider in ARKHAM_PROVIDERS:
             time_series_query = f"""
                 SELECT
                     DATE_TRUNC('{granularity}', timestamp) as time_period,
                     COUNT(*) as count
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
                     {date_filter_arkham}
@@ -2043,7 +2053,7 @@ def get_swap_count_by_provider(provider):
                     chain,
                     COUNT(*) as count
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND chain IS NOT NULL
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
@@ -2052,11 +2062,11 @@ def get_swap_count_by_provider(provider):
                 ORDER BY time_period ASC
             """
 
-            time_series = db_manager.execute_query(time_series_query, fetch=True)
-            chain_breakdown = db_manager.execute_query(chain_breakdown_query, fetch=True)
+            time_series = db_manager.execute_query(time_series_query, (provider,), fetch=True)
+            chain_breakdown = db_manager.execute_query(chain_breakdown_query, (provider,), fetch=True)
 
             return jsonify({
-                'provider': '1inch',
+                'provider': provider,
                 'totalCount': [
                     {
                         'date': r['time_period'].isoformat() if r['time_period'] else None,
@@ -2170,9 +2180,9 @@ def get_users():
                 FROM (
                     SELECT timestamp as date, source, user_address FROM swaps WHERE 1=1 {date_filter}
                     UNION ALL
-                    SELECT timestamp as date, '1inch' as source, from_address as user_address
+                    SELECT timestamp as date, protocol as source, from_address as user_address
                     FROM dex_aggregator_revenue
-                    WHERE 1=1
+                    WHERE protocol IN %s
                         AND token_in_symbol IS NOT NULL
                         AND token_out_symbol IS NOT NULL
                         {date_filter_arkham}
@@ -2189,9 +2199,9 @@ def get_users():
                 FROM (
                     SELECT date_only as date, source, user_address FROM swaps WHERE 1=1 {date_filter}
                     UNION ALL
-                    SELECT DATE(timestamp) as date, '1inch' as source, from_address as user_address
+                    SELECT DATE(timestamp) as date, protocol as source, from_address as user_address
                     FROM dex_aggregator_revenue
-                    WHERE 1=1
+                    WHERE protocol IN %s
                         AND token_in_symbol IS NOT NULL
                         AND token_out_symbol IS NOT NULL
                         {date_filter_arkham}
@@ -2200,7 +2210,7 @@ def get_users():
                 ORDER BY 1 ASC
             """
 
-        users_over_time = db_manager.execute_query(users_over_time_query, fetch=True)
+        users_over_time = db_manager.execute_query(users_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         # 3. Users by Platform Over Time
         platform_case = get_normalized_platform_case()
@@ -2238,13 +2248,14 @@ def get_users():
             FROM (
                 SELECT source, user_address FROM swaps WHERE 1=1 {date_filter}
                 UNION ALL
-                SELECT '1inch' as source, from_address as user_address
-                FROM dex_aggregator_revenue WHERE 1=1 {date_filter_arkham}
+                SELECT protocol as source, from_address as user_address
+                FROM dex_aggregator_revenue
+                WHERE protocol IN %s {date_filter_arkham}
             ) combined_provider_users
             GROUP BY source
             ORDER BY value DESC
         """
-        users_by_provider = db_manager.execute_query(users_by_provider_query, fetch=True)
+        users_by_provider = db_manager.execute_query(users_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         # 6. Swap Count by Provider
         swap_count_by_provider_query = f"""
@@ -2254,12 +2265,14 @@ def get_users():
             FROM (
                 SELECT source FROM swaps WHERE 1=1 {date_filter}
                 UNION ALL
-                SELECT '1inch' as source FROM dex_aggregator_revenue WHERE 1=1 {date_filter_arkham}
+                SELECT protocol as source
+                FROM dex_aggregator_revenue
+                WHERE protocol IN %s {date_filter_arkham}
             ) combined_swap_counts
             GROUP BY source
             ORDER BY value DESC
         """
-        swap_count_by_provider = db_manager.execute_query(swap_count_by_provider_query, fetch=True)
+        swap_count_by_provider = db_manager.execute_query(swap_count_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         # 7. Users by Platform (raw)
         users_by_platform_query = f"""
@@ -2306,9 +2319,10 @@ def get_users():
                     FROM (
                         SELECT timestamp as date, source, user_address FROM swaps
                         UNION ALL
-                        SELECT timestamp as date, '1inch' as source, from_address as user_address
+                        SELECT timestamp as date, protocol as source, from_address as user_address
                         FROM dex_aggregator_revenue
-                        WHERE token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
+                        WHERE protocol IN %s
+                            AND token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
                     ) all_swaps
                     GROUP BY user_address
                 )
@@ -2331,9 +2345,10 @@ def get_users():
                     FROM (
                         SELECT date_only as date, source, user_address FROM swaps
                         UNION ALL
-                        SELECT DATE(timestamp) as date, '1inch' as source, from_address as user_address
+                        SELECT DATE(timestamp) as date, protocol as source, from_address as user_address
                         FROM dex_aggregator_revenue
-                        WHERE token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
+                        WHERE protocol IN %s
+                            AND token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
                     ) all_swaps
                     GROUP BY user_address
                 )
@@ -2347,7 +2362,7 @@ def get_users():
                 ORDER BY 1 ASC
             """
 
-        new_users_over_time = db_manager.execute_query(new_users_over_time_query, fetch=True)
+        new_users_over_time = db_manager.execute_query(new_users_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
         return jsonify({
             'totalUsers': {'unique_users': safe_int(total_users['unique_users'])},
@@ -2404,13 +2419,13 @@ def get_users_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider == '1inch':
+        if provider in ARKHAM_PROVIDERS:
             time_series_query = f"""
                 SELECT
                     DATE_TRUNC('{granularity}', timestamp) as time_period,
                     COUNT(DISTINCT from_address) as users
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
                     {date_filter_arkham}
@@ -2424,7 +2439,7 @@ def get_users_by_provider(provider):
                     chain,
                     COUNT(DISTINCT from_address) as users
                 FROM dex_aggregator_revenue
-                WHERE protocol = '1inch'
+                WHERE protocol = %s
                     AND chain IS NOT NULL
                     AND token_in_symbol IS NOT NULL
                     AND token_out_symbol IS NOT NULL
@@ -2433,11 +2448,11 @@ def get_users_by_provider(provider):
                 ORDER BY time_period ASC
             """
 
-            time_series = db_manager.execute_query(time_series_query, fetch=True)
-            chain_breakdown = db_manager.execute_query(chain_breakdown_query, fetch=True)
+            time_series = db_manager.execute_query(time_series_query, (provider,), fetch=True)
+            chain_breakdown = db_manager.execute_query(chain_breakdown_query, (provider,), fetch=True)
 
             return jsonify({
-                'provider': '1inch',
+                'provider': provider,
                 'totalUsers': [
                     {
                         'date': r['time_period'].isoformat() if r['time_period'] else None,

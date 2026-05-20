@@ -40,28 +40,29 @@ class SyncService:
         try:
             ingestor = self.ingestors[source_name]
             
-            # Special handling for Arkham which has its own ingestion logic
+            # Special handling for Arkham which has its own ingestion logic.
+            # ArkhamIngestor.ingest() runs per-integrator (1inch, kyberswap) and
+            # returns one result per source — each gets its own sync_status row.
+            # Display-name mapping: '1inch' → sync_status key 'arkham' (legacy),
+            # 'kyberswap' → 'kyberswap'.
             if source_name == 'arkham':
                 try:
-                    ingestor.ingest()
-                    logger.info(f"Completed sync for {source_name}")
-                    # Update sync status on success
-                    db_manager.update_sync_status(
-                        source_name,
-                        next_page_token=None,
-                        last_synced_timestamp=datetime.utcnow(),
-                        error_count=0,
-                        last_error=None
-                    )
+                    results = ingestor.ingest()
+                    logger.info(f"Completed Arkham sync: {results}")
                 except Exception as e:
-                    logger.error(f"Sync failed for {source_name}: {e}")
-                    # Update sync status on failure
+                    logger.error(f"Arkham sync orchestrator crashed: {e}")
+                    results = [
+                        {'source': src, 'inserted': 0, 'error': str(e)}
+                        for src, _addr in ingestor.integrators
+                    ]
+                for r in results:
+                    sync_key = 'arkham' if r['source'] == '1inch' else r['source']
                     db_manager.update_sync_status(
-                        source_name,
+                        sync_key,
                         next_page_token=None,
                         last_synced_timestamp=datetime.utcnow(),
-                        error_count=1,
-                        last_error=str(e)
+                        error_count=0 if r['error'] is None else 1,
+                        last_error=r['error'],
                     )
                 return
 

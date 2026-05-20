@@ -21,6 +21,9 @@ load_dotenv()
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import config  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -336,7 +339,7 @@ class ImprovedRPCEnricher:
             SELECT tx_hash, chain, timestamp, actual_fee_usd, protocol
             FROM dex_aggregator_revenue
             WHERE swap_volume_usd IS NULL
-              AND protocol = '1inch'
+              AND protocol IN %s
               AND chain IN ({placeholders})
             ORDER BY timestamp DESC
         """
@@ -344,7 +347,7 @@ class ImprovedRPCEnricher:
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query, tuple(available_chains))
+        cursor.execute(query, (config.ARKHAM_PROVIDERS,) + tuple(available_chains))
         records = cursor.fetchall()
         cursor.close()
 

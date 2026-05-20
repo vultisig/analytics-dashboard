@@ -146,13 +146,16 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         return '';
     };
 
-    const formatSourceName = (source: string) => {
-        if (source === 'arkham') return '1inch (Arkham)';
-        if (source === 'thorchain') return 'THORChain';
-        if (source === 'mayachain') return 'MAYAChain';
-        if (source === 'lifi') return 'LI.FI';
-        return source.charAt(0).toUpperCase() + source.slice(1);
+    const SOURCE_LABELS: Record<string, string> = {
+        arkham: '1inch (Arkham)',
+        kyberswap: 'KyberSwap (Arkham)',
+        thorchain: 'THORChain',
+        mayachain: 'MAYAChain',
+        lifi: 'LI.FI',
     };
+
+    const formatSourceName = (source: string) =>
+        SOURCE_LABELS[source] ?? source.charAt(0).toUpperCase() + source.slice(1);
 
     const handleMouseLeave = () => {
         // Clear any existing timeout

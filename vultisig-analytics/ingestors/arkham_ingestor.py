@@ -9,8 +9,9 @@ import logging
 import requests
 import psycopg2
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from .protocol_identifier import ProtocolIdentifier
+from config import config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,7 +19,6 @@ logger = logging.getLogger(__name__)
 # Configuration
 ARKHAM_API_KEY = os.getenv('ARKHAM_API_KEY')
 ARKHAM_API_BASE = 'https://api.arkhamintelligence.com'
-INTEGRATOR_ADDRESS = '0xA4a4f610e89488EB4ECc6c63069f241a54485269'
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Chain name normalization
@@ -38,8 +38,8 @@ CHAIN_MAPPING = {
 
 class ArkhamIngestor:
     """Ingests DEX aggregator revenue data from Arkham API."""
-    
-    def __init__(self):
+
+    def __init__(self, integrators: Optional[List[Tuple[str, str]]] = None):
         if not ARKHAM_API_KEY:
             raise ValueError("ARKHAM_API_KEY environment variable not set")
 
@@ -50,6 +50,7 @@ class ArkhamIngestor:
         self.database_url = DATABASE_URL
         self.db = None
         self.protocol_identifier = None
+        self.integrators = integrators if integrators is not None else config.ARKHAM_FEE_RECEIVERS
 
     def _get_connection(self):
         """Get or refresh database connection"""
@@ -74,40 +75,47 @@ class ArkhamIngestor:
         logger.info("Database connection established")
         return self.db
         
-    def fetch_all_transfers(self) -> List[Dict]:
+    def fetch_all_transfers(self, source_name: str, integrator_address: str) -> List[Dict]:
         """
-        Fetch transfers from Arkham API.
-        Only fetches new transfers by checking latest timestamp in database.
+        Fetch transfers from Arkham API for one integrator.
+        Only fetches new transfers by checking latest timestamp in database
+        scoped to this source's protocol value.
         """
         url = f'{ARKHAM_API_BASE}/transfers'
         headers = {
             'Accept': 'application/json',
             'API-Key': self.api_key
         }
-        
-        # Get latest timestamp from database to avoid re-fetching
+
+        # Get latest timestamp from database to avoid re-fetching. Scope by
+        # protocol so each source gets an independent cursor — without this,
+        # the second source's first run would inherit the first source's
+        # cursor and skip its entire backfill.
         try:
             db = self._get_connection()
             cursor = db.cursor()
-            cursor.execute("SELECT MAX(timestamp) FROM dex_aggregator_revenue WHERE fee_data_source = 'arkham'")
+            cursor.execute(
+                "SELECT MAX(timestamp) FROM dex_aggregator_revenue WHERE protocol = %s",
+                (source_name,),
+            )
             result = cursor.fetchone()
             latest_timestamp = result[0] if result and result[0] else None
             if latest_timestamp:
-                logger.info(f"Latest Arkham timestamp in DB: {latest_timestamp}")
+                logger.info(f"Latest {source_name} timestamp in DB: {latest_timestamp}")
             cursor.close()
         except Exception as e:
-            logger.warning(f"Could not fetch latest timestamp: {e}")
+            logger.warning(f"Could not fetch latest timestamp for {source_name}: {e}")
             latest_timestamp = None
-        
+
         all_transfers = []
         offset = 0
         limit = 1000
-        
-        logger.info(f"Fetching transfers for integrator {INTEGRATOR_ADDRESS}")
-        
+
+        logger.info(f"Fetching {source_name} transfers for integrator {integrator_address}")
+
         while True:
             params = {
-                'base': INTEGRATOR_ADDRESS,
+                'base': integrator_address,
                 'limit': limit,
                 'offset': offset
             }
@@ -200,13 +208,17 @@ class ArkhamIngestor:
         
         return None
     
-    def insert_transfer(self, transfer: Dict):
+    def insert_transfer(self, transfer: Dict, expected_protocol: Optional[str] = None):
         """
         Insert a single transfer into the database.
         Stores ALL available fields from Arkham API response.
 
         Args:
             transfer: Transfer data from Arkham API
+            expected_protocol: When the transfer was fetched by filtering on a
+                known Vultisig fee receiver, this is the aggregator that
+                receiver belongs to. Skips heuristic classification entirely —
+                receiver-based attribution is ground truth.
         """
         try:
             tx_hash = transfer.get('transactionHash')
@@ -222,12 +234,15 @@ class ArkhamIngestor:
             # Extract chain and normalize
             chain = self.normalize_chain(transfer.get('chain', ''))
 
-            # Try to identify protocol from Arkham entity first (most reliable)
-            protocol = self.identify_protocol_from_arkham_entity(from_address_obj)
-
-            # If not found, use our protocol identifier
-            if not protocol:
-                protocol = self.protocol_identifier.identify_protocol(tx_hash, from_address, chain)
+            # Protocol attribution. Prefer the explicit source (we know which
+            # Vultisig fee receiver this came from). Fall back to Arkham
+            # entity metadata, then to the heuristic identifier.
+            if expected_protocol:
+                protocol = expected_protocol
+            else:
+                protocol = self.identify_protocol_from_arkham_entity(from_address_obj)
+                if not protocol:
+                    protocol = self.protocol_identifier.identify_protocol(tx_hash, from_address, chain)
 
             # Extract fee data (what Arkham provides directly)
             actual_fee_usd = float(transfer.get('historicalUSD', 0))
@@ -338,50 +353,65 @@ class ArkhamIngestor:
             if self.db:
                 self.db.rollback()
     
-    def ingest(self):
-        """Main ingestion process."""
+    def ingest_one(self, source_name: str, integrator_address: str) -> Dict:
+        """
+        Ingest transfers for a single integrator (source_name, address) pair.
+        Returns {'source': str, 'inserted': int, 'error': Optional[str]}.
+        Caller is responsible for updating sync_status from the return value.
+        """
+        result = {'source': source_name, 'inserted': 0, 'error': None}
         try:
-            logger.info("Starting Arkham ingestion")
-
-            # Ensure connection is established
             db = self._get_connection()
 
-            # Fetch all transfers
-            transfers = self.fetch_all_transfers()
+            transfers = self.fetch_all_transfers(source_name, integrator_address)
 
             if not transfers:
-                logger.warning("No transfers fetched")
-                return
+                logger.info(f"No new {source_name} transfers")
+                return result
 
-            # Insert each transfer
             for i, transfer in enumerate(transfers, 1):
-                self.insert_transfer(transfer)
+                self.insert_transfer(transfer, expected_protocol=source_name)
 
-                # Commit every 100 records and refresh connection
                 if i % 100 == 0:
                     db.commit()
-                    logger.info(f"Committed {i}/{len(transfers)} transfers")
-                    # Refresh connection to prevent staleness
+                    logger.info(f"Committed {i}/{len(transfers)} {source_name} transfers")
                     db = self._get_connection()
 
-            # Final commit
             db.commit()
-            logger.info(f"Completed ingestion of {len(transfers)} transfers")
+            result['inserted'] = len(transfers)
+            logger.info(f"Completed {source_name} ingestion: {len(transfers)} transfers")
+            return result
 
-            # Print stats
+        except Exception as e:
+            logger.error(f"Error during {source_name} ingestion: {e}")
+            result['error'] = str(e)
+            if self.db:
+                self.db.rollback()
+            return result
+
+    def ingest(self) -> List[Dict]:
+        """
+        Run all configured integrators sequentially. Returns per-source
+        results so the orchestrator can update sync_status independently.
+        """
+        results: List[Dict] = []
+        try:
+            self._get_connection()
+            for source_name, address in self.integrators:
+                logger.info(f"=== Starting Arkham ingestion for {source_name} ===")
+                results.append(self.ingest_one(source_name, address))
+
             if self.protocol_identifier:
                 stats = self.protocol_identifier.get_protocol_stats()
                 logger.info("Protocol breakdown:")
                 for protocol, count in stats.items():
                     logger.info(f"  {protocol}: {count} transactions")
 
-        except Exception as e:
-            logger.error(f"Error during ingestion: {e}")
-            if self.db:
-                self.db.rollback()
+            return results
         finally:
             if self.db:
                 self.db.close()
+                self.db = None
 
 def main():
     """Entry point for Arkham ingestor."""

@@ -12,7 +12,7 @@ import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders } from '@/lib/providerUtils';
+import { sortProviders, getKnownProviders } from '@/lib/providerUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
 
@@ -53,7 +53,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                 const paramsString = params.toString();
 
                 // Define all known providers upfront
-                const allKnownProviders = ['thorchain', 'mayachain', 'lifi', '1inch'];
+                const allKnownProviders = getKnownProviders();
 
                 // Fetch main volume data and all provider data in parallel
                 const [volumeRes, ...providerResponses] = await Promise.all([
@@ -382,7 +382,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                             {chartView === 'provider' ? 'Total Swap Volume' : 'Total Swap Volume by Platform'}
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch' : ''}
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
                         </p>
                     </div>
                     <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
@@ -392,7 +392,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch excluded (no platform info)</span>
+                            <span>1inch + KyberSwap excluded (no platform info)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl
