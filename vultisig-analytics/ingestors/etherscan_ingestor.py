@@ -81,7 +81,7 @@ def _build_row(
         chain_name,
         source_name,
         timestamp,
-        None,  # actual_fee_usd — left for enricher
+        0,  # actual_fee_usd — column is NOT NULL; enricher overwrites with the real block-time USD value
         transfer.get('tokenSymbol') or '',
         transfer.get('contractAddress') or '',
         format(human_amount_dec, 'f'),  # fee_amount_raw — full-precision text
@@ -183,16 +183,21 @@ class EtherscanIngestor:
             return [], f"HTTP error on chainid={chainid}: {e}"
 
         status = data.get('status')
+        message = data.get('message')
         result = data.get('result', [])
 
         if status == '1' and isinstance(result, list):
             return result, None
-        # Etherscan's contract for empty addresses is status=0 + empty result;
-        # we deliberately ignore the human-readable `message` field which
-        # varies by chain/version.
-        if status == '0' and result == []:
+        # Etherscan V2 reports "no transactions on this chain" via TWO shapes:
+        # `result: []` (older variant) and `message: 'NOTOK'` with `result`
+        # set to the generic string 'NOTOK' (current variant on BSC/OP/Base/
+        # Avalanche when an address has no txs). Real errors carry a specific
+        # message like 'Invalid API Key' or 'Max rate limit reached', so an
+        # exact-match check on the empty-signal strings is robust without
+        # silently masking auth or rate-limit failures.
+        if status == '0' and (result == [] or message in ('No transactions found', 'NOTOK')):
             return [], None
-        return [], f"Etherscan chainid={chainid} status={status} msg={data.get('message')!r}"
+        return [], f"Etherscan chainid={chainid} status={status} msg={message!r} result={result!r}"
 
     def _insert_rows(self, rows: List[Tuple]) -> int:
         """Batch-insert via execute_values. ON CONFLICT (tx_hash) DO NOTHING
