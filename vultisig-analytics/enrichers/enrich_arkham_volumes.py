@@ -33,6 +33,7 @@ class VolumeEnricher:
         self.db = psycopg2.connect(DATABASE_URL)
         self.extractor_path = os.path.join(
             os.path.dirname(__file__),
+            '..',
             'ingestors',
             'volume_extractor.js'
         )
@@ -273,7 +274,7 @@ class VolumeEnricher:
                 token_out_symbol = %s,
                 token_out_address = %s,
                 amount_in = %s,
-                volume_data_source = 'blockchain_rpc',
+                volume_data_source = 'estimated',
                 updated_at = NOW()
             WHERE tx_hash = %s
         """, (
@@ -303,14 +304,15 @@ class VolumeEnricher:
         """
         cursor = self.db.cursor(cursor_factory=RealDictCursor)
 
-        # Get records without token symbol data (what the dashboard needs for filtering)
-        # Records may have swap_volume_usd from Arkham but still need token symbols
+        # Get records that still need enrichment.
+        # Some rows are missing volume, some are missing token symbols, and
+        # some are missing both. Process all of them in one pass.
         query = """
             SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd
             FROM dex_aggregator_revenue
-            WHERE (token_in_symbol IS NULL OR token_out_symbol IS NULL)
+            WHERE (swap_volume_usd IS NULL OR token_in_symbol IS NULL OR token_out_symbol IS NULL)
               AND protocol IN %s
-            ORDER BY swap_volume_usd DESC NULLS LAST
+            ORDER BY timestamp DESC
         """
 
         if limit:
