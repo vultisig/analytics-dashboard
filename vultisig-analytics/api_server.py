@@ -27,6 +27,13 @@ CORS(app)
 # new Vultisig fee receiver is a single-site change.
 ARKHAM_PROVIDERS = config.ARKHAM_PROVIDERS
 KNOWN_PROVIDERS = ('thorchain', 'mayachain', 'lifi') + ARKHAM_PROVIDERS
+ARKHAM_SWAP_PATH_EXPR = """
+    CASE
+        WHEN token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
+            THEN COALESCE(NULLIF(chain, ''), 'Unknown chain') || ': ' || token_in_symbol || ' -> ' || token_out_symbol
+        ELSE COALESCE(NULLIF(chain, ''), 'Unknown chain') || ': token symbols unavailable'
+    END
+"""
 
 
 @app.errorhandler(ValueError)
@@ -1194,21 +1201,18 @@ def get_revenue():
             ORDER BY source, total_revenue DESC
         """
 
-        # Path queries GROUP BY token symbols to label routes; etherscan-sourced
-        # rows have null symbols, so we exclude them here (their dollar values
-        # still flow through the revenue/volume aggregates above).
+        # Etherscan-sourced KyberSwap rows can lack token symbols. Keep them
+        # visible with a chain-level fallback instead of emitting NULL labels.
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
-                token_in_symbol || ' -> ' || token_out_symbol as swap_path,
+                {ARKHAM_SWAP_PATH_EXPR} as swap_path,
                 COALESCE(SUM(actual_fee_usd), 0) as total_revenue,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY protocol, token_in_symbol, token_out_symbol
+            GROUP BY protocol, swap_path
             ORDER BY total_revenue DESC
             LIMIT 10
         """
@@ -1561,19 +1565,17 @@ def get_swap_volume():
             ORDER BY source, total_volume DESC
         """
 
-        # See arkham_paths_query in /api/revenue — same NULL-symbol guard.
+        # See arkham_paths_query in /api/revenue — same chain-level fallback.
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
-                token_in_symbol || ' -> ' || token_out_symbol as swap_path,
+                {ARKHAM_SWAP_PATH_EXPR} as swap_path,
                 COALESCE(SUM(swap_volume_usd), 0) as total_volume,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY protocol, token_in_symbol, token_out_symbol
+            GROUP BY protocol, swap_path
             ORDER BY total_volume DESC
             LIMIT 10
         """
@@ -1931,19 +1933,17 @@ def get_swap_count():
             ORDER BY source, swap_count DESC
         """
 
-        # See arkham_paths_query in /api/revenue — same NULL-symbol guard.
+        # See arkham_paths_query in /api/revenue — same chain-level fallback.
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
-                token_in_symbol || ' -> ' || token_out_symbol as swap_path,
+                {ARKHAM_SWAP_PATH_EXPR} as swap_path,
                 COALESCE(SUM(swap_volume_usd), 0) as total_volume,
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND token_in_symbol IS NOT NULL
-                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
-            GROUP BY protocol, token_in_symbol, token_out_symbol
+            GROUP BY protocol, swap_path
             ORDER BY swap_count DESC
             LIMIT 10
         """
