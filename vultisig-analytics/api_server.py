@@ -1194,6 +1194,9 @@ def get_revenue():
             ORDER BY source, total_revenue DESC
         """
 
+        # Path queries GROUP BY token symbols to label routes; etherscan-sourced
+        # rows have null symbols, so we exclude them here (their dollar values
+        # still flow through the revenue/volume aggregates above).
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
@@ -1202,8 +1205,8 @@ def get_revenue():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND (fee_data_source = 'etherscan'
-                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+                AND token_in_symbol IS NOT NULL
+                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_revenue DESC
@@ -1558,6 +1561,7 @@ def get_swap_volume():
             ORDER BY source, total_volume DESC
         """
 
+        # See arkham_paths_query in /api/revenue — same NULL-symbol guard.
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
@@ -1566,8 +1570,8 @@ def get_swap_volume():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND (fee_data_source = 'etherscan'
-                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+                AND token_in_symbol IS NOT NULL
+                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY total_volume DESC
@@ -1927,6 +1931,7 @@ def get_swap_count():
             ORDER BY source, swap_count DESC
         """
 
+        # See arkham_paths_query in /api/revenue — same NULL-symbol guard.
         arkham_paths_query = f"""
             SELECT
                 protocol as source,
@@ -1935,8 +1940,8 @@ def get_swap_count():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
-                AND (fee_data_source = 'etherscan'
-                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+                AND token_in_symbol IS NOT NULL
+                AND token_out_symbol IS NOT NULL
                 {date_filter_arkham}
             GROUP BY protocol, token_in_symbol, token_out_symbol
             ORDER BY swap_count DESC

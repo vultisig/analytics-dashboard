@@ -23,8 +23,9 @@ export function TopPathsChart({
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
     const [showPercentage, setShowPercentage] = useState(true);
 
-    // Sort data by the specified dataKey descending and take top 10
+    // Etherscan-sourced rows have null token symbols, so swap_path is null — drop them.
     const sortedData = [...data]
+        .filter(item => item?.name)
         .sort((a, b) => (b[dataKey] || 0) - (a[dataKey] || 0))
         .slice(0, 10);
 
