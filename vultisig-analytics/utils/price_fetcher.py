@@ -159,20 +159,12 @@ class PriceFetcher:
         cached_price = self._check_cache(token_id, price_date)
         if cached_price is not None:
             return cached_price
-        
-        # Use asyncio to run the async fetch
+
+        # asyncio.run creates a fresh event loop, so this works from any
+        # thread — asyncio.get_event_loop() raises in non-main threads
+        # (the sync service calls this from ThreadPoolExecutor workers).
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If loop is already running, create a new thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.get_historical_price_async(token_id, price_date))
-                    price = future.result(timeout=30)
-            else:
-                price = loop.run_until_complete(self.get_historical_price_async(token_id, price_date))
-            
-            return price
+            return asyncio.run(self.get_historical_price_async(token_id, price_date))
         except Exception as e:
             logger.error(f"Error in synchronous price fetch: {e}")
             return None
