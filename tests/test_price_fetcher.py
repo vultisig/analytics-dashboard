@@ -7,12 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-if "psycopg2" not in sys.modules:
-    _mock_pg = MagicMock()
-    sys.modules["psycopg2"] = _mock_pg
-    sys.modules["psycopg2.extras"] = _mock_pg.extras
-if "aiohttp" not in sys.modules:
-    sys.modules["aiohttp"] = MagicMock()
+# Another test module may have mocked psycopg2 already (without the extras
+# submodule), so register both unconditionally-but-idempotently.
+sys.modules.setdefault("psycopg2", MagicMock())
+sys.modules.setdefault("psycopg2.extras", MagicMock())
+sys.modules.setdefault("aiohttp", MagicMock())
 
 _VA = os.path.join(os.path.dirname(__file__), "..", "vultisig-analytics")
 if os.path.isdir(_VA) and _VA not in sys.path:
