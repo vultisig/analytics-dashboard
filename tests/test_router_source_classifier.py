@@ -299,5 +299,40 @@ class TestAssetSymbol(unittest.TestCase):
 
 
 
+
+# ---------------------------------------------------------------------------
+# sync_attributed_gap_rows
+# ---------------------------------------------------------------------------
+
+class TestSyncAttributedGapRows(unittest.TestCase):
+    def _db(self, rowcount=0):
+        db = MagicMock()
+        cur = MagicMock()
+        cur.rowcount = rowcount
+        db.cursor.return_value = cur
+        return db, cur
+
+    def test_inserts_with_conflict_guard_and_grace(self):
+        db, cur = self._db(rowcount=1)
+        inserted = rsc.sync_attributed_gap_rows(db)
+
+        self.assertEqual(inserted, 1)
+        sql = cur.execute.call_args[0][0]
+        self.assertIn('ON CONFLICT (tx_hash) DO NOTHING', sql)
+        self.assertIn('NOT EXISTS', sql)
+        params = cur.execute.call_args[0][1]
+        self.assertEqual(params[0], rsc.config.ATTRIBUTED_LIFI_TOOLS)
+        self.assertEqual(params[2], rsc.config.LIFI_MATCH_GRACE_DAYS)
+        db.commit.assert_called_once()
+
+    def test_chain_case_covers_every_known_chain(self):
+        db, cur = self._db()
+        rsc.sync_attributed_gap_rows(db)
+        sql = cur.execute.call_args[0][0]
+        for name, chainid in rsc.CHAIN_TO_ID.items():
+            self.assertIn(f"WHEN '{chainid}' THEN '{name}'", sql)
+
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -260,6 +260,60 @@ def _resolve_lifi_diamond(db, row_id: int, tx_hash: str, row_ts: datetime, count
         counts['deferred'] += 1
 
 
+def sync_attributed_gap_rows(db) -> int:
+    """Synthesize fee rows for attributed swaps that never produced one.
+
+    A fee-less or native-token-fee swap leaves no ERC20 transfer, so the
+    etherscan ingestor has nothing to ingest and the swap — relabeled out of
+    the lifi series — would otherwise be credited nowhere. Waits the same
+    grace window as classification so a late-arriving real fee row wins.
+    """
+    chain_case = ' '.join(
+        f"WHEN '{chainid}' THEN '{name}'" for name, chainid in CHAIN_TO_ID.items()
+    )
+    known_chainids = tuple(str(chainid) for chainid in CHAIN_TO_ID.values())
+    cur = db.cursor()
+    cur.execute(
+        f"""
+        INSERT INTO dex_aggregator_revenue (
+            tx_hash, chain, protocol, timestamp, actual_fee_usd,
+            swap_volume_usd, token_in_symbol, token_out_symbol,
+            amount_in, amount_out, from_address,
+            fee_data_source, volume_data_source
+        )
+        SELECT
+            s.in_tx_id,
+            CASE split_part(s.in_asset, '-', 2) {chain_case} END,
+            s.tool,
+            s.timestamp,
+            COALESCE(s.affiliate_fee_usd, 0),
+            s.in_amount_usd,
+            NULLIF(split_part(s.in_asset, '-', 1), ''),
+            NULLIF(split_part(s.out_asset, '-', 1), ''),
+            s.in_amount,
+            s.out_amount,
+            LOWER(s.user_address),
+            'lifi',
+            'lifi_attribution'
+        FROM swaps s
+        WHERE s.tool IN %s
+          AND COALESCE(s.in_tx_id, '') <> ''
+          AND split_part(s.in_asset, '-', 2) IN %s
+          AND s.timestamp < NOW() - INTERVAL '1 day' * %s
+          AND NOT EXISTS (
+              SELECT 1 FROM dex_aggregator_revenue d
+              WHERE LOWER(d.tx_hash) = LOWER(s.in_tx_id)
+          )
+        ON CONFLICT (tx_hash) DO NOTHING
+        """,
+        (config.ATTRIBUTED_LIFI_TOOLS, known_chainids, config.LIFI_MATCH_GRACE_DAYS),
+    )
+    inserted = cur.rowcount
+    cur.close()
+    db.commit()
+    return inserted
+
+
 def reclassify_all(
     api_key: str,
     db,
