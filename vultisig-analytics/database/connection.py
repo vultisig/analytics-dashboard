@@ -45,7 +45,7 @@ class DatabaseManager:
             pool_1, pool_2, is_streaming_swap, swap_slip, volume_tier, raw_data, platform,
             in_address, in_tx_id, in_amount_raw, out_addresses, out_tx_ids, out_heights,
             affiliate_addresses, affiliate_fees_bps, metadata_complete,
-            in_price_usd, out_price_usd, network_fees_raw, pools_used, swap_status, swap_type, memo
+            in_price_usd, out_price_usd, network_fees_raw, pools_used, swap_status, swap_type, memo, tool
         ) VALUES (
             %(timestamp)s, %(tx_hash)s, %(source)s, %(date_only)s, %(block_height)s, %(user_address)s,
             %(in_asset)s, %(in_amount)s, %(in_amount_usd)s, %(out_asset)s, %(out_amount)s, %(out_amount_usd)s,
@@ -53,9 +53,12 @@ class DatabaseManager:
             %(pool_1)s, %(pool_2)s, %(is_streaming_swap)s, %(swap_slip)s, %(volume_tier)s, %(raw_data)s, %(platform)s,
             %(in_address)s, %(in_tx_id)s, %(in_amount_raw)s, %(out_addresses)s, %(out_tx_ids)s, %(out_heights)s,
             %(affiliate_addresses)s, %(affiliate_fees_bps)s, %(metadata_complete)s,
-            %(in_price_usd)s, %(out_price_usd)s, %(network_fees_raw)s, %(pools_used)s, %(swap_status)s, %(swap_type)s, %(memo)s
+            %(in_price_usd)s, %(out_price_usd)s, %(network_fees_raw)s, %(pools_used)s, %(swap_status)s, %(swap_type)s, %(memo)s, %(tool)s
         ) ON CONFLICT (timestamp, tx_hash, source) DO NOTHING
         """
+
+        for swap in swaps_data:
+            swap.setdefault('tool', None)
 
         with self.get_connection() as conn:
             with conn.cursor() as cursor:

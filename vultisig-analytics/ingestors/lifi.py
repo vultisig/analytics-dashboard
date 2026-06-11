@@ -192,11 +192,18 @@ class LiFiIngestor(BaseIngestor):
             # Memo equivalent (integrator info)
             memo = integrator if integrator else ''
 
+            # Swaps executed by an attributed aggregator (e.g. 1inch under the
+            # LI.FI umbrella) are credited to that aggregator. Their fee rows
+            # in dex_aggregator_revenue carry the display; this relabel keeps
+            # them out of the lifi series so nothing double-counts.
+            source = tool if tool in config.ATTRIBUTED_LIFI_TOOLS else self.source_name
+
             return {
                 # Existing fields
                 'timestamp': timestamp,
                 'date_only': timestamp.date(),
-                'source': self.source_name,
+                'source': source,
+                'tool': tool or None,
                 'tx_hash': transaction_id,  # Use transactionId as primary
                 'block_height': block_height,
                 'user_address': from_address,

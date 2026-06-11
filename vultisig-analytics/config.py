@@ -43,6 +43,24 @@ class Config:
     ]
     ARKHAM_PROVIDERS = tuple(name for name, _ in ARKHAM_FEE_RECEIVERS)
 
+    # LI.FI Diamond proxy — tx.to for every LI.FI-routed swap on all EVM chains.
+    LIFI_DIAMOND_ADDRESS = "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae"
+    # li.quest `tool` values credited as their own provider instead of 'lifi'.
+    ATTRIBUTED_LIFI_TOOLS = ("1inch",)
+    # How long a LiFi-Diamond fee row may wait for its li.quest swap to land
+    # before the classifier gives up and demotes it to 'other'.
+    LIFI_MATCH_GRACE_DAYS = 7
+
+    # Attributed rows live in dex_aggregator_revenue, whose analytics queries
+    # filter to ARKHAM_PROVIDERS — a tool outside that set would be credited
+    # into rows no query ever shows.
+    _unknown_tools = set(ATTRIBUTED_LIFI_TOOLS) - set(ARKHAM_PROVIDERS)
+    if _unknown_tools:
+        raise ValueError(
+            f"ATTRIBUTED_LIFI_TOOLS {_unknown_tools} missing from ARKHAM_PROVIDERS — "
+            "attributed swaps would be invisible in analytics"
+        )
+
     # Rate limiting - Per-source delays (seconds between requests)
     API_DELAY_SECONDS = 2  # Default fallback
     API_DELAYS = {
