@@ -679,3 +679,38 @@ class TestParseSwapVariants(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# parse_swap — tool capture + aggregator attribution
+# ---------------------------------------------------------------------------
+
+class TestToolAttribution(unittest.TestCase):
+    def setUp(self):
+        self.ing = LiFiIngestor()
+
+    def test_tool_stored_as_column(self):
+        result = self.ing.parse_swap(_clone(0))
+        self.assertEqual(result["tool"], "kyberswap")
+
+    def test_unattributed_tool_keeps_lifi_source(self):
+        result = self.ing.parse_swap(_clone(0))
+        self.assertEqual(result["source"], "lifi")
+
+    def test_attributed_tool_relabels_source(self):
+        """1inch-executed LI.FI swaps are credited to 1inch; the relabel keeps
+        them out of the lifi series (source != '1inch' filters)."""
+        raw = _clone(0)
+        raw["tool"] = "1inch"
+        result = self.ing.parse_swap(raw)
+        self.assertEqual(result["source"], "1inch")
+        self.assertEqual(result["tool"], "1inch")
+
+    def test_missing_tool_stored_as_none(self):
+        raw = _clone(0)
+        raw.pop("tool", None)
+        result = self.ing.parse_swap(raw)
+        self.assertIsNone(result["tool"])
+        self.assertEqual(result["source"], "lifi")
+
+

@@ -22,6 +22,11 @@ KYBER_V2_ROUTER = '0x6131b5fae19ea4f9d964eac0408e4408b66337b5'
 ONEINCH_V5_ROUTER = '0x1111111254eeb25477b68fb85ed929f73a960582'
 THORCHAIN_ROUTER = '0xd37bbe5744d730a1d98d8dc97c42f0ca46ad7146'
 TREASURY_EOA = '0x890b0a47d192857d41f3e50fa6338dc47944b9fc'
+LIFI_DIAMOND = rsc.config.LIFI_DIAMOND_ADDRESS
+
+from datetime import datetime, timedelta  # noqa: E402
+OLD_TS = datetime.utcnow() - timedelta(days=30)
+FRESH_TS = datetime.utcnow()
 
 
 def _mock_get(to_addr):
@@ -91,7 +96,7 @@ class TestClassifyRow(unittest.TestCase):
     @patch.object(rsc.requests, 'get')
     def test_router_tx_kept(self, mock_get):
         mock_get.return_value = _mock_get(KYBER_V2_ROUTER)
-        final, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
         self.assertEqual(final, 'kyberswap')
         self.assertIsNone(err)
 
@@ -99,7 +104,7 @@ class TestClassifyRow(unittest.TestCase):
     def test_non_router_demoted(self, mock_get):
         # Treasury EOA → tx.to is the EOA itself (not a router)
         mock_get.return_value = _mock_get(TREASURY_EOA)
-        final, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
         self.assertEqual(final, 'other')
         self.assertIsNone(err)
 
@@ -108,14 +113,14 @@ class TestClassifyRow(unittest.TestCase):
         """The receiver also catches THORChain affiliate fees — they must
         not be tagged as kyberswap (already captured by the thorchain ingestor)."""
         mock_get.return_value = _mock_get(THORCHAIN_ROUTER)
-        final, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
         self.assertEqual(final, 'other')
         self.assertIsNone(err)
 
     @patch.object(rsc.requests, 'get')
     def test_oneinch_router_kept_for_oneinch_source(self, mock_get):
         mock_get.return_value = _mock_get(ONEINCH_V5_ROUTER)
-        final, err = rsc.classify_row('key', 1, '0xabc', '1inch')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', '1inch')
         self.assertEqual(final, '1inch')
         self.assertIsNone(err)
 
@@ -124,7 +129,7 @@ class TestClassifyRow(unittest.TestCase):
         """1inch router on a kyberswap-tagged row → demote (defensible to be
         strict; cross-protocol attribution would require calldata decode)."""
         mock_get.return_value = _mock_get(ONEINCH_V5_ROUTER)
-        final, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
         self.assertEqual(final, 'other')
 
     @patch.object(rsc.requests, 'get')
@@ -133,7 +138,7 @@ class TestClassifyRow(unittest.TestCase):
         an inability to classify, never a forced demote."""
         import requests as req
         mock_get.side_effect = req.exceptions.Timeout('timeout')
-        final, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
         self.assertIsNone(final)
         self.assertIsNotNone(err)
 
@@ -164,8 +169,8 @@ class TestReclassifyAll(unittest.TestCase):
     @patch.object(rsc.requests, 'get')
     def test_kept_and_demoted_counts(self, mock_get, _mock_time):
         rows = [
-            (1, '0xkeep', 'Ethereum', 'kyberswap'),
-            (2, '0xdrop', 'Ethereum', 'kyberswap'),
+            (1, '0xkeep', 'Ethereum', 'kyberswap', OLD_TS),
+            (2, '0xdrop', 'Ethereum', 'kyberswap', OLD_TS),
         ]
         # First call returns kyber router; second returns treasury EOA
         mock_get.side_effect = [_mock_get(KYBER_V2_ROUTER), _mock_get(TREASURY_EOA)]
@@ -185,7 +190,7 @@ class TestReclassifyAll(unittest.TestCase):
         """Fail-open invariant: a row whose classification API call errors
         must NOT be UPDATEd. It stays unclassified and retries next cycle."""
         import requests as req
-        rows = [(1, '0xerr', 'Ethereum', 'kyberswap')]
+        rows = [(1, '0xerr', 'Ethereum', 'kyberswap', OLD_TS)]
         mock_get.side_effect = req.exceptions.ConnectionError('boom')
         db, update_cursor = self._mock_db(rows)
 
@@ -199,12 +204,99 @@ class TestReclassifyAll(unittest.TestCase):
     @patch.object(rsc, 'time')
     @patch.object(rsc.requests, 'get')
     def test_unknown_chain_skipped_without_api_call(self, mock_get, _mock_time):
-        rows = [(1, '0xabc', 'Solana', 'kyberswap')]  # not in CHAIN_TO_ID
+        rows = [(1, '0xabc', 'Solana', 'kyberswap', OLD_TS)]  # not in CHAIN_TO_ID
         db, update_cursor = self._mock_db(rows)
         counts = rsc.reclassify_all('key', db)
         self.assertEqual(counts['skipped_unknown_chain'], 1)
         mock_get.assert_not_called()
         update_cursor.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# reclassify_all — LiFi Diamond attribution
+# ---------------------------------------------------------------------------
+
+ONEINCH_SWAP = {
+    'tool': '1inch',
+    'in_amount_usd': 1234.5,
+    'affiliate_fee_usd': 6.17,
+    'in_asset': 'VULT-1',
+    'out_asset': 'USDC-1',
+    'in_amount': 2000.0,
+}
+
+
+class TestLifiDiamondAttribution(TestReclassifyAll):
+    @patch.object(rsc, 'time')
+    @patch.object(rsc.requests, 'get')
+    def test_oneinch_tool_attributed_with_liquest_values(self, mock_get, _mock_time):
+        rows = [(1, '0xfee', 'Ethereum', '1inch', OLD_TS)]
+        mock_get.return_value = _mock_get(LIFI_DIAMOND)
+        db, update_cursor = self._mock_db(rows)
+
+        with patch.object(rsc, 'fetch_lifi_swap', return_value=dict(ONEINCH_SWAP)):
+            counts = rsc.reclassify_all('key', db)
+
+        self.assertEqual(counts['attributed'], 1)
+        self.assertEqual(counts['demoted'], 0)
+        params = update_cursor.execute.call_args[0][1]
+        self.assertEqual(params[0], '1inch')      # protocol
+        self.assertEqual(params[1], 1234.5)       # swap_volume_usd
+        self.assertEqual(params[2], 6.17)         # actual_fee_usd
+        self.assertEqual(params[3], 'VULT')       # token_in_symbol
+        self.assertEqual(params[4], 'USDC')       # token_out_symbol
+
+    @patch.object(rsc, 'time')
+    @patch.object(rsc.requests, 'get')
+    def test_unattributed_tool_demoted(self, mock_get, _mock_time):
+        rows = [(1, '0xfee', 'Ethereum', '1inch', OLD_TS)]
+        mock_get.return_value = _mock_get(LIFI_DIAMOND)
+        db, update_cursor = self._mock_db(rows)
+
+        swap = dict(ONEINCH_SWAP, tool='sushiswap')
+        with patch.object(rsc, 'fetch_lifi_swap', return_value=swap):
+            counts = rsc.reclassify_all('key', db)
+
+        self.assertEqual(counts['demoted'], 1)
+        self.assertEqual(counts['attributed'], 0)
+
+    @patch.object(rsc, 'time')
+    @patch.object(rsc.requests, 'get')
+    def test_missing_swap_defers_fresh_row(self, mock_get, _mock_time):
+        """The lifi sync runs in parallel — a fee row may land before its
+        li.quest swap. Fresh rows must wait, not get demoted."""
+        rows = [(1, '0xfee', 'Ethereum', '1inch', FRESH_TS)]
+        mock_get.return_value = _mock_get(LIFI_DIAMOND)
+        db, update_cursor = self._mock_db(rows)
+
+        with patch.object(rsc, 'fetch_lifi_swap', return_value=None):
+            counts = rsc.reclassify_all('key', db)
+
+        self.assertEqual(counts['deferred'], 1)
+        update_cursor.execute.assert_not_called()
+
+    @patch.object(rsc, 'time')
+    @patch.object(rsc.requests, 'get')
+    def test_missing_swap_demotes_after_grace(self, mock_get, _mock_time):
+        rows = [(1, '0xfee', 'Ethereum', '1inch', OLD_TS)]
+        mock_get.return_value = _mock_get(LIFI_DIAMOND)
+        db, update_cursor = self._mock_db(rows)
+
+        with patch.object(rsc, 'fetch_lifi_swap', return_value=None):
+            counts = rsc.reclassify_all('key', db)
+
+        self.assertEqual(counts['demoted'], 1)
+
+
+class TestAssetSymbol(unittest.TestCase):
+    def test_strips_chain_suffix(self):
+        self.assertEqual(rsc._asset_symbol('USDC-1'), 'USDC')
+
+    def test_handles_empty(self):
+        self.assertIsNone(rsc._asset_symbol(''))
+        self.assertIsNone(rsc._asset_symbol(None))
+        self.assertIsNone(rsc._asset_symbol('-1'))
+
 
 
 if __name__ == '__main__':

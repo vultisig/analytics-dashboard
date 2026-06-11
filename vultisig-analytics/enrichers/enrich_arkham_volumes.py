@@ -11,7 +11,6 @@ import subprocess
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
-from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -19,11 +18,43 @@ load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import config  # noqa: E402
+from utils.price_fetcher import PriceFetcher  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv('DATABASE_URL')
+
+# Vultisig charges 50 bps on aggregator swaps, so volume = fee / 0.005.
+# Matches the volume_to_fee_ratio of historical Arkham-sourced rows.
+VOLUME_TO_FEE_MULTIPLIER = 200
+
+# CoinGecko ids for fee tokens we can price. Fees in unmapped (long-tail)
+# tokens stay at 0 — the row is still marked processed so it never loops.
+COINGECKO_IDS = {
+    'ETH': 'ethereum', 'WETH': 'ethereum',
+    'BNB': 'binancecoin', 'WBNB': 'binancecoin',
+    'MATIC': 'matic-network', 'WMATIC': 'matic-network',
+    'POL': 'polygon-ecosystem-token',
+    'AVAX': 'avalanche-2', 'WAVAX': 'avalanche-2',
+    'USDC': 'usd-coin', 'USDC.E': 'usd-coin',
+    'USDT': 'tether',
+    'DAI': 'dai',
+    'WBTC': 'wrapped-bitcoin',
+    'VULT': 'vultisig',
+    'INJ': 'injective-protocol',
+}
+
+NATIVE_TOKENS = {
+    'Ethereum': 'ETH',
+    'BSC': 'BNB',
+    'Polygon': 'MATIC',
+    'Arbitrum': 'ETH',
+    'Optimism': 'ETH',
+    'Base': 'ETH',
+    'Avalanche': 'AVAX',
+    'Blast': 'ETH',
+}
 
 class VolumeEnricher:
     def __init__(self):
@@ -31,6 +62,7 @@ class VolumeEnricher:
             raise ValueError("DATABASE_URL environment variable not set")
 
         self.db = psycopg2.connect(DATABASE_URL)
+        self.price_fetcher = PriceFetcher(DATABASE_URL)
         self.extractor_path = os.path.join(
             os.path.dirname(__file__),
             '..',
@@ -122,17 +154,7 @@ class VolumeEnricher:
             Token symbol or None if not found
         """
         if token_address == 'NATIVE' or not token_address:
-            chain_native_tokens = {
-                'Ethereum': 'ETH',
-                'BSC': 'BNB',
-                'Polygon': 'MATIC',
-                'Arbitrum': 'ETH',
-                'Optimism': 'ETH',
-                'Base': 'ETH',
-                'Avalanche': 'AVAX',
-                'Blast': 'ETH'
-            }
-            return chain_native_tokens.get(chain)
+            return NATIVE_TOKENS.get(chain)
 
         # Try to get token symbol from dex_aggregator_revenue table
         cursor = self.db.cursor(cursor_factory=RealDictCursor)
@@ -159,141 +181,94 @@ class VolumeEnricher:
 
         return None
 
-    def get_token_price_usd(self, token_symbol: str, chain: str, timestamp: datetime) -> float:
+    def resolve_fee_usd(self, record: dict) -> float:
+        """USD value of the fee transfer at tx time.
+
+        Etherscan-ingested rows land with actual_fee_usd = 0 (the ingestor
+        can't price); the fee IS the transfer itself, so price its token via
+        CoinGecko. Unmapped tokens return 0 — fee unknown.
         """
-        Get token price in USD from historical_prices table.
-        Falls back to current price if historical not available.
-        """
-        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        existing = record.get('actual_fee_usd')
+        if existing:
+            return float(existing)
 
-        # Try to find price around the transaction timestamp
-        cursor.execute("""
-            SELECT price_usd
-            FROM historical_prices
-            WHERE token_symbol = %s
-              AND chain = %s
-              AND timestamp <= %s
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """, (token_symbol, chain, timestamp))
+        token_id = COINGECKO_IDS.get((record.get('fee_token_symbol') or '').upper())
+        if not token_id or not record.get('fee_amount_raw'):
+            return 0.0
 
-        result = cursor.fetchone()
-        if result:
-            return float(result['price_usd'])
+        price = self.price_fetcher.get_historical_price(token_id, record['timestamp'].date())
+        if not price:
+            return 0.0
+        return float(record['fee_amount_raw']) * price
 
-        # Fallback: Try without chain restriction
-        cursor.execute("""
-            SELECT price_usd
-            FROM historical_prices
-            WHERE token_symbol = %s
-              AND timestamp <= %s
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """, (token_symbol, timestamp))
+    def extract_swap_path(self, record: dict) -> dict:
+        """Token in/out symbols + amounts for the swap, via volume_extractor.js.
+        Returns {} when the tx can't be parsed — path display stays empty."""
+        volume_data = self.call_volume_extractor(record['tx_hash'], record['chain'])
+        if not volume_data or not volume_data.get('amount'):
+            return {}
 
-        result = cursor.fetchone()
-        if result:
-            return float(result['price_usd'])
-
-        # No price found
-        logger.warning(f"No price found for {token_symbol} on {chain} at {timestamp}")
-        return 0.0
-
-    def enrich_record(self, record: dict) -> bool:
-        """
-        Enrich a single Arkham record with volume data from blockchain.
-
-        Returns:
-            True if successfully enriched, False otherwise
-        """
-        tx_hash = record['tx_hash']
         chain = record['chain']
-        timestamp = record['timestamp']
-
-        logger.info(f"Enriching {tx_hash} on {chain}")
-
-        # Call volume extractor
-        volume_data = self.call_volume_extractor(tx_hash, chain)
-
-        if not volume_data:
-            logger.warning(f"Could not extract volume for {tx_hash}")
-            return False
-
-        # Extract data
-        raw_amount = volume_data.get('amount')
         token_address = volume_data.get('token')
-        token_out_address = volume_data.get('tokenOut')  # Extract destination token
-        decimals = volume_data.get('decimals', 18)
-        tx_type = volume_data.get('type')
-
-        if not raw_amount:
-            logger.warning(f"No amount found in extracted data for {tx_hash}")
-            return False
-
-        # Convert to human-readable
-        amount_in = self.convert_to_human_readable(raw_amount, decimals)
-
-        # Get token symbols from extractor (more reliable than database lookup)
+        token_out_address = volume_data.get('tokenOut')
         token_in_symbol = volume_data.get('tokenSymbol')
         token_out_symbol = volume_data.get('tokenOutSymbol')
 
-        # Fallback: try database lookup if extractor didn't provide symbols
         if not token_in_symbol and token_address:
             token_in_symbol = self.get_token_symbol_from_address(token_address, chain)
-
         if not token_out_symbol and token_out_address:
             token_out_symbol = self.get_token_symbol_from_address(token_out_address, chain)
-
-        # Handle NATIVE token symbol conversion
         if token_in_symbol == 'NATIVE':
-            chain_native_tokens = {
-                'Ethereum': 'ETH',
-                'BSC': 'BNB',
-                'Polygon': 'MATIC',
-                'Arbitrum': 'ETH',
-                'Optimism': 'ETH',
-                'Base': 'ETH',
-                'Avalanche': 'AVAX',
-                'Blast': 'ETH'
-            }
-            token_in_symbol = chain_native_tokens.get(chain, token_in_symbol)
+            token_in_symbol = NATIVE_TOKENS.get(chain, token_in_symbol)
 
-        # Calculate volume in USD using the same logic as existing records
-        # Vultisig takes 0.5% fee, so: volume = fee / 0.005 = fee * 200
-        # This matches the existing data pattern (volume_to_fee_ratio = 200x)
-        swap_volume_usd = record['actual_fee_usd'] * 200 if record.get('actual_fee_usd') else None
+        return {
+            'token_in_symbol': token_in_symbol,
+            'token_in_address': token_address,
+            'token_out_symbol': token_out_symbol,
+            'token_out_address': token_out_address,
+            'amount_in': self.convert_to_human_readable(
+                volume_data['amount'], volume_data.get('decimals', 18)
+            ),
+        }
 
-        # Update database with both token_in and token_out
+    def apply_updates(self, tx_hash: str, updates: dict) -> None:
+        """Persist enrichment results. Always stamps volume_data_source =
+        'estimated' so the row is never re-selected — that stamp is the
+        loop-breaker for rows whose fee token can't be priced."""
+        updates = {**updates, 'volume_data_source': 'estimated'}
+        set_clause = ', '.join(f"{col} = %s" for col in updates)
         cursor = self.db.cursor()
-        cursor.execute("""
-            UPDATE dex_aggregator_revenue
-            SET
-                swap_volume_usd = %s,
-                token_in_symbol = %s,
-                token_in_address = %s,
-                token_out_symbol = %s,
-                token_out_address = %s,
-                amount_in = %s,
-                volume_data_source = 'estimated',
-                updated_at = NOW()
-            WHERE tx_hash = %s
-        """, (
-            swap_volume_usd,
-            token_in_symbol,
-            token_address,
-            token_out_symbol,
-            token_out_address,
-            amount_in,
-            tx_hash
-        ))
+        cursor.execute(
+            f"UPDATE dex_aggregator_revenue SET {set_clause}, updated_at = NOW() WHERE tx_hash = %s",
+            (*updates.values(), tx_hash),
+        )
 
-        # Log with swap path if available
-        volume_str = f"${swap_volume_usd:.2f}" if swap_volume_usd else "N/A"
-        if token_out_symbol:
-            logger.info(f"✓ Enriched {tx_hash}: {token_in_symbol} → {token_out_symbol} ({amount_in:.4f} {token_in_symbol}, volume: {volume_str})")
-        else:
-            logger.info(f"✓ Enriched {tx_hash}: {amount_in:.4f} {token_in_symbol} (volume: {volume_str})")
-        return True
+    def enrich_record(self, record: dict) -> bool:
+        """Price the fee, estimate volume, and fill the swap path for one row.
+
+        Returns True if anything beyond the processed-stamp was written.
+        """
+        tx_hash = record['tx_hash']
+        logger.info(f"Enriching {tx_hash} on {record['chain']}")
+
+        updates = {}
+        if record.get('swap_volume_usd') is None:
+            fee_usd = self.resolve_fee_usd(record)
+            if fee_usd:
+                updates['swap_volume_usd'] = fee_usd * VOLUME_TO_FEE_MULTIPLIER
+                if not record.get('actual_fee_usd'):
+                    updates['actual_fee_usd'] = fee_usd
+
+        if not record.get('token_in_symbol') or not record.get('token_out_symbol'):
+            updates.update(self.extract_swap_path(record))
+
+        self.apply_updates(tx_hash, updates)
+
+        path = f"{updates.get('token_in_symbol', '?')} → {updates.get('token_out_symbol', '?')}"
+        volume = updates.get('swap_volume_usd')
+        volume_str = f"${volume:.2f}" if volume else "N/A"
+        logger.info(f"✓ Enriched {tx_hash}: {path} (volume: {volume_str})")
+        return bool(updates)
 
     def enrich_all_missing_volumes(self, limit: int = None):
         """
@@ -304,14 +279,24 @@ class VolumeEnricher:
         """
         cursor = self.db.cursor(cursor_factory=RealDictCursor)
 
-        # Get records that still need enrichment.
-        # Some rows are missing volume, some are missing token symbols, and
-        # some are missing both. Process all of them in one pass.
+        # Rows that still need enrichment AND haven't been processed before.
+        # Etherscan rows wait for the router classifier ('router_check') so we
+        # never enrich a row that later gets demoted; processing stamps
+        # 'estimated', which removes the row from this scope permanently —
+        # rows with unpriceable fee tokens must not be retried every cycle.
         query = """
-            SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd
+            SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd,
+                   token_in_symbol, token_out_symbol,
+                   fee_token_symbol, fee_amount_raw, fee_data_source
             FROM dex_aggregator_revenue
             WHERE (swap_volume_usd IS NULL OR token_in_symbol IS NULL OR token_out_symbol IS NULL)
               AND protocol IN %s
+              AND (
+                    (fee_data_source = 'etherscan' AND volume_data_source = 'router_check')
+                 OR (fee_data_source IS DISTINCT FROM 'etherscan'
+                     AND (token_in_symbol IS NULL OR token_out_symbol IS NULL)
+                     AND volume_data_source IS DISTINCT FROM 'estimated')
+              )
             ORDER BY timestamp DESC
         """
 

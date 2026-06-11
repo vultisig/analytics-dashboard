@@ -43,6 +43,15 @@ class Config:
     ]
     ARKHAM_PROVIDERS = tuple(name for name, _ in ARKHAM_FEE_RECEIVERS)
 
+    # LI.FI Diamond proxy — tx.to for every LI.FI-routed swap on all EVM chains.
+    LIFI_DIAMOND_ADDRESS = "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae"
+    # li.quest `tool` values credited as their own provider instead of 'lifi'.
+    # Must stay a subset of ARKHAM_PROVIDERS so attributed rows remain visible.
+    ATTRIBUTED_LIFI_TOOLS = ("1inch",)
+    # How long a LiFi-Diamond fee row may wait for its li.quest swap to land
+    # before the classifier gives up and demotes it to 'other'.
+    LIFI_MATCH_GRACE_DAYS = 7
+
     # Rate limiting - Per-source delays (seconds between requests)
     API_DELAY_SECONDS = 2  # Default fallback
     API_DELAYS = {
