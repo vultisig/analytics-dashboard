@@ -10,7 +10,10 @@ from ingestors.thorchain import THORChainIngestor
 from ingestors.mayachain import MayaChainIngestor
 from ingestors.lifi import LiFiIngestor
 from ingestors.etherscan_ingestor import EtherscanIngestor
-from ingestors.router_source_classifier import reclassify_all as reclassify_etherscan_rows
+from ingestors.router_source_classifier import (
+    reclassify_all as reclassify_etherscan_rows,
+    sync_attributed_gap_rows,
+)
 from ingestors.vult_holders import VultHoldersIngestor
 from enrichers.enrich_arkham_volumes import VolumeEnricher
 
@@ -74,6 +77,16 @@ class SyncService:
                         reclassify_etherscan_rows(ingestor.api_key, conn)
                 except Exception as e:
                     logger.error(f"Router-source classifier crashed: {e}")
+
+                # Attributed swaps without an on-chain fee transfer (fee-less
+                # or native-fee) get a synthetic revenue row so they aren't
+                # credited nowhere after leaving the lifi series.
+                try:
+                    with db_manager.get_connection() as conn:
+                        gap_rows = sync_attributed_gap_rows(conn)
+                    logger.info(f"Attribution gap filler: {gap_rows} synthetic fee rows inserted")
+                except Exception as e:
+                    logger.error(f"Attribution gap filler crashed: {e}")
 
                 try:
                     logger.info("Running Arkham volume enrichment for missing token/volume fields")
