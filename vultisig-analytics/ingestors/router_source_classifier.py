@@ -253,16 +253,11 @@ def _resolve_lifi_diamond(db, row_id: int, tx_hash: str, row_ts: datetime, count
     if swap and swap['tool'] in config.ATTRIBUTED_LIFI_TOOLS:
         apply_attribution(db, row_id, swap)
         counts['attributed'] += 1
-    elif swap:
-        apply_classification(db, row_id, 'other')
-        counts['demoted'] += 1
-    elif datetime.utcnow() - row_ts > timedelta(days=config.LIFI_MATCH_GRACE_DAYS):
+    elif swap or datetime.utcnow() - row_ts > timedelta(days=config.LIFI_MATCH_GRACE_DAYS):
         apply_classification(db, row_id, 'other')
         counts['demoted'] += 1
     else:
         counts['deferred'] += 1
-        return
-    db.commit()
 
 
 def reclassify_all(
@@ -297,13 +292,12 @@ def reclassify_all(
         if final == protocol:
             counts['kept'] += 1
             apply_classification(db, row_id, final)
-            db.commit()
         elif tx_to == config.LIFI_DIAMOND_ADDRESS:
             _resolve_lifi_diamond(db, row_id, tx_hash, row_ts, counts)
         else:
             counts['demoted'] += 1
             apply_classification(db, row_id, final)
-            db.commit()
+        db.commit()
         time.sleep(delay)
 
     logger.info(
