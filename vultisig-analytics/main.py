@@ -12,6 +12,7 @@ from ingestors.lifi import LiFiIngestor
 from ingestors.etherscan_ingestor import EtherscanIngestor
 from ingestors.router_source_classifier import reclassify_all as reclassify_etherscan_rows
 from ingestors.vult_holders import VultHoldersIngestor
+from enrichers.enrich_arkham_volumes import VolumeEnricher
 
 # Setup logging
 logging.basicConfig(
@@ -73,6 +74,16 @@ class SyncService:
                         reclassify_etherscan_rows(ingestor.api_key, conn)
                 except Exception as e:
                     logger.error(f"Router-source classifier crashed: {e}")
+
+                try:
+                    logger.info("Running Arkham volume enrichment for missing token/volume fields")
+                    enricher = VolumeEnricher()
+                    try:
+                        enricher.enrich_all_missing_volumes()
+                    finally:
+                        enricher.close()
+                except Exception as e:
+                    logger.error(f"Arkham volume enrichment crashed: {e}")
                 return
 
             sync_status = None
