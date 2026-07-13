@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ComponentType, JSX } from 'react';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartCard } from '@/components/ChartCard';
 import { StatsCard } from '@/components/StatsCard';
 import {
@@ -17,20 +17,25 @@ import {
 } from '@/icons';
 import {
     fetchTransparencyBuybacks,
+    fetchTransparencyLocked,
     fetchTransparencySummary,
     fetchTransparencyTreasury,
 } from '@/lib/api';
 import type {
     TransparencyBuybacks,
     TransparencyBuybackTrade,
+    TransparencyLockedData,
+    TransparencyLockedPosition,
     TransparencySummary,
     TransparencyTreasury,
 } from '@/lib/api';
 
 const DAY_IN_MILLISECONDS = 86_400_000;
 const ETHERSCAN_ADDRESS_URL = 'https://etherscan.io/address';
+const ETHERSCAN_TOKEN_URL = 'https://etherscan.io/token';
 const ETHERSCAN_TRANSACTION_URL = 'https://etherscan.io/tx';
 const BUYBACK_CHART_HEIGHT = 280;
+const PRICE_BAND_CHART_HEIGHT = 240;
 const USD_FORMATTER = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -52,6 +57,7 @@ const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
 
 type TransparencyData = {
     buybacks: TransparencyBuybacks;
+    locked: TransparencyLockedData;
     summary: TransparencySummary;
     treasury: TransparencyTreasury;
 };
@@ -64,31 +70,13 @@ type PipelineMetricProps = {
     icon: ComponentType<{ size?: number; className?: string }>;
 };
 
-type PendingSection = {
-    title: string;
-    subtitle: string;
-    zeroState: string;
-    icon: ComponentType<{ size?: number; className?: string }>;
-};
-
-const PENDING_SECTIONS: PendingSection[] = [
-    {
-        title: 'Buyback History',
-        subtitle: 'On-chain VULT buyback receipts',
-        zeroState: '0 buyback receipts recorded.',
-        icon: IconReceiptCheck,
-    },
-    {
-        title: 'Locked Liquidity',
-        subtitle: 'Dead-owned liquidity position receipts',
-        zeroState: '0 — first lock scheduled',
-        icon: IconVault,
-    },
-];
-
 function getTransparencyData(): Promise<TransparencyData> {
-    return Promise.all([fetchTransparencySummary(), fetchTransparencyTreasury(), fetchTransparencyBuybacks()])
-        .then(([summary, treasury, buybacks]) => ({ summary, treasury, buybacks }));
+    return Promise.all([
+        fetchTransparencySummary(),
+        fetchTransparencyTreasury(),
+        fetchTransparencyBuybacks(),
+        fetchTransparencyLocked(),
+    ]).then(([summary, treasury, buybacks, locked]) => ({ summary, treasury, buybacks, locked }));
 }
 
 function getEtherscanAddressUrl(address: string): string {
@@ -97,6 +85,10 @@ function getEtherscanAddressUrl(address: string): string {
 
 function getEtherscanTransactionUrl(transactionHash: string): string {
     return `${ETHERSCAN_TRANSACTION_URL}/${transactionHash}`;
+}
+
+function getEtherscanTokenUrl(contractAddress: string, tokenId: number): string {
+    return `${ETHERSCAN_TOKEN_URL}/${contractAddress}?a=${tokenId}`;
 }
 
 function formatUsd(value: number): string {
@@ -353,15 +345,136 @@ function BuybackHistory({ buybacks }: { buybacks: TransparencyBuybacks }): JSX.E
     );
 }
 
-function PendingSections(): JSX.Element {
+type PriceBandDatum = {
+    high: number;
+    low: number;
+    range: number;
+    tokenId: string;
+};
+
+type PriceBandTooltipProps = {
+    active?: boolean;
+    payload?: readonly { payload?: PriceBandDatum }[];
+};
+
+function getPriceBandData(positions: TransparencyLockedPosition[]): PriceBandDatum[] {
+    return [...positions]
+        .sort((first, second) => first.priceRangeUsd.low - second.priceRangeUsd.low)
+        .map(position => ({
+            high: position.priceRangeUsd.high,
+            low: position.priceRangeUsd.low,
+            range: position.priceRangeUsd.high - position.priceRangeUsd.low,
+            tokenId: `NFT #${position.tokenId}`,
+        }));
+}
+
+function PriceBandTooltip({ active, payload }: PriceBandTooltipProps): JSX.Element | null {
+    const band = payload?.[0]?.payload;
+    if (!active || !band) return null;
+
     return (
-        <>
-            {PENDING_SECTIONS.map(({ title, subtitle, zeroState, icon }) => (
-                <ChartCard key={title} title={title} subtitle={subtitle} icon={icon}>
-                    <p className="py-10 text-center text-sm text-[var(--text-tertiary)]">{zeroState}</p>
-                </ChartCard>
-            ))}
-        </>
+        <div className="rounded-xl border border-[var(--border-normal)] bg-[var(--surface-1)] p-3 text-sm shadow-xl">
+            <p className="font-medium text-[var(--text-primary)]">{band.tokenId}</p>
+            <p className="mt-1 text-[var(--text-secondary)]">{formatPrice(band.low)} to {formatPrice(band.high)}</p>
+        </div>
+    );
+}
+
+function LockedPositionReceipt({ position }: { position: TransparencyLockedPosition }): JSX.Element {
+    return (
+        <a
+            href={getEtherscanTokenUrl(position.nftContractAddress, position.tokenId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[var(--brand-blue-light)] hover:underline"
+        >
+            NFT #{position.tokenId}
+            <IconExternalLinkV className="size-3" />
+        </a>
+    );
+}
+
+function LockedLiquidityLedger({ locked }: { locked: TransparencyLockedData }): JSX.Element {
+    if (locked.positions.length === 0) {
+        return (
+            <ChartCard
+                title="Locked Liquidity"
+                subtitle="Dead-owned liquidity position receipts"
+                icon={IconVault}
+                action={<EtherscanLink address={locked.ownerAddress} label="View dead owner" />}
+            >
+                <p className="py-10 text-center text-sm text-[var(--text-tertiary)]">0 — first lock scheduled</p>
+            </ChartCard>
+        );
+    }
+
+    return (
+        <ChartCard
+            title="Locked Liquidity"
+            subtitle="Current composition at the pool tick"
+            icon={IconVault}
+            action={<EtherscanLink address={locked.ownerAddress} label="View dead owner" />}
+        >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <StatsCard title="VULT locked" value={formatVult(locked.vultLocked)} subtitle={`${locked.positionCount} NFT receipts`} icon={IconCoinV} />
+                <StatsCard title="USDC paired" value={formatUsd(locked.usdcLocked)} subtitle="Current position composition" icon={IconDollar} />
+                <StatsCard title="Current value" value={formatUsd(locked.valueUsd)} subtitle="At the live pool spot" icon={IconChart4} />
+            </div>
+            <div className="mt-6 overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="border-b border-[var(--border-normal)] text-xs text-[var(--text-tertiary)]">
+                        <tr>
+                            <th className="pb-3 font-medium">Locked NFT</th>
+                            <th className="pb-3 font-medium">Tick range</th>
+                            <th className="pb-3 font-medium">Price band</th>
+                            <th className="pb-3 font-medium">VULT</th>
+                            <th className="pb-3 font-medium">USDC</th>
+                            <th className="pb-3 font-medium">Current value</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-normal)]">
+                        {locked.positions.map(position => (
+                            <tr key={position.tokenId} className="text-[var(--text-secondary)]">
+                                <td className="py-3"><LockedPositionReceipt position={position} /></td>
+                                <td className="py-3">{position.tickRange.lower.toLocaleString()} to {position.tickRange.upper.toLocaleString()}</td>
+                                <td className="py-3">{formatPrice(position.priceRangeUsd.low)} to {formatPrice(position.priceRangeUsd.high)}</td>
+                                <td className="py-3 text-[var(--text-primary)]">{formatVult(position.composition.VULT)}</td>
+                                <td className="py-3 text-[var(--text-primary)]">{formatUsd(position.composition.USDC)}</td>
+                                <td className="py-3 text-[var(--text-primary)]">{formatUsd(position.valueUsd)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </ChartCard>
+    );
+}
+
+function PriceBandMap({ locked }: { locked: TransparencyLockedData }): JSX.Element {
+    const priceBands = getPriceBandData(locked.positions);
+    if (priceBands.length === 0) return <></>;
+
+    return (
+        <ChartCard
+            title="Liquidity Price Bands"
+            subtitle="Current pool spot relative to each locked NFT range"
+            icon={IconChart4}
+            action={<EtherscanLink address={locked.ownerAddress} label="View dead owner" />}
+        >
+            <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height={PRICE_BAND_CHART_HEIGHT}>
+                    <BarChart data={priceBands} layout="vertical" margin={{ top: 10, right: 20, bottom: 0, left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" horizontal={false} />
+                        <XAxis type="number" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={value => formatPrice(Number(value))} />
+                        <YAxis type="category" dataKey="tokenId" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} width={78} />
+                        <Tooltip content={({ active, payload }) => <PriceBandTooltip active={active} payload={payload} />} cursor={{ fill: 'rgba(6, 182, 212, 0.05)' }} />
+                        <ReferenceLine x={locked.spotPriceUsd} stroke="var(--alert-info)" strokeDasharray="4 4" label={{ value: 'Current spot', fill: '#94A3B8', fontSize: 12 }} />
+                        <Bar dataKey="low" stackId="price-band" fill="transparent" legendType="none" />
+                        <Bar dataKey="range" name="Locked price band" stackId="price-band" fill="var(--brand-blue-light)" radius={[4, 4, 4, 4]} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+        </ChartCard>
     );
 }
 
@@ -371,7 +484,8 @@ function TransparencyContent({ data }: { data: TransparencyData }): JSX.Element 
             <PipelineStrip summary={data.summary} />
             <TreasuryBalances treasury={data.treasury} />
             <BuybackHistory buybacks={data.buybacks} />
-            <PendingSections />
+            <LockedLiquidityLedger locked={data.locked} />
+            <PriceBandMap locked={data.locked} />
             <SupplyLedger summary={data.summary} />
         </>
     );
