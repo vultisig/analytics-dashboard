@@ -236,13 +236,8 @@ function TreasuryBalances({ treasury }: { treasury: TransparencyTreasury }): JSX
     );
 }
 
-function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Element {
-    const { supply, treasuryAddress } = summary;
-    const balances = [
-        { title: 'Circulating', value: formatVult(supply.circulatingVult), subtitle: 'Outside locked and treasury balances', icon: IconCoinV },
-        { title: 'Protocol-locked', value: formatVult(supply.protocolLockedVult), subtitle: 'Dead-owned liquidity positions', icon: IconReceiptCheck },
-        { title: 'Treasury unallocated', value: formatVult(supply.treasuryUnallocatedVult), subtitle: 'Live fee treasury balance', icon: IconWallet4 },
-    ];
+function SupplyComposition({ summary }: { summary: TransparencySummary }): JSX.Element {
+    const { supply } = summary;
     const supplyComposition = [
         { name: 'Circulating', value: Number(supply.circulatingVult) },
         { name: 'Treasury bought-back', value: Number(supply.treasuryUnallocatedVult) },
@@ -250,28 +245,38 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
     ];
 
     return (
-        <>
-            <ChartCard
-                title="Supply Ledger"
-                subtitle={`${formatVult(supply.totalVult)} total supply`}
-                icon={IconChart4}
-                action={<EtherscanLink address={treasuryAddress} label="View treasury receipt" />}
-            >
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {balances.map(({ title, value, subtitle, icon }) => (
-                        <StatsCard key={title} title={title} value={value} subtitle={subtitle} icon={icon} />
-                    ))}
-                </div>
-            </ChartCard>
-            <DonutChart
-                title="Supply Composition"
-                subtitle={`${formatVult(supply.totalVult)} allocated across the supply ledger`}
-                data={supplyComposition}
-                colors={providerColors}
-                currency={false}
-                valueFormatter={value => VULT_FORMATTER.format(value)}
-            />
-        </>
+        <DonutChart
+            title="Supply Composition"
+            subtitle={`${formatVult(supply.totalVult)} allocated across the supply ledger`}
+            data={supplyComposition}
+            colors={providerColors}
+            currency={false}
+            valueFormatter={value => VULT_FORMATTER.format(value)}
+        />
+    );
+}
+
+function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Element {
+    const { supply, treasuryAddress } = summary;
+    const balances = [
+        { title: 'Circulating', value: formatVult(supply.circulatingVult), subtitle: 'Outside locked and treasury balances', icon: IconCoinV },
+        { title: 'Protocol-locked', value: formatVult(supply.protocolLockedVult), subtitle: 'Dead-owned liquidity positions', icon: IconReceiptCheck },
+        { title: 'Treasury unallocated', value: formatVult(supply.treasuryUnallocatedVult), subtitle: 'Live fee treasury balance', icon: IconWallet4 },
+    ];
+
+    return (
+        <ChartCard
+            title="Supply Ledger"
+            subtitle={`${formatVult(supply.totalVult)} total supply`}
+            icon={IconChart4}
+            action={<EtherscanLink address={treasuryAddress} label="View treasury receipt" />}
+        >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {balances.map(({ title, value, subtitle, icon }) => (
+                    <StatsCard key={title} title={title} value={value} subtitle={subtitle} icon={icon} />
+                ))}
+            </div>
+        </ChartCard>
     );
 }
 
@@ -501,6 +506,7 @@ function PriceBandMap({ locked }: { locked: TransparencyLockedData }): JSX.Eleme
 function TransparencyContent({ data }: { data: TransparencyData }): JSX.Element {
     return (
         <>
+            <SupplyComposition summary={data.summary} />
             <PipelineStrip summary={data.summary} />
             <TreasuryBalances treasury={data.treasury} />
             <BuybackHistory buybacks={data.buybacks} />
