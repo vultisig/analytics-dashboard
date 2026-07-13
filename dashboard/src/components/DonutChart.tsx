@@ -11,6 +11,7 @@ interface DonutChartProps {
     data: { name: string; value: number }[];
     colors: string[];
     currency?: boolean;
+    valueFormatter?: (value: number) => string;
 }
 
 const formatValue = (value: number, currency: boolean) =>
@@ -23,9 +24,10 @@ interface CustomTooltipProps {
     payload?: ReadonlyArray<{ name?: string | number; value?: number }>;
     total: number;
     currency: boolean;
+    valueFormatter?: (value: number) => string;
 }
 
-function CustomTooltip({ active, payload, total, currency }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, total, currency, valueFormatter }: CustomTooltipProps) {
     if (!active || !payload || payload.length === 0) return null;
 
     const item = payload[0];
@@ -47,14 +49,14 @@ function CustomTooltip({ active, payload, total, currency }: CustomTooltipProps)
                 <p className="t-body-s text-[var(--text-secondary)]">{name}</p>
             </div>
             <p className="font-display font-medium text-num text-[16px] leading-[20px] tracking-[0.2px] text-[var(--text-primary)]">
-                {formatValue(value, currency)}
+                {valueFormatter?.(value) ?? formatValue(value, currency)}
             </p>
             <p className="t-footnote text-[var(--text-tertiary)]">{percentage}%</p>
         </div>
     );
 }
 
-export function DonutChart({ title, subtitle, data, currency = true }: DonutChartProps) {
+export function DonutChart({ title, subtitle, data, currency = true, valueFormatter }: DonutChartProps) {
     const activeData = data.filter(d => d.value > 0);
     const total = activeData.reduce((sum, item) => sum + item.value, 0);
     const hasData = activeData.length > 0 && total > 0;
@@ -96,7 +98,7 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
                                         ))}
                                     </Pie>
                                     <Tooltip
-                                        content={(props) => <CustomTooltip {...props} total={total} currency={currency} />}
+                                        content={(props) => <CustomTooltip {...props} total={total} currency={currency} valueFormatter={valueFormatter} />}
                                         wrapperStyle={{ outline: 'none' }}
                                     />
                                 </PieChart>
@@ -120,7 +122,7 @@ export function DonutChart({ title, subtitle, data, currency = true }: DonutChar
                                         </span>
                                     </div>
                                     <p className="font-display font-medium text-num text-[18px] leading-[20px] tracking-[0.2px] text-[var(--text-primary)] truncate">
-                                        {formatValue(entry.value, currency)}
+                                        {valueFormatter?.(entry.value) ?? formatValue(entry.value, currency)}
                                     </p>
                                     <p className="t-footnote text-[var(--text-tertiary)]">{percentage}%</p>
                                 </div>

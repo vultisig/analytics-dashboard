@@ -286,6 +286,7 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
                 data={supplyComposition}
                 colors={providerColors}
                 currency={false}
+                valueFormatter={value => VULT_FORMATTER.format(value)}
             />
         </>
     );
