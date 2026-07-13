@@ -160,7 +160,7 @@ function PipelineMetric({ label, value, subtitle, href, icon }: PipelineMetricPr
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`${label}: open receipt on Etherscan`}
-            className="block rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-blue-light)]"
+            className="block h-full rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-blue-light)] [&>div]:h-full"
         >
             <StatsCard title={label} value={value} subtitle={subtitle} icon={icon} size="large" />
         </a>
@@ -193,7 +193,7 @@ function PipelineStrip({ summary }: { summary: TransparencySummary }): JSX.Eleme
                     Live on-chain receipts for the VULT transparency pipeline.
                 </p>
             </div>
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
                 <PipelineMetric
                     label="Fees collected"
                     value={formatUsd(summary.fees.allTimeUsd)}
