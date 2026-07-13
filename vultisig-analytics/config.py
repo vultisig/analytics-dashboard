@@ -23,6 +23,18 @@ class Config:
     ONEINCH_API_URL = "https://api.1inch.dev/history"
     ONEINCH_RAYNALYTICS_URL = "https://raynalytics.net/api/vultisig-1inch-swap-insights"
 
+    # Transparency page: public, read-only Ethereum RPC endpoint and
+    # canonical on-chain receipts. Do not source these from transaction history.
+    ETH_RPC_URL = os.getenv("ETH_RPC_URL", "https://ethereum-rpc.publicnode.com")
+    VULT_ADDRESS = "0xb788144DF611029C60b859DF47e79B7726C4DEBa"
+    USDC_ADDRESS = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    FEE_TREASURY_ADDRESS = "0x8E247a480449c84a5fDD25974A8501f3EFa4ABb9"
+    BUYBACK_WALLET_ADDRESS = "0xBee139A9d76840d52F69CADc27FeA936eCBbc285"
+    VULT_USDC_POOL_ADDRESS = "0x6Df52cC6E2E6f6531E4ceB4b083CF49864A89020"
+    NFPM_ADDRESS = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88"
+    DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD"
+    LOCKED_POSITION_IDS = []
+
     # API Keys
     ONEINCH_API_KEY = os.getenv("ONEINCH_API_KEY", "")
     LIFI_API_KEY = os.getenv("LIFI_API_KEY", "")
