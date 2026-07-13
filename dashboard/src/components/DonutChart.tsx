@@ -87,8 +87,8 @@ export function DonutChart({ title, subtitle, data, currency = true, valueFormat
                                         cy="100%"
                                         startAngle={180}
                                         endAngle={0}
-                                        innerRadius="120%"
-                                        outerRadius="200%"
+                                        innerRadius={Math.round(DONUT_FRAME_HEIGHT * 0.6)}
+                                        outerRadius={DONUT_FRAME_HEIGHT}
                                         paddingAngle={2}
                                         dataKey="value"
                                     >
