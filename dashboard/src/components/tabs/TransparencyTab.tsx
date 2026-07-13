@@ -367,15 +367,15 @@ function BuybackHistory({ buybacks }: { buybacks: TransparencyBuybacks }): JSX.E
         <>
             <ChartCard title="Buyback History" subtitle={`Cumulative on-chain VULT receipts · ${syncStamp}`} icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View buyback wallet" />}>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <StatsCard title="USDC spent" value={formatUsd(summary.usdcSpent)} subtitle={`All-time · ${syncStamp}`} icon={IconDollar} />
-                    <StatsCard title="VULT received" value={formatVult(summary.vultBought)} subtitle={`All-time · ${syncStamp}`} icon={IconCoinV} />
-                    <StatsCard title="Average price" value={formatPrice(summary.averagePrice)} subtitle={`USDC per VULT · ${syncStamp}`} icon={IconChart4} />
+                    <StatsCard title="USDC spent" value={formatUsd(summary.usdcSpent)} subtitle="All-time" icon={IconDollar} />
+                    <StatsCard title="VULT received" value={formatVult(summary.vultBought)} subtitle="All-time" icon={IconCoinV} />
+                    <StatsCard title="Average price" value={formatPrice(summary.averagePrice)} subtitle="USDC per VULT" icon={IconChart4} />
                 </div>
                 <div className="mt-6">
                     <BuybackChart trades={trades} />
                 </div>
             </ChartCard>
-            <ChartCard title="Buyback Receipts" subtitle={`Indexed swap transactions · ${syncStamp}`} icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View full history" />}>
+            <ChartCard title="Buyback Receipts" subtitle="Indexed swap transactions" icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View full history" />}>
                 <BuybackLedger trades={trades} />
             </ChartCard>
         </>
