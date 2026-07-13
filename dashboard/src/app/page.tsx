@@ -12,6 +12,7 @@ import { UsersTab } from '@/components/tabs/UsersTab';
 import { CountTab } from '@/components/tabs/CountTab';
 import { ReferralsTab } from '@/components/tabs/ReferralsTab';
 import { HoldersTab } from '@/components/tabs/HoldersTab';
+import { TransparencyTab } from '@/components/tabs/TransparencyTab';
 import { getParam, SHORT_PARAMS, SHORT_VALUES } from '@/lib/urlParams';
 
 function TitleForTab(tab: string): string {
@@ -22,6 +23,7 @@ function TitleForTab(tab: string): string {
         case SHORT_VALUES.TAB_COUNT: return 'Count';
         case SHORT_VALUES.TAB_REFERRALS: return 'Referrals';
         case SHORT_VALUES.TAB_HOLDERS: return 'Holders';
+        case SHORT_VALUES.TAB_TRANSPARENCY: return 'Transparency';
         case SHORT_VALUES.TAB_OVERVIEW:
         default: return 'Dashboard';
     }
@@ -60,7 +62,7 @@ function DashboardContent() {
         prevParams.current = currentParams;
     }, [searchParams]);
 
-    const hideControls = activeTab === SHORT_VALUES.TAB_HOLDERS;
+    const hideControls = activeTab === SHORT_VALUES.TAB_HOLDERS || activeTab === SHORT_VALUES.TAB_TRANSPARENCY;
     const hideGranularity = activeTab === SHORT_VALUES.TAB_REFERRALS;
 
     return (
@@ -110,6 +112,7 @@ function DashboardContent() {
                             <ReferralsTab range={range} startDate={startDate} endDate={endDate} granularity={granularity} />
                         )}
                         {activeTab === SHORT_VALUES.TAB_HOLDERS && <HoldersTab />}
+                        {activeTab === SHORT_VALUES.TAB_TRANSPARENCY && <TransparencyTab />}
                     </div>
                 </div>
             </main>

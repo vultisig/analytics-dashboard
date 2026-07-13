@@ -22,6 +22,7 @@ export const SHORT_VALUES = {
   TAB_COUNT: 'c',
   TAB_REFERRALS: 'ref',
   TAB_HOLDERS: 'h',
+  TAB_TRANSPARENCY: 't',
 
   // Date ranges
   RANGE_1D: '1d',
@@ -58,6 +59,7 @@ const LONG_TO_SHORT_VALUES: Record<string, string> = {
   count: SHORT_VALUES.TAB_COUNT,
   referrals: SHORT_VALUES.TAB_REFERRALS,
   holders: SHORT_VALUES.TAB_HOLDERS,
+  transparency: SHORT_VALUES.TAB_TRANSPARENCY,
 
   // Granularity
   hour: SHORT_VALUES.GRAN_HOUR,

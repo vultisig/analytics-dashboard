@@ -261,3 +261,89 @@ export async function fetchReferrals(params: CommonQueryParams) {
 export async function fetchSystemStatus() {
   return fetchApi('/api/system-status');
 }
+
+export type TransparencyMonthlyInflow = {
+  date: string;
+  feesUsd: number;
+};
+
+export type TransparencyBuybackSummary = {
+  usdcSpent: number;
+  vultBought: number;
+  averagePrice: number;
+};
+
+export type TransparencyBuybackTrade = {
+  date: string;
+  txHash: string;
+  usdcSpent: number;
+  vultBought: number;
+  price: number;
+};
+
+export type TransparencyLockedPosition = {
+  tokenId: number;
+  nftContractAddress: string;
+  tickRange: { lower: number; upper: number };
+  priceRangeUsd: { low: number; high: number };
+  composition: { VULT: number; USDC: number };
+  valueUsd: number;
+};
+
+export type TransparencyLockedData = {
+  ownerAddress: string;
+  spotPriceUsd: number;
+  positions: TransparencyLockedPosition[];
+  positionCount: number;
+  vultLocked: number;
+  usdcLocked: number;
+  valueUsd: number;
+  percentOfSupply: number;
+};
+
+export type TransparencySupply = {
+  totalVult: number;
+  circulatingVult: number;
+  investorLockedVult: number;
+  protocolLockedVult: number;
+  treasuryUnallocatedVult: number;
+  unlockDate: string;
+};
+
+export type TransparencySummary = {
+  fees: { allTimeUsd: number; thisMonthUsd: number };
+  buybacks: TransparencyBuybackSummary;
+  locked: TransparencyLockedData;
+  supply: TransparencySupply;
+  treasuryAddress: string;
+  buybackWalletAddress: string;
+};
+
+export type TransparencyTreasury = {
+  address: string;
+  balances: Record<string, number>;
+  spotPriceUsd: number;
+  monthlyInflow: TransparencyMonthlyInflow[];
+};
+
+export type TransparencyBuybacks = {
+  walletAddress: string;
+  trades: TransparencyBuybackTrade[];
+  summary: TransparencyBuybackSummary;
+};
+
+export function fetchTransparencySummary(): Promise<TransparencySummary> {
+  return fetchApi('/api/transparency/summary');
+}
+
+export function fetchTransparencyTreasury(): Promise<TransparencyTreasury> {
+  return fetchApi('/api/transparency/treasury');
+}
+
+export function fetchTransparencyBuybacks(): Promise<TransparencyBuybacks> {
+  return fetchApi('/api/transparency/buybacks');
+}
+
+export function fetchTransparencyLocked(): Promise<TransparencyLockedData> {
+  return fetchApi('/api/transparency/locked');
+}
