@@ -37,8 +37,6 @@ ARKHAM_SWAP_PATH_EXPR = """
     END
 """
 TRANSPARENCY_TOTAL_VULT_SUPPLY = Decimal("100000000")
-TRANSPARENCY_INVESTOR_LOCKED_VULT = Decimal("24000000")
-TRANSPARENCY_UNLOCK_DATE = "2026-10-29"
 transparency_reader = ChainReader()
 
 
@@ -479,15 +477,13 @@ def _locked_data():
 
 def _transparency_supply(locked, treasury_balances):
     treasury_vult = treasury_balances['VULT']
-    circulating = TRANSPARENCY_TOTAL_VULT_SUPPLY - TRANSPARENCY_INVESTOR_LOCKED_VULT
+    circulating = TRANSPARENCY_TOTAL_VULT_SUPPLY
     circulating -= Decimal(str(locked['vultLocked'])) + treasury_vult
     return {
         'totalVult': float(TRANSPARENCY_TOTAL_VULT_SUPPLY),
         'circulatingVult': float(circulating),
-        'investorLockedVult': float(TRANSPARENCY_INVESTOR_LOCKED_VULT),
         'protocolLockedVult': locked['vultLocked'],
         'treasuryUnallocatedVult': safe_float(treasury_vult),
-        'unlockDate': TRANSPARENCY_UNLOCK_DATE,
     }
 
 

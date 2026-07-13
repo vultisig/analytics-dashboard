@@ -33,7 +33,6 @@ import type {
     TransparencyTreasury,
 } from '@/lib/api';
 
-const DAY_IN_MILLISECONDS = 86_400_000;
 const ETHERSCAN_ADDRESS_URL = 'https://etherscan.io/address';
 const ETHERSCAN_TOKEN_URL = 'https://etherscan.io/token';
 const ETHERSCAN_TRANSACTION_URL = 'https://etherscan.io/tx';
@@ -47,10 +46,6 @@ const USD_FORMATTER = new Intl.NumberFormat('en-US', {
 });
 const VULT_FORMATTER = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 0,
-});
-const UNLOCK_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'long',
-    timeZone: 'UTC',
 });
 const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     month: 'short',
@@ -131,12 +126,6 @@ function getCumulativeBuybacks(trades: TransparencyBuybackTrade[]): { date: stri
         total += trade.vultBought;
         return { date: trade.date, vult: total };
     });
-}
-
-function getUnlockCountdown(unlockDate: string): string {
-    const unlockAt = Date.parse(`${unlockDate}T00:00:00Z`);
-    const daysRemaining = Math.ceil((unlockAt - Date.now()) / DAY_IN_MILLISECONDS);
-    return daysRemaining > 0 ? `${daysRemaining.toLocaleString()} days until unlock` : 'Unlock date reached';
 }
 
 function EtherscanLink({ address, label }: { address: string; label: string }): JSX.Element {
@@ -249,16 +238,13 @@ function TreasuryBalances({ treasury }: { treasury: TransparencyTreasury }): JSX
 
 function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Element {
     const { supply, treasuryAddress } = summary;
-    const unlockDate = UNLOCK_DATE_FORMATTER.format(new Date(`${supply.unlockDate}T00:00:00Z`));
     const balances = [
-        { title: 'Circulating', value: formatVult(supply.circulatingVult), subtitle: 'Outside scheduled allocations', icon: IconCoinV },
-        { title: 'Investor-locked', value: formatVult(supply.investorLockedVult), subtitle: `Until ${unlockDate}`, icon: IconVault },
+        { title: 'Circulating', value: formatVult(supply.circulatingVult), subtitle: 'Outside locked and treasury balances', icon: IconCoinV },
         { title: 'Protocol-locked', value: formatVult(supply.protocolLockedVult), subtitle: 'Dead-owned liquidity positions', icon: IconReceiptCheck },
         { title: 'Treasury unallocated', value: formatVult(supply.treasuryUnallocatedVult), subtitle: 'Live fee treasury balance', icon: IconWallet4 },
     ];
     const supplyComposition = [
         { name: 'Circulating', value: Number(supply.circulatingVult) },
-        { name: 'Investor-locked', value: Number(supply.investorLockedVult) },
         { name: 'Treasury bought-back', value: Number(supply.treasuryUnallocatedVult) },
         { name: 'LP-and-burned', value: Number(supply.protocolLockedVult) },
     ];
@@ -271,14 +257,11 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
                 icon={IconChart4}
                 action={<EtherscanLink address={treasuryAddress} label="View treasury receipt" />}
             >
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {balances.map(({ title, value, subtitle, icon }) => (
                         <StatsCard key={title} title={title} value={value} subtitle={subtitle} icon={icon} />
                     ))}
                 </div>
-                <p className="mt-5 text-sm text-[var(--text-secondary)]">
-                    Investor allocation unlocks on {unlockDate} · <span className="text-[var(--alert-info)]">{getUnlockCountdown(supply.unlockDate)}</span>
-                </p>
             </ChartCard>
             <DonutChart
                 title="Supply Composition"

@@ -80,8 +80,16 @@ class TestTransparencyApi(unittest.TestCase):
         self.assertEqual(body["buybacks"]["vultBought"], 10000.0)
         self.assertEqual(body["locked"]["positionCount"], 1)
         self.assertEqual(body["locked"]["percentOfSupply"], 0.005)
-        self.assertEqual(body["supply"]["unlockDate"], "2026-10-29")
-        self.assertEqual(body["supply"]["investorLockedVult"], 24_000_000.0)
+        supply = body["supply"]
+        self.assertEqual(
+            set(supply),
+            {"totalVult", "circulatingVult", "protocolLockedVult", "treasuryUnallocatedVult"},
+        )
+        self.assertEqual(supply["circulatingVult"], 96_990_661.0)
+        self.assertEqual(
+            supply["circulatingVult"] + supply["protocolLockedVult"] + supply["treasuryUnallocatedVult"],
+            supply["totalVult"],
+        )
         self.assertEqual(body["fees"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
         self.assertEqual(body["buybacks"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
 

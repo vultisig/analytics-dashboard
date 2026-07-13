@@ -305,10 +305,8 @@ export type TransparencyLockedData = {
 export type TransparencySupply = {
   totalVult: number;
   circulatingVult: number;
-  investorLockedVult: number;
   protocolLockedVult: number;
   treasuryUnallocatedVult: number;
-  unlockDate: string;
 };
 
 export type TransparencySummary = {
