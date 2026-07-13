@@ -257,10 +257,10 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
         { title: 'Treasury unallocated', value: formatVult(supply.treasuryUnallocatedVult), subtitle: 'Live fee treasury balance', icon: IconWallet4 },
     ];
     const supplyComposition = [
-        { name: 'Circulating', value: supply.circulatingVult },
-        { name: 'Investor-locked', value: supply.investorLockedVult },
-        { name: 'Treasury bought-back', value: supply.treasuryUnallocatedVult },
-        { name: 'LP-and-burned', value: supply.protocolLockedVult },
+        { name: 'Circulating', value: Number(supply.circulatingVult) },
+        { name: 'Investor-locked', value: Number(supply.investorLockedVult) },
+        { name: 'Treasury bought-back', value: Number(supply.treasuryUnallocatedVult) },
+        { name: 'LP-and-burned', value: Number(supply.protocolLockedVult) },
     ];
 
     return (
