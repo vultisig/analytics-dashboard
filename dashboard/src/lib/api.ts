@@ -271,6 +271,7 @@ export type TransparencyBuybackSummary = {
   usdcSpent: number;
   vultBought: number;
   averagePrice: number;
+  lastSuccessfulSync: string | null;
 };
 
 export type TransparencyBuybackTrade = {
@@ -311,7 +312,7 @@ export type TransparencySupply = {
 };
 
 export type TransparencySummary = {
-  fees: { allTimeUsd: number; thisMonthUsd: number };
+  fees: { allTimeUsd: number; thisMonthUsd: number; lastSuccessfulSync: string | null };
   buybacks: TransparencyBuybackSummary;
   locked: TransparencyLockedData;
   supply: TransparencySupply;

@@ -57,6 +57,11 @@ const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     timeZone: 'UTC',
 });
+const SYNC_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+});
 
 type TransparencyData = {
     buybacks: TransparencyBuybacks;
@@ -111,6 +116,12 @@ function formatPrice(value: number): string {
 
 function formatReceiptDate(date: string): string {
     return RECEIPT_DATE_FORMATTER.format(new Date(`${date}T00:00:00Z`));
+}
+
+function formatSyncStamp(lastSuccessfulSync: string | null): string {
+    return lastSuccessfulSync
+        ? `As of ${SYNC_TIMESTAMP_FORMATTER.format(new Date(lastSuccessfulSync))} UTC`
+        : 'Sync status unavailable';
 }
 
 function getCumulativeBuybacks(trades: TransparencyBuybackTrade[]): { date: string; vult: number }[] {
@@ -185,7 +196,7 @@ function PipelineStrip({ summary }: { summary: TransparencySummary }): JSX.Eleme
                 <PipelineMetric
                     label="Fees collected"
                     value={formatUsd(summary.fees.allTimeUsd)}
-                    subtitle={`${formatUsd(summary.fees.thisMonthUsd)} collected this month`}
+                    subtitle={`${formatUsd(summary.fees.thisMonthUsd)} collected this month · ${formatSyncStamp(summary.fees.lastSuccessfulSync)}`}
                     href={feeReceipt}
                     icon={IconDollar}
                 />
@@ -349,19 +360,20 @@ function BuybackLedger({ trades }: { trades: TransparencyBuybackTrade[] }): JSX.
 
 function BuybackHistory({ buybacks }: { buybacks: TransparencyBuybacks }): JSX.Element {
     const { summary, trades, walletAddress } = buybacks;
+    const syncStamp = formatSyncStamp(summary.lastSuccessfulSync);
     return (
         <>
-            <ChartCard title="Buyback History" subtitle="Cumulative on-chain VULT receipts" icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View buyback wallet" />}>
+            <ChartCard title="Buyback History" subtitle={`Cumulative on-chain VULT receipts · ${syncStamp}`} icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View buyback wallet" />}>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <StatsCard title="USDC spent" value={formatUsd(summary.usdcSpent)} subtitle="All-time" icon={IconDollar} />
-                    <StatsCard title="VULT received" value={formatVult(summary.vultBought)} subtitle="All-time" icon={IconCoinV} />
-                    <StatsCard title="Average price" value={formatPrice(summary.averagePrice)} subtitle="USDC per VULT" icon={IconChart4} />
+                    <StatsCard title="USDC spent" value={formatUsd(summary.usdcSpent)} subtitle={`All-time · ${syncStamp}`} icon={IconDollar} />
+                    <StatsCard title="VULT received" value={formatVult(summary.vultBought)} subtitle={`All-time · ${syncStamp}`} icon={IconCoinV} />
+                    <StatsCard title="Average price" value={formatPrice(summary.averagePrice)} subtitle={`USDC per VULT · ${syncStamp}`} icon={IconChart4} />
                 </div>
                 <div className="mt-6">
                     <BuybackChart trades={trades} />
                 </div>
             </ChartCard>
-            <ChartCard title="Buyback Receipts" subtitle="Indexed swap transactions" icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View full history" />}>
+            <ChartCard title="Buyback Receipts" subtitle={`Indexed swap transactions · ${syncStamp}`} icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View full history" />}>
                 <BuybackLedger trades={trades} />
             </ChartCard>
         </>

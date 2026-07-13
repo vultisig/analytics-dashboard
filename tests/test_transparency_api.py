@@ -2,7 +2,7 @@
 import os
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +17,7 @@ from config import config  # noqa: E402
 
 
 TRADE_HASH = "0x1111111111111111111111111111111111111111111111111111111111111111"
+LAST_SUCCESSFUL_SYNC = datetime(2026, 7, 13, 12, 30, tzinfo=timezone.utc)
 POSITION = LockedPosition(
     token_id=1_195_906,
     token0=config.USDC_ADDRESS,
@@ -52,6 +53,8 @@ class TestTransparencyApi(unittest.TestCase):
         self.db.stop()
 
     def _query_result(self, query, *_args, **_kwargs):
+        if "FROM sync_status" in query:
+            return [{"last_successful_sync": LAST_SUCCESSFUL_SYNC}]
         if "FROM buyback_trades" in query:
             return [{
                 "date": date(2026, 7, 1),
@@ -79,6 +82,8 @@ class TestTransparencyApi(unittest.TestCase):
         self.assertEqual(body["locked"]["percentOfSupply"], 0.005)
         self.assertEqual(body["supply"]["unlockDate"], "2026-10-29")
         self.assertEqual(body["supply"]["investorLockedVult"], 24_000_000.0)
+        self.assertEqual(body["fees"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
+        self.assertEqual(body["buybacks"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
 
     def test_treasury_returns_live_receipt_balances_and_monthly_fees(self):
         response = self.client.get("/api/transparency/treasury")
@@ -98,6 +103,7 @@ class TestTransparencyApi(unittest.TestCase):
         self.assertEqual(body["trades"][0]["txHash"], TRADE_HASH)
         self.assertEqual(body["summary"]["usdcSpent"], 1000.0)
         self.assertEqual(body["summary"]["averagePrice"], 0.1)
+        self.assertEqual(body["summary"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
 
     def test_locked_returns_verified_position_composition_and_receipt_addresses(self):
         response = self.client.get("/api/transparency/locked")

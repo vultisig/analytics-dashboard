@@ -395,6 +395,17 @@ def _transparency_current_month_fees():
     return safe_float(swaps['fees']) + safe_float(arkham['fees'])
 
 
+def _last_successful_sync(sources):
+    rows = db_manager.execute_query("""
+        SELECT MIN(last_synced_timestamp) AS last_successful_sync
+        FROM sync_status
+        WHERE source IN %s AND last_error IS NULL AND last_synced_timestamp IS NOT NULL
+        HAVING COUNT(*) = %s
+    """, (tuple(sources), len(sources)), fetch=True)
+    timestamp = rows[0]['last_successful_sync'] if rows else None
+    return timestamp.isoformat() if timestamp else None
+
+
 def _merge_monthly_fees(*rows_by_source):
     totals = defaultdict(float)
     for rows in rows_by_source:
@@ -421,6 +432,7 @@ def _buyback_summary(trades):
     return {
         'usdcSpent': float(usdc_spent), 'vultBought': float(vult_bought),
         'averagePrice': float(usdc_spent / vult_bought) if vult_bought else 0,
+        'lastSuccessfulSync': _last_successful_sync(('buybacks',)),
     }
 
 
@@ -484,7 +496,11 @@ def _transparency_summary():
     locked = _locked_data()
     trades = _transparency_buyback_trades()
     return {
-        'fees': {'allTimeUsd': _transparency_fees(), 'thisMonthUsd': _transparency_current_month_fees()},
+        'fees': {
+            'allTimeUsd': _transparency_fees(),
+            'thisMonthUsd': _transparency_current_month_fees(),
+            'lastSuccessfulSync': _last_successful_sync(KNOWN_PROVIDERS),
+        },
         'buybacks': _buyback_summary(trades), 'locked': locked,
         'supply': _transparency_supply(locked, treasury),
         'treasuryAddress': config.FEE_TREASURY_ADDRESS,
