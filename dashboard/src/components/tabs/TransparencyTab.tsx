@@ -17,6 +17,7 @@ import {
     IconWallet4,
 } from '@/icons';
 import { providerColors } from '@/lib/chartStyles';
+import { formatCompactNumber } from '@/lib/numberFormatters';
 import {
     fetchTransparencyBuybacks,
     fetchTransparencyLocked,
@@ -302,7 +303,7 @@ function BuybackChart({ trades }: { trades: TransparencyBuybackTrade[] }): JSX.E
                 <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" vertical={false} />
                     <XAxis dataKey="date" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} dy={10} tickFormatter={formatReceiptDate} />
-                    <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={value => VULT_FORMATTER.format(Number(value))} />
+                    <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={value => formatCompactNumber(Number(value))} />
                     <Tooltip
                         formatter={value => formatVult(Number(value))}
                         labelFormatter={value => formatReceiptDate(String(value))}

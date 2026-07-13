@@ -6,6 +6,7 @@ import { StatsCard } from './StatsCard';
 import { Tooltip } from './Tooltip';
 import { getTierColor } from '@/lib/chartStyles';
 import { IconAwardV, IconPeopleCopy, IconTrendingUpV } from '@/icons';
+import { formatCompactNumber } from '@/lib/numberFormatters';
 
 // Fee tier discount percentages for tooltip
 const tierDiscounts: Record<string, string> = {
@@ -91,10 +92,6 @@ function CustomTooltipContent({ active, payload, totalUsers }: CustomTooltipProp
       </p>
     </div>
   );
-}
-
-function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
 function formatCompactCurrency(value: number): string {
