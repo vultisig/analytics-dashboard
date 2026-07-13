@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ComponentType, JSX } from 'react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartCard } from '@/components/ChartCard';
 import { StatsCard } from '@/components/StatsCard';
 import {
@@ -15,16 +16,21 @@ import {
     IconWallet4,
 } from '@/icons';
 import {
+    fetchTransparencyBuybacks,
     fetchTransparencySummary,
     fetchTransparencyTreasury,
 } from '@/lib/api';
 import type {
+    TransparencyBuybacks,
+    TransparencyBuybackTrade,
     TransparencySummary,
     TransparencyTreasury,
 } from '@/lib/api';
 
 const DAY_IN_MILLISECONDS = 86_400_000;
 const ETHERSCAN_ADDRESS_URL = 'https://etherscan.io/address';
+const ETHERSCAN_TRANSACTION_URL = 'https://etherscan.io/tx';
+const BUYBACK_CHART_HEIGHT = 280;
 const USD_FORMATTER = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -37,8 +43,15 @@ const UNLOCK_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',
     timeZone: 'UTC',
 });
+const RECEIPT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+});
 
 type TransparencyData = {
+    buybacks: TransparencyBuybacks;
     summary: TransparencySummary;
     treasury: TransparencyTreasury;
 };
@@ -74,12 +87,16 @@ const PENDING_SECTIONS: PendingSection[] = [
 ];
 
 function getTransparencyData(): Promise<TransparencyData> {
-    return Promise.all([fetchTransparencySummary(), fetchTransparencyTreasury()])
-        .then(([summary, treasury]) => ({ summary, treasury }));
+    return Promise.all([fetchTransparencySummary(), fetchTransparencyTreasury(), fetchTransparencyBuybacks()])
+        .then(([summary, treasury, buybacks]) => ({ summary, treasury, buybacks }));
 }
 
 function getEtherscanAddressUrl(address: string): string {
     return `${ETHERSCAN_ADDRESS_URL}/${address}`;
+}
+
+function getEtherscanTransactionUrl(transactionHash: string): string {
+    return `${ETHERSCAN_TRANSACTION_URL}/${transactionHash}`;
 }
 
 function formatUsd(value: number): string {
@@ -95,6 +112,18 @@ function formatPrice(value: number): string {
         minimumFractionDigits: 2,
         maximumFractionDigits: 6,
     })}`;
+}
+
+function formatReceiptDate(date: string): string {
+    return RECEIPT_DATE_FORMATTER.format(new Date(`${date}T00:00:00Z`));
+}
+
+function getCumulativeBuybacks(trades: TransparencyBuybackTrade[]): { date: string; vult: number }[] {
+    let total = 0;
+    return [...trades].reverse().map(trade => {
+        total += trade.vultBought;
+        return { date: trade.date, vult: total };
+    });
 }
 
 function getUnlockCountdown(unlockDate: string): string {
@@ -240,6 +269,90 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
     );
 }
 
+function BuybackChart({ trades }: { trades: TransparencyBuybackTrade[] }): JSX.Element {
+    const chartData = getCumulativeBuybacks(trades);
+    if (chartData.length === 0) {
+        return <p className="py-10 text-center text-sm text-[var(--text-tertiary)]">0 buyback receipts recorded.</p>;
+    }
+
+    return (
+        <div className="h-[280px]">
+            <ResponsiveContainer width="100%" height={BUYBACK_CHART_HEIGHT}>
+                <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" vertical={false} />
+                    <XAxis dataKey="date" stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} dy={10} tickFormatter={formatReceiptDate} />
+                    <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={value => VULT_FORMATTER.format(Number(value))} />
+                    <Tooltip
+                        formatter={value => formatVult(Number(value))}
+                        labelFormatter={value => formatReceiptDate(String(value))}
+                        contentStyle={{ background: 'var(--surface-1)', border: '1px solid var(--border-normal)', borderRadius: 12 }}
+                    />
+                    <Line type="monotone" dataKey="vult" name="VULT accumulated" stroke="var(--brand-blue-light)" strokeWidth={2} dot={false} />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+function BuybackLedger({ trades }: { trades: TransparencyBuybackTrade[] }): JSX.Element {
+    if (trades.length === 0) {
+        return <p className="py-10 text-center text-sm text-[var(--text-tertiary)]">0 buyback receipts recorded.</p>;
+    }
+
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="border-b border-[var(--border-normal)] text-xs text-[var(--text-tertiary)]">
+                    <tr>
+                        <th className="pb-3 font-medium">Date</th>
+                        <th className="pb-3 font-medium">USDC spent</th>
+                        <th className="pb-3 font-medium">VULT received</th>
+                        <th className="pb-3 font-medium">Effective price</th>
+                        <th className="pb-3 font-medium">Transaction</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-normal)]">
+                    {trades.map(trade => (
+                        <tr key={trade.txHash} className="text-[var(--text-secondary)]">
+                            <td className="py-3">{formatReceiptDate(trade.date)}</td>
+                            <td className="py-3 text-[var(--text-primary)]">{formatUsd(trade.usdcSpent)}</td>
+                            <td className="py-3 text-[var(--text-primary)]">{formatVult(trade.vultBought)}</td>
+                            <td className="py-3">{formatPrice(trade.price)}</td>
+                            <td className="py-3">
+                                <a href={getEtherscanTransactionUrl(trade.txHash)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-blue-light)] hover:underline">
+                                    {`${trade.txHash.slice(0, 10)}…${trade.txHash.slice(-8)}`}
+                                    <IconExternalLinkV className="size-3" />
+                                </a>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function BuybackHistory({ buybacks }: { buybacks: TransparencyBuybacks }): JSX.Element {
+    const { summary, trades, walletAddress } = buybacks;
+    return (
+        <>
+            <ChartCard title="Buyback History" subtitle="Cumulative on-chain VULT receipts" icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View buyback wallet" />}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <StatsCard title="USDC spent" value={formatUsd(summary.usdcSpent)} subtitle="All-time" icon={IconDollar} />
+                    <StatsCard title="VULT received" value={formatVult(summary.vultBought)} subtitle="All-time" icon={IconCoinV} />
+                    <StatsCard title="Average price" value={formatPrice(summary.averagePrice)} subtitle="USDC per VULT" icon={IconChart4} />
+                </div>
+                <div className="mt-6">
+                    <BuybackChart trades={trades} />
+                </div>
+            </ChartCard>
+            <ChartCard title="Buyback Receipts" subtitle="Indexed swap transactions" icon={IconReceiptCheck}>
+                <BuybackLedger trades={trades} />
+            </ChartCard>
+        </>
+    );
+}
+
 function PendingSections(): JSX.Element {
     return (
         <>
@@ -257,6 +370,7 @@ function TransparencyContent({ data }: { data: TransparencyData }): JSX.Element 
         <>
             <PipelineStrip summary={data.summary} />
             <TreasuryBalances treasury={data.treasury} />
+            <BuybackHistory buybacks={data.buybacks} />
             <PendingSections />
             <SupplyLedger summary={data.summary} />
         </>
