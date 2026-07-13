@@ -5,9 +5,6 @@ import { ChartCard } from './ChartCard';
 import { formatProviderName } from '@/lib/providerUtils';
 import { providerColorMap, chainColorMap, fallbackChainColors } from '@/lib/chartStyles';
 
-const DONUT_FRAME_WIDTH = 329;
-const DONUT_FRAME_HEIGHT = 155;
-
 interface DonutChartProps {
     title: string;
     subtitle?: string;
@@ -78,8 +75,8 @@ export function DonutChart({ title, subtitle, data, currency = true, valueFormat
             {hasData ? (
                 <div className="flex flex-col gap-14">
                     <div className="w-full flex justify-center">
-                        <div className="w-full" style={{ maxWidth: DONUT_FRAME_WIDTH }}>
-                            <ResponsiveContainer width="100%" height={DONUT_FRAME_HEIGHT}>
+                        <div className="w-full max-w-[329px] aspect-[329/155]">
+                            <ResponsiveContainer width="100%" height="100%">
                                 <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                     <Pie
                                         data={sortedData}
@@ -87,8 +84,8 @@ export function DonutChart({ title, subtitle, data, currency = true, valueFormat
                                         cy="100%"
                                         startAngle={180}
                                         endAngle={0}
-                                        innerRadius={Math.round(DONUT_FRAME_HEIGHT * 0.6)}
-                                        outerRadius={DONUT_FRAME_HEIGHT}
+                                        innerRadius="120%"
+                                        outerRadius="200%"
                                         paddingAngle={2}
                                         dataKey="value"
                                     >
