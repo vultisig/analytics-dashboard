@@ -35,6 +35,7 @@ const ETHERSCAN_ADDRESS_URL = 'https://etherscan.io/address';
 const ETHERSCAN_TOKEN_URL = 'https://etherscan.io/token';
 const ETHERSCAN_TRANSACTION_URL = 'https://etherscan.io/tx';
 const BUYBACK_CHART_HEIGHT = 280;
+const MAX_BUYBACK_RECEIPTS = 20;
 const PRICE_BAND_CHART_HEIGHT = 240;
 const USD_FORMATTER = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -291,35 +292,40 @@ function BuybackLedger({ trades }: { trades: TransparencyBuybackTrade[] }): JSX.
         return <p className="py-10 text-center text-sm text-[var(--text-tertiary)]">0 buyback receipts recorded.</p>;
     }
 
+    const visibleTrades = trades.slice(0, MAX_BUYBACK_RECEIPTS);
+
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="border-b border-[var(--border-normal)] text-xs text-[var(--text-tertiary)]">
-                    <tr>
-                        <th className="pb-3 font-medium">Date</th>
-                        <th className="pb-3 font-medium">USDC spent</th>
-                        <th className="pb-3 font-medium">VULT received</th>
-                        <th className="pb-3 font-medium">Effective price</th>
-                        <th className="pb-3 font-medium">Transaction</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-normal)]">
-                    {trades.map(trade => (
-                        <tr key={trade.txHash} className="text-[var(--text-secondary)]">
-                            <td className="py-3">{formatReceiptDate(trade.date)}</td>
-                            <td className="py-3 text-[var(--text-primary)]">{formatUsd(trade.usdcSpent)}</td>
-                            <td className="py-3 text-[var(--text-primary)]">{formatVult(trade.vultBought)}</td>
-                            <td className="py-3">{formatPrice(trade.price)}</td>
-                            <td className="py-3">
-                                <a href={getEtherscanTransactionUrl(trade.txHash)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-blue-light)] hover:underline">
-                                    {`${trade.txHash.slice(0, 10)}…${trade.txHash.slice(-8)}`}
-                                    <IconExternalLinkV className="size-3" />
-                                </a>
-                            </td>
+        <div>
+            <p className="mb-3 text-xs text-[var(--text-tertiary)]">Showing latest {visibleTrades.length} of {trades.length}</p>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="border-b border-[var(--border-normal)] text-xs text-[var(--text-tertiary)]">
+                        <tr>
+                            <th className="pb-3 font-medium">Date</th>
+                            <th className="pb-3 font-medium">USDC spent</th>
+                            <th className="pb-3 font-medium">VULT received</th>
+                            <th className="pb-3 font-medium">Effective price</th>
+                            <th className="pb-3 font-medium">Transaction</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-normal)]">
+                        {visibleTrades.map(trade => (
+                            <tr key={trade.txHash} className="text-[var(--text-secondary)]">
+                                <td className="py-3">{formatReceiptDate(trade.date)}</td>
+                                <td className="py-3 text-[var(--text-primary)]">{formatUsd(trade.usdcSpent)}</td>
+                                <td className="py-3 text-[var(--text-primary)]">{formatVult(trade.vultBought)}</td>
+                                <td className="py-3">{formatPrice(trade.price)}</td>
+                                <td className="py-3">
+                                    <a href={getEtherscanTransactionUrl(trade.txHash)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[var(--brand-blue-light)] hover:underline">
+                                        {`${trade.txHash.slice(0, 10)}…${trade.txHash.slice(-8)}`}
+                                        <IconExternalLinkV className="size-3" />
+                                    </a>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
@@ -338,7 +344,7 @@ function BuybackHistory({ buybacks }: { buybacks: TransparencyBuybacks }): JSX.E
                     <BuybackChart trades={trades} />
                 </div>
             </ChartCard>
-            <ChartCard title="Buyback Receipts" subtitle="Indexed swap transactions" icon={IconReceiptCheck}>
+            <ChartCard title="Buyback Receipts" subtitle="Indexed swap transactions" icon={IconReceiptCheck} action={<EtherscanLink address={walletAddress} label="View full history" />}>
                 <BuybackLedger trades={trades} />
             </ChartCard>
         </>
