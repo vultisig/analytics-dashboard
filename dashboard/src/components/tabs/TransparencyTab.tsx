@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ComponentType, JSX } from 'react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartCard } from '@/components/ChartCard';
+import { DonutChart } from '@/components/DonutChart';
 import { StatsCard } from '@/components/StatsCard';
 import {
     IconAlertCircleV,
@@ -15,6 +16,7 @@ import {
     IconVault,
     IconWallet4,
 } from '@/icons';
+import { providerColors } from '@/lib/chartStyles';
 import {
     fetchTransparencyBuybacks,
     fetchTransparencyLocked,
@@ -242,23 +244,38 @@ function SupplyLedger({ summary }: { summary: TransparencySummary }): JSX.Elemen
         { title: 'Protocol-locked', value: formatVult(supply.protocolLockedVult), subtitle: 'Dead-owned liquidity positions', icon: IconReceiptCheck },
         { title: 'Treasury unallocated', value: formatVult(supply.treasuryUnallocatedVult), subtitle: 'Live fee treasury balance', icon: IconWallet4 },
     ];
+    const supplyComposition = [
+        { name: 'Circulating', value: supply.circulatingVult },
+        { name: 'Investor-locked', value: supply.investorLockedVult },
+        { name: 'Treasury bought-back', value: supply.treasuryUnallocatedVult },
+        { name: 'LP-and-burned', value: supply.protocolLockedVult },
+    ];
 
     return (
-        <ChartCard
-            title="Supply Ledger"
-            subtitle={`${formatVult(supply.totalVult)} total supply`}
-            icon={IconChart4}
-            action={<EtherscanLink address={treasuryAddress} label="View treasury receipt" />}
-        >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {balances.map(({ title, value, subtitle, icon }) => (
-                    <StatsCard key={title} title={title} value={value} subtitle={subtitle} icon={icon} />
-                ))}
-            </div>
-            <p className="mt-5 text-sm text-[var(--text-secondary)]">
-                Investor allocation unlocks on {unlockDate} · <span className="text-[var(--alert-info)]">{getUnlockCountdown(supply.unlockDate)}</span>
-            </p>
-        </ChartCard>
+        <>
+            <ChartCard
+                title="Supply Ledger"
+                subtitle={`${formatVult(supply.totalVult)} total supply`}
+                icon={IconChart4}
+                action={<EtherscanLink address={treasuryAddress} label="View treasury receipt" />}
+            >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {balances.map(({ title, value, subtitle, icon }) => (
+                        <StatsCard key={title} title={title} value={value} subtitle={subtitle} icon={icon} />
+                    ))}
+                </div>
+                <p className="mt-5 text-sm text-[var(--text-secondary)]">
+                    Investor allocation unlocks on {unlockDate} · <span className="text-[var(--alert-info)]">{getUnlockCountdown(supply.unlockDate)}</span>
+                </p>
+            </ChartCard>
+            <DonutChart
+                title="Supply Composition"
+                subtitle={`${formatVult(supply.totalVult)} allocated across the supply ledger`}
+                data={supplyComposition}
+                colors={providerColors}
+                currency={false}
+            />
+        </>
     );
 }
 
