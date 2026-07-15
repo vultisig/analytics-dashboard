@@ -112,6 +112,12 @@ class TestTransparencyApi(unittest.TestCase):
         self.assertEqual(body["summary"]["usdcSpent"], 1000.0)
         self.assertEqual(body["summary"]["averagePrice"], 0.1)
         self.assertEqual(body["summary"]["lastSuccessfulSync"], LAST_SUCCESSFUL_SYNC.isoformat())
+        buyback_query = next(
+            call.args[0]
+            for call in api_server.db_manager.execute_query.call_args_list
+            if "FROM buyback_trades" in call.args[0]
+        )
+        self.assertIn("ORDER BY block_number DESC, tx_hash DESC", buyback_query)
 
     def test_locked_returns_verified_position_composition_and_receipt_addresses(self):
         response = self.client.get("/api/transparency/locked")

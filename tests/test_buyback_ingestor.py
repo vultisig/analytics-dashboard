@@ -121,6 +121,18 @@ class TestBuybackIngestor(unittest.TestCase):
         self.assertIn("ON CONFLICT (tx_hash) DO NOTHING", insert_sql)
         self.assertEqual(mock_values.call_args.args[2][0][1], TX_HASH)
 
+    @patch("ingestors.buyback_ingestor.execute_values")
+    def test_insert_trades_counts_all_batches(self, mock_values):
+        from ingestors import buyback_ingestor as module
+        from ingestors.buyback_ingestor import build_buyback_trades
+
+        trades = build_buyback_trades([VULT_IN, USDC_OUT]) * 2
+        with patch.object(module, "INSERT_PAGE_SIZE", 1):
+            inserted = self.ingestor._insert_trades(trades)
+
+        self.assertEqual(inserted, 2)
+        self.assertEqual(mock_values.call_count, 2)
+
     @patch("ingestors.buyback_ingestor.requests.get")
     def test_rechecks_the_latest_block_for_late_indexed_transfers(self, mock_get):
         self.cursor.fetchone.return_value = (123456,)
@@ -131,6 +143,36 @@ class TestBuybackIngestor(unittest.TestCase):
         self.ingestor._fetch_transfers()
 
         self.assertEqual(mock_get.call_args.kwargs["params"]["startblock"], 123456)
+
+    @patch("ingestors.buyback_ingestor.requests.get")
+    def test_no_transactions_response_is_not_a_sync_error(self, mock_get):
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "0",
+            "message": "No transactions found",
+            "result": "No transactions found",
+        }
+        mock_get.return_value = response
+
+        transfers, error = self.ingestor._fetch_transfers()
+
+        self.assertEqual(transfers, [])
+        self.assertIsNone(error)
+
+    @patch("ingestors.buyback_ingestor.requests.get")
+    def test_notok_rate_limit_response_is_a_sync_error(self, mock_get):
+        response = MagicMock()
+        response.json.return_value = {
+            "status": "0",
+            "message": "NOTOK",
+            "result": "Max rate limit reached",
+        }
+        mock_get.return_value = response
+
+        transfers, error = self.ingestor._fetch_transfers()
+
+        self.assertEqual(transfers, [])
+        self.assertIn("Max rate limit", error)
 
 
 class TestSyncWiring(unittest.TestCase):

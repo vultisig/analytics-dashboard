@@ -415,7 +415,7 @@ def _merge_monthly_fees(*rows_by_source):
 def _transparency_buyback_trades():
     rows = db_manager.execute_query("""
         SELECT date, tx_hash, usdc_spent, vult_bought, price
-        FROM buyback_trades ORDER BY date DESC, tx_hash DESC
+        FROM buyback_trades ORDER BY block_number DESC, tx_hash DESC
     """, fetch=True)
     return [{
         'date': row['date'].isoformat(), 'txHash': row['tx_hash'],

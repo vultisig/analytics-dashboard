@@ -153,6 +153,14 @@ class TestChainReader(unittest.TestCase):
             with self.assertRaisesRegex(ChainReaderError, "upstream unavailable"):
                 reader.get_spot_price()
 
+    def test_invalid_hexadecimal_rpc_result_raises_chain_reader_error(self):
+        reader = ChainReader("https://rpc.example")
+        response = _rpc_response("0x" + "g" * 64)
+
+        with patch("chain_reader.requests.post", return_value=response):
+            with self.assertRaisesRegex(ChainReaderError, "invalid hexadecimal"):
+                reader.get_spot_price()
+
 
 if __name__ == "__main__":
     unittest.main()

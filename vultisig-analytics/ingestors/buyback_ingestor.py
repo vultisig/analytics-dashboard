@@ -176,8 +176,10 @@ class BuybackIngestor:
         result = data.get("result", [])
         if data.get("status") == "1" and isinstance(result, list):
             return result, None
-        is_empty = result == [] or (
-            data.get("message") == "NOTOK" and result == "NOTOK"
+        is_empty = (
+            result == []
+            or data.get("message") == "No transactions found"
+            or (data.get("message") == "NOTOK" and result == "NOTOK")
         )
         if data.get("status") == "0" and is_empty:
             return [], None
@@ -209,8 +211,12 @@ class BuybackIngestor:
             ON CONFLICT (tx_hash) DO NOTHING
         """
         try:
-            execute_values(cursor, sql, [trade.as_row() for trade in trades], page_size=INSERT_PAGE_SIZE)
-            return cursor.rowcount
+            rows = [trade.as_row() for trade in trades]
+            inserted = 0
+            for start in range(0, len(rows), INSERT_PAGE_SIZE):
+                execute_values(cursor, sql, rows[start:start + INSERT_PAGE_SIZE])
+                inserted += cursor.rowcount
+            return inserted
         finally:
             cursor.close()
 

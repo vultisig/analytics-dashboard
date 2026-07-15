@@ -258,4 +258,8 @@ class ChainReader:
         result = response_data.get("result")
         if not isinstance(result, str):
             raise ChainReaderError("Ethereum RPC response has no hexadecimal result")
+        try:
+            int(result, 16)
+        except ValueError as error:
+            raise ChainReaderError("Ethereum RPC response has an invalid hexadecimal result") from error
         return result
