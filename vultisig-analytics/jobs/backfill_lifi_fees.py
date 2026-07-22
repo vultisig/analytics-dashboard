@@ -31,6 +31,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+SECONDS_PER_DAY = 86400
+
 UPSERT_QUERY = """
 INSERT INTO swaps (
     timestamp, tx_hash, source, date_only, block_height, user_address,
@@ -62,7 +64,7 @@ def backfill(days: int, dry_run: bool) -> None:
 
     ingestor = LiFiIngestor()
     db = DatabaseManager() if not dry_run else None
-    from_timestamp = int(time.time()) - days * 86400
+    from_timestamp = int(time.time()) - days * SECONDS_PER_DAY
 
     next_token = None
     pages = fetched = written = 0
