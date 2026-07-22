@@ -267,6 +267,8 @@ class TestFetchData(unittest.TestCase):
         self.assertIn("vultisig-web", integrators)
         self.assertIn("vultisig-windows", integrators)
         self.assertIn("vultisig-mac", integrators)
+        # SDK-default tag used by desktop apps + browser extension.
+        self.assertIn("vultisig-0", integrators)
         self.assertNotIn("next", called_params)
 
     def test_next_page_token_is_forwarded(self):
@@ -322,6 +324,11 @@ class TestGetPlatformFromIntegrator(unittest.TestCase):
     def test_windows(self):
         self.assertEqual(
             self.ing.get_platform_from_integrator("vultisig-windows"), "Windows"
+        )
+
+    def test_vultisig_0_returns_desktop_extension(self):
+        self.assertEqual(
+            self.ing.get_platform_from_integrator("vultisig-0"), "Desktop/Extension"
         )
 
     def test_bare_vultisig_returns_unknown(self):
@@ -572,6 +579,72 @@ class TestParseSwapVariants(unittest.TestCase):
         result = self.ing.parse_swap(raw)
         self.assertIsNotNone(result)
         self.assertEqual(result["affiliate_fee_usd"], 0)
+
+    def test_fee_costs_fee_split_takes_precedence_over_included_steps(self):
+        """
+        When feeCosts is present, affiliate_fee_usd comes from
+        feeSplit.integratorFee priced in the fee's own token — NOT from the
+        includedSteps delta (which is ~0 on most bridge routes).
+        """
+        raw = _clone(0)
+        raw["sending"]["includedSteps"] = [
+            {
+                "tool": "feeCollection",
+                "fromAmount": "1000000",
+                "toAmount": "1000000",  # zero delta — legacy path would yield 0
+            }
+        ]
+        # Real-world shape: Jul 22 2026 HYPE swap, integrator fee 1.58920204 HYPE @ $58.58.
+        raw["feeCosts"] = [
+            {
+                "name": "LIFI Fixed Fee",
+                "token": {"symbol": "HYPE", "decimals": 18, "priceUSD": "58.58"},
+                "amount": "2913537073590000000",
+                "feeSplit": {
+                    "lifiFee": "1324335033450000000",
+                    "integratorFee": "1589202040140000000",
+                },
+            }
+        ]
+        result = self.ing.parse_swap(raw)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], 93.095, places=2)
+
+    def test_fee_costs_sums_multiple_entries(self):
+        fee_costs = [
+            {
+                "token": {"symbol": "USDC", "decimals": 6, "priceUSD": "1"},
+                "feeSplit": {"integratorFee": "250000"},
+            },
+            {
+                "token": {"symbol": "WETH", "decimals": 18, "priceUSD": "2000"},
+                "feeSplit": {"integratorFee": "1000000000000000"},  # 0.001 WETH
+            },
+        ]
+        usd = LiFiIngestor.integrator_fee_usd_from_fee_costs(fee_costs)
+        self.assertAlmostEqual(usd, 0.25 + 2.0, places=6)
+
+    def test_fee_costs_tolerates_missing_split_and_bad_values(self):
+        fee_costs = [
+            {"token": {"decimals": 6, "priceUSD": "1"}},  # no feeSplit
+            {"token": {"decimals": 6, "priceUSD": "1"}, "feeSplit": {"integratorFee": "not-a-number"}},
+            {"token": None, "feeSplit": {"integratorFee": "1000000000000000000"}},  # defaults: 18 dec, price 0
+        ]
+        self.assertEqual(LiFiIngestor.integrator_fee_usd_from_fee_costs(fee_costs), 0)
+
+    def test_empty_fee_costs_falls_back_to_included_steps(self):
+        """feeCosts: [] (older rows) must keep using the includedSteps delta."""
+        raw = _clone(0)
+        raw["feeCosts"] = []
+        raw["sending"]["includedSteps"] = [
+            {"tool": "feeCollection", "fromAmount": "1000000", "toAmount": "990000"}
+        ]
+        raw["sending"]["token"]["decimals"] = 6
+        raw["sending"]["token"]["priceUSD"] = "1"
+        raw["sending"]["amount"] = "1000000"
+        result = self.ing.parse_swap(raw)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], 0.01, places=6)
 
     def test_missing_timestamp_falls_back_to_now(self):
         raw = _clone(0)

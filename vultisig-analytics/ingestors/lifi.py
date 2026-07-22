@@ -22,16 +22,19 @@ class LiFiIngestor(BaseIngestor):
         else:
             logger.warning("LiFi API key not found - using public rate limits (20 RPM)")
 
-    def fetch_data(self, next_page_token: str = None, limit: int = 50) -> Dict:
+    def fetch_data(self, next_page_token: str = None, limit: int = 50,
+                   from_timestamp: int = None) -> Dict:
         """Fetch transfer data from LiFi API for all Vultisig integrators"""
         # LiFi supports comma-separated integrators - more efficient
         params = {
-            'integrator': 'vultisig-ios,vultisig-android,vultisig-web,vultisig-windows,vultisig-mac',
+            'integrator': 'vultisig-ios,vultisig-android,vultisig-web,vultisig-windows,vultisig-mac,vultisig-0',
             'limit': limit
         }
 
         if next_page_token:
             params['next'] = next_page_token
+        if from_timestamp:
+            params['fromTimestamp'] = from_timestamp
 
         return self.make_request(self.api_url, params)
 
@@ -117,21 +120,20 @@ class LiFiIngestor(BaseIngestor):
             receiving_gas_usd = safe_float(receiving.get('gasAmountUSD', 0))
             network_fee_usd = sending_gas_usd + receiving_gas_usd
 
-            # Integrator fees from included steps
-            affiliate_fee_usd = 0
+            # feeSplit.integratorFee is the exact payout to our fee wallet;
+            # includedSteps deltas are ~0 on most bridge routes.
             included_steps = sending.get('includedSteps', [])
-            for step in included_steps:
-                if step.get('tool') == 'feeCollection':
-                    # Calculate fee as difference between fromAmount and toAmount
-                    from_amt = safe_float(step.get('fromAmount', 0))
-                    to_amt = safe_float(step.get('toAmount', 0))
-                    fee_amount_raw = from_amt - to_amt
-
-                    # Convert to USD using token price
-                    token_price = safe_float(sending_token.get('priceUSD', 0))
-                    if token_price > 0 and sending_decimals > 0:
-                        fee_amount_normalized = fee_amount_raw / (10 ** sending_decimals)
-                        affiliate_fee_usd += fee_amount_normalized * token_price
+            fee_costs = raw_transfer.get('feeCosts') or []
+            if fee_costs:
+                affiliate_fee_usd = self.integrator_fee_usd_from_fee_costs(fee_costs)
+            else:
+                affiliate_fee_usd = 0
+                for step in included_steps:
+                    if step.get('tool') == 'feeCollection':
+                        fee_amount_raw = safe_float(step.get('fromAmount', 0)) - safe_float(step.get('toAmount', 0))
+                        token_price = safe_float(sending_token.get('priceUSD', 0))
+                        if token_price > 0 and sending_decimals > 0:
+                            affiliate_fee_usd += (fee_amount_raw / (10 ** sending_decimals)) * token_price
 
             # Bridge/liquidity fees (difference between input and output USD minus gas)
             liquidity_fee_usd = max(0, in_amount_usd - out_amount_usd - affiliate_fee_usd)
@@ -252,12 +254,31 @@ class LiFiIngestor(BaseIngestor):
             logger.error(f"Raw data: {raw_transfer}")
             return None
 
+    @staticmethod
+    def integrator_fee_usd_from_fee_costs(fee_costs: List[Dict]) -> float:
+        """Sum integratorFee across feeCosts, priced in each fee's own token."""
+        total = 0.0
+        for fee in fee_costs:
+            split = fee.get('feeSplit') or {}
+            token = fee.get('token') or {}
+            try:
+                integrator_fee = float(split.get('integratorFee') or 0)
+                decimals = int(token.get('decimals') or 18)
+                price = float(token.get('priceUSD') or 0)
+            except (ValueError, TypeError):
+                continue
+            total += (integrator_fee / (10 ** decimals)) * price
+        return total
+
     def get_platform_from_integrator(self, integrator: str) -> str:
         """Determine platform from integrator string"""
         if not integrator:
             return 'Unknown'
-        
+
         integrator = integrator.lower()
+        if integrator == 'vultisig-0':
+            # SDK-default integrator tag: desktop apps + browser extension
+            return 'Desktop/Extension'
         if 'ios' in integrator:
             return 'iOS'
         elif 'android' in integrator:
