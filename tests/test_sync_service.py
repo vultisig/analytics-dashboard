@@ -82,9 +82,17 @@ class FakeMidgardIngestor:
         return self.pages[next_page_token]
 
     def parse_swap(self, action):
-        self.parsed_hashes.append(action["tx_hash"])
+        action_inputs = action.get("in") or []
+        if not action_inputs or not isinstance(action_inputs[0], dict):
+            return None
+
+        tx_hash = action_inputs[0].get("txID")
+        if not tx_hash:
+            return None
+
+        self.parsed_hashes.append(tx_hash)
         return {
-            "tx_hash": action["tx_hash"],
+            "tx_hash": tx_hash,
             "timestamp": action["timestamp"],
         }
 
@@ -114,8 +122,7 @@ class FakeDatabase:
 
 
 class SyncServiceReconciliationTests(unittest.TestCase):
-    def test_midgard_rescan_skips_known_rows_and_reaches_late_action(self):
-        ingestor = FakeMidgardIngestor()
+    def run_sync(self, ingestor):
         database = FakeDatabase()
         service = sync_main.SyncService.__new__(sync_main.SyncService)
         service.ingestors = {"thorchain": ingestor}
@@ -125,11 +132,34 @@ class SyncServiceReconciliationTests(unittest.TestCase):
         ):
             service.sync_source("thorchain")
 
+        return database
+
+    def test_midgard_rescan_skips_known_rows_and_reaches_late_action(self):
+        ingestor = FakeMidgardIngestor()
+        database = self.run_sync(ingestor)
+
         self.assertEqual(ingestor.fetch_tokens, [None, "page-2"])
         self.assertEqual(ingestor.parsed_hashes, ["new", "late"])
         self.assertEqual(
             [[row["tx_hash"] for row in batch] for batch in database.inserted_batches],
             [["new"], ["late"]],
+        )
+
+    def test_malformed_action_does_not_block_later_valid_action(self):
+        ingestor = FakeMidgardIngestor()
+        ingestor.pages = {
+            None: {
+                "actions": [{"in": [None]}, _action("late")],
+                "meta": {},
+            }
+        }
+
+        database = self.run_sync(ingestor)
+
+        self.assertEqual(ingestor.parsed_hashes, ["late"])
+        self.assertEqual(
+            [[row["tx_hash"] for row in batch] for batch in database.inserted_batches],
+            [["late"]],
         )
 
 

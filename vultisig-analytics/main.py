@@ -33,6 +33,23 @@ MIDGARD_RECONCILIATION_SOURCES = frozenset({'thorchain', 'mayachain'})
 MAX_PAGES_PER_SYNC = 10
 DUPLICATE_PAGE_STOP_LIMIT = 3
 
+
+def extract_midgard_tx_hash(action: object) -> str | None:
+    if not isinstance(action, dict):
+        return None
+
+    action_inputs = action.get('in')
+    if not isinstance(action_inputs, list) or not action_inputs:
+        return None
+
+    first_input = action_inputs[0]
+    if not isinstance(first_input, dict):
+        return None
+
+    tx_hash = first_input.get('txID')
+    return tx_hash if isinstance(tx_hash, str) and tx_hash else None
+
+
 class SyncService:
     def __init__(self):
         self.ingestors = {
@@ -163,9 +180,8 @@ class SyncService:
                     known_tx_hashes = set()
                     if reconcile_late_actions:
                         raw_tx_hashes = [
-                            action.get('in', [{}])[0].get('txID')
+                            extract_midgard_tx_hash(action)
                             for action in actions
-                            if action.get('in')
                         ]
                         raw_tx_hashes = [tx_hash for tx_hash in raw_tx_hashes if tx_hash]
                         if raw_tx_hashes:
@@ -185,9 +201,8 @@ class SyncService:
                     swap_records = []
                     for action in actions:
                         if reconcile_late_actions:
-                            action_inputs = action.get('in') or []
-                            raw_tx_hash = action_inputs[0].get('txID') if action_inputs else None
-                            if raw_tx_hash and raw_tx_hash in known_tx_hashes:
+                            raw_tx_hash = extract_midgard_tx_hash(action)
+                            if raw_tx_hash in known_tx_hashes:
                                 continue
 
                         parsed_swap = ingestor.parse_swap(action)
