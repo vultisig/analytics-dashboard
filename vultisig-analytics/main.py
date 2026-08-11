@@ -29,6 +29,27 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+MIDGARD_RECONCILIATION_SOURCES = frozenset({'thorchain', 'mayachain'})
+MAX_PAGES_PER_SYNC = 10
+DUPLICATE_PAGE_STOP_LIMIT = 3
+
+
+def extract_midgard_tx_hash(action: object) -> str | None:
+    if not isinstance(action, dict):
+        return None
+
+    action_inputs = action.get('in')
+    if not isinstance(action_inputs, list) or not action_inputs:
+        return None
+
+    first_input = action_inputs[0]
+    if not isinstance(first_input, dict):
+        return None
+
+    tx_hash = first_input.get('txID')
+    return tx_hash if isinstance(tx_hash, str) and tx_hash else None
+
+
 class SyncService:
     def __init__(self):
         self.ingestors = {
@@ -109,19 +130,25 @@ class SyncService:
                 logger.info(f"No sync status found for {source_name}, starting fresh")
                 sync_status = {}
             
-            # Get latest transaction hash from database to detect duplicates
+            # Midgard can index actions after newer actions have already been
+            # returned. Those sources must rescan a bounded page window rather
+            # than treating the latest stored transaction as a complete cursor.
+            reconcile_late_actions = source_name in MIDGARD_RECONCILIATION_SOURCES
+
+            # Non-Midgard sources retain the efficient latest-transaction stop.
             latest_tx_hash = None
-            try:
-                results = db_manager.execute_query(
-                    "SELECT tx_hash FROM swaps WHERE source = %s ORDER BY timestamp DESC LIMIT 1",
-                    (source_name,),
-                    fetch=True
-                )
-                if results:
-                    latest_tx_hash = results[0]['tx_hash']
-                    logger.info(f"Latest {source_name} tx in DB: {latest_tx_hash}")
-            except Exception as e:
-                logger.warning(f"Could not fetch latest tx_hash for {source_name}: {e}")
+            if not reconcile_late_actions:
+                try:
+                    results = db_manager.execute_query(
+                        "SELECT tx_hash FROM swaps WHERE source = %s ORDER BY timestamp DESC LIMIT 1",
+                        (source_name,),
+                        fetch=True
+                    )
+                    if results:
+                        latest_tx_hash = results[0]['tx_hash']
+                        logger.info(f"Latest {source_name} tx in DB: {latest_tx_hash}")
+                except Exception as e:
+                    logger.warning(f"Could not fetch latest tx_hash for {source_name}: {e}")
             
             # Start fresh from page 1 (latest data) instead of using potentially expired token
             # This ensures we always get the newest data first
@@ -129,7 +156,7 @@ class SyncService:
             total_processed = 0
             pages_processed = 0
             found_existing_data = False
-            max_pages = 10  # Limit pages per sync to avoid infinite pagination
+            max_pages = MAX_PAGES_PER_SYNC  # Bound rolling reconciliation work
             consecutive_zero_inserts = 0  # Track consecutive pages with no new data
 
             while True:
@@ -146,10 +173,38 @@ class SyncService:
                     if not actions:
                         logger.info(f"No more actions for {source_name}")
                         break
+
+                    # Avoid re-enriching every duplicate in the rolling Midgard
+                    # window. A page-level lookup leaves only genuinely unseen
+                    # actions for parsing while preserving fail-open behavior.
+                    known_tx_hashes = set()
+                    if reconcile_late_actions:
+                        raw_tx_hashes = [
+                            extract_midgard_tx_hash(action)
+                            for action in actions
+                        ]
+                        raw_tx_hashes = [tx_hash for tx_hash in raw_tx_hashes if tx_hash]
+                        if raw_tx_hashes:
+                            try:
+                                existing_rows = db_manager.execute_query(
+                                    "SELECT tx_hash FROM swaps WHERE source = %s AND tx_hash = ANY(%s)",
+                                    (source_name, raw_tx_hashes),
+                                    fetch=True
+                                )
+                                known_tx_hashes = {row['tx_hash'] for row in existing_rows}
+                            except Exception as e:
+                                logger.warning(
+                                    f"Could not fetch existing transaction hashes for {source_name}: {e}"
+                                )
                     
                     # Parse and prepare swap data
                     swap_records = []
                     for action in actions:
+                        if reconcile_late_actions:
+                            raw_tx_hash = extract_midgard_tx_hash(action)
+                            if raw_tx_hash in known_tx_hashes:
+                                continue
+
                         parsed_swap = ingestor.parse_swap(action)
                         if parsed_swap:
                             # Check if we've reached data we already have
@@ -168,7 +223,10 @@ class SyncService:
                         # Track consecutive zero inserts (all duplicates)
                         if inserted_count == 0:
                             consecutive_zero_inserts += 1
-                            if consecutive_zero_inserts >= 3:
+                            if (
+                                not reconcile_late_actions
+                                and consecutive_zero_inserts >= DUPLICATE_PAGE_STOP_LIMIT
+                            ):
                                 logger.info(f"3 consecutive pages with no new data, stopping sync for {source_name}")
                                 break
                         else:
@@ -186,7 +244,10 @@ class SyncService:
                             latest_data_ts = None
                     else:
                         consecutive_zero_inserts += 1
-                        if consecutive_zero_inserts >= 3:
+                        if (
+                            not reconcile_late_actions
+                            and consecutive_zero_inserts >= DUPLICATE_PAGE_STOP_LIMIT
+                        ):
                             logger.info(f"3 consecutive pages with no new data, stopping sync for {source_name}")
                             break
                         latest_data_ts = None
