@@ -4,6 +4,7 @@ Run database migration to add price fetching tables
 """
 import psycopg2
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,8 +15,9 @@ if not DATABASE_URL:
     print("❌ DATABASE_URL not set")
     exit(1)
 
-# Read migration SQL
-with open('migrations/add_price_tables.sql', 'r') as f:
+# Read migration SQL (path from argv, defaulting to the historical hardcoded file)
+migration_file = sys.argv[1] if len(sys.argv) > 1 else 'migrations/add_price_tables.sql'
+with open(migration_file, 'r') as f:
     migration_sql = f.read()
 
 # Connect and execute
@@ -23,7 +25,7 @@ conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
 try:
-    print("Running migration: add_price_tables.sql")
+    print(f"Running migration: {migration_file}")
     cursor.execute(migration_sql)
     conn.commit()
     print("✅ Migration completed successfully")

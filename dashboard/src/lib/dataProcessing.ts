@@ -3,6 +3,7 @@
  */
 
 import type { DateRangeType } from './dateUtils';
+import { parseApiDate, utcWeekStart } from './dateUtils';
 import { SHORT_VALUES } from './urlParams';
 
 interface RawDataItem {
@@ -49,7 +50,7 @@ export function transformToChartData(
       date,
       ...values,
     }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => parseApiDate(a.date).getTime() - parseApiDate(b.date).getTime());
 
   return result;
 }
@@ -104,7 +105,7 @@ export function filterByDateRange(
   }
 
   return data.filter(item => {
-    const itemDate = new Date(item.date);
+    const itemDate = parseApiDate(item.date);
     if (filterStartDate && itemDate < filterStartDate) return false;
     if (itemDate > filterEndDate) return false;
     return true;
@@ -132,13 +133,14 @@ export function aggregateByGranularity(
   const grouped: Record<string, { values: Record<string, number>; timestamp: number }> = {};
 
   data.forEach(item => {
-    const date = new Date(item.date);
+    const date = parseApiDate(item.date);
     let bucketKey: string;
 
     switch (granularity) {
       case 'h':
         // Format: "Dec 10, 2024 14" (Month Day, Year Hour)
         bucketKey = date.toLocaleString('en-US', {
+          timeZone: 'UTC',
           month: 'short',
           day: 'numeric',
           year: 'numeric',
@@ -148,18 +150,16 @@ export function aggregateByGranularity(
         break;
       case 'w':
         // Get week start (Sunday)
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        bucketKey = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        bucketKey = utcWeekStart(date).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
         break;
       case 'm':
         // Format: "Jan 2024"
-        bucketKey = date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        bucketKey = date.toLocaleString('en-US', { timeZone: 'UTC', month: 'short', year: 'numeric' });
         break;
       case 'd':
       default:
         // Format: "Dec 10, 2024"
-        bucketKey = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        bucketKey = date.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
         break;
     }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { parseApiDate, utcWeekStart } from '../../lib/dateUtils';
 import { StackedBarChart } from '@/components/StackedBarChart';
 import { DonutChart } from '@/components/DonutChart';
 import { TopPathsChart } from '@/components/TopPathsChart';
@@ -256,15 +257,13 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
         const platformByDate: Record<string, any> = {};
 
         allData.countByPlatformOverTime.forEach((row: any) => {
-            const date = new Date(row.date);
+            const date = parseApiDate(row.date);
             let dateStr: string;
 
             if (granularity === 'h') {
                 dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
             } else if (granularity === 'w') {
-                const weekStart = new Date(date);
-                weekStart.setDate(date.getDate() - date.getDay());
-                dateStr = weekStart.toISOString().split('T')[0];
+                dateStr = utcWeekStart(date).toISOString().split('T')[0];
             } else if (granularity === 'm') {
                 dateStr = date.toISOString().slice(0, 7);
             } else {

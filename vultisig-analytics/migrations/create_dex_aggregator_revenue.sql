@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS dex_aggregator_revenue (
   tx_hash VARCHAR(66) UNIQUE NOT NULL,
   chain VARCHAR(50) NOT NULL,
   protocol VARCHAR(50) NOT NULL, -- '1inch', 'paraswap', 'cowswap', 'other'
-  timestamp TIMESTAMP NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
   
   -- Actual data from Arkham (ground truth)
   actual_fee_usd NUMERIC(20,8) NOT NULL,
