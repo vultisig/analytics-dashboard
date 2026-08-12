@@ -13,7 +13,7 @@ import copy
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock, call
 
 # Mock psycopg2 before any ingestor import (it may not be installed in CI).
@@ -459,11 +459,13 @@ class TestInsertTransfer(unittest.TestCase):
     def test_missing_timestamp_uses_now(self):
         transfer = _clone(TRANSFER_NO_ENTITY)
         transfer["blockTimestamp"] = None
-        before = datetime.now()
+        before = datetime.now(timezone.utc)
         self.ing.insert_transfer(transfer)
-        after = datetime.now()
+        after = datetime.now(timezone.utc)
         params = self._get_insert_params()
         ts = params[3]
+        # The fallback must be timezone-aware UTC, not naive local time
+        self.assertEqual(ts.utcoffset(), timedelta(0))
         self.assertGreaterEqual(ts, before)
         self.assertLessEqual(ts, after)
 

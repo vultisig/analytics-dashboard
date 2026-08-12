@@ -15,7 +15,9 @@ class DatabaseManager:
     def get_connection(self):
         conn = None
         try:
-            conn = psycopg2.connect(self.connection_string)
+            # Pin the session timezone: dex_aggregator_revenue.timestamp is TIMESTAMP (naive),
+            # so to_char/UNION coercions and stored wall-clock all depend on the session TZ.
+            conn = psycopg2.connect(self.connection_string, options='-c timezone=UTC')
             yield conn
         except Exception as e:
             if conn:
