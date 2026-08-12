@@ -250,6 +250,17 @@ class APITester:
             params={"r": "7d", "g": "d"}
         )
         self.test_endpoint(
+            "Vultisig Share of Routed Markets",
+            "/api/market-volume-share",
+            expected_keys=[
+                "series",
+                "benchmarks",
+                "effectiveGranularity",
+            ],
+            expected_type=dict,
+            params={"r": "30d", "g": "d"},
+        )
+        self.test_endpoint(
             "Swap Volume by Provider (THORChain)",
             "/api/swap-volume/provider/thorchain",
             expected_keys=["provider", "totalVolume", "platformBreakdown"],
