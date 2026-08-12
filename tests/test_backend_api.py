@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 import time
 from datetime import datetime
@@ -39,6 +40,28 @@ class Colors:
     BLUE = '\033[94m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
+
+
+DATETIME_STRING = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
+UTC_OFFSET = re.compile(r'(?:[+-]\d{2}:\d{2}|Z)$')
+
+
+def find_offsetless_datetimes(node, path="$"):
+    """Walk a JSON payload and return paths of datetime strings without a UTC offset.
+
+    Guards the API's single-serializer contract (iso_utc): every datetime the API
+    emits must carry an explicit offset, or JS Date() parses it as local time.
+    """
+    bad = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            bad += find_offsetless_datetimes(value, f"{path}.{key}")
+    elif isinstance(node, list):
+        for i, value in enumerate(node[:50]):
+            bad += find_offsetless_datetimes(value, f"{path}[{i}]")
+    elif isinstance(node, str) and DATETIME_STRING.match(node) and not UTC_OFFSET.search(node):
+        bad.append(f"{path} = {node}")
+    return bad
 
 
 def print_pass(message: str):
@@ -113,6 +136,13 @@ class APITester:
                 if missing_keys:
                     print_warn(f"{name}: Missing keys: {missing_keys}")
                     self.warnings += 1
+
+            # Enforce the single-serializer contract: no offset-less datetimes
+            offsetless = find_offsetless_datetimes(data)
+            if offsetless:
+                print_fail(f"{name}: offset-less datetime strings: {offsetless[:3]}")
+                self.failed += 1
+                return False
 
             print_pass(f"{name}")
             self.passed += 1

@@ -8,7 +8,7 @@ import os
 import logging
 import requests
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional, Tuple
 from .protocol_identifier import ProtocolIdentifier
 from config import config
@@ -255,7 +255,7 @@ class ArkhamIngestor:
             if timestamp:
                 timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             else:
-                timestamp = datetime.now()
+                timestamp = datetime.now(timezone.utc)
 
             block_number = transfer.get('blockNumber')
 

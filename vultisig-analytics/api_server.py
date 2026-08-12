@@ -536,19 +536,14 @@ def _market_bucket(date_key, granularity):
     return parsed.isoformat()
 
 
-def get_sort_key_for_timestamp(row, field='time_period'):
-    """Get a timezone-naive datetime for sorting mixed timezone-aware and naive datetimes.
+def iso_utc(value):
+    """Serialize a DB timestamp as ISO-8601 UTC.
 
-    This handles the case where swaps table has timestamp with time zone but
-    dex_aggregator_revenue has timestamp without time zone.
+    Every timestamp column is TIMESTAMPTZ and sessions are pinned to UTC
+    (migrations/dex_aggregator_revenue_timestamptz.sql), so values arrive
+    timezone-aware; this is the API's single serialization boundary.
     """
-    tp = row.get(field)
-    if tp is None:
-        return datetime.min
-    # Convert timezone-aware to naive for comparison
-    if hasattr(tp, 'tzinfo') and tp.tzinfo is not None:
-        return tp.replace(tzinfo=None)
-    return tp
+    return value.isoformat() if value is not None else None
 
 
 # =============================================================================
@@ -913,7 +908,7 @@ def get_recent_activity():
         activities = []
         for row in results:
             activity = {
-                'timestamp': row['timestamp'].isoformat() if row['timestamp'] else None,
+                'timestamp': iso_utc(row['timestamp']),
                 'source': row['source'],
                 'tx_hash': row['tx_hash'],
                 'user_address': row['user_address'],
@@ -981,8 +976,8 @@ def get_stats():
 
             stats[source] = {
                 'count': count,
-                'earliest_swap': row['earliest_swap'].isoformat() if row['earliest_swap'] else None,
-                'latest_swap': row['latest_swap'].isoformat() if row['latest_swap'] else None,
+                'earliest_swap': iso_utc(row['earliest_swap']),
+                'latest_swap': iso_utc(row['latest_swap']),
                 'total_fees': float(row['total_fees']),
                 'total_volume': float(row['total_volume'])
             }
@@ -1311,7 +1306,7 @@ def get_revenue():
         # 2. Fee Revenue by Provider (Over Time)
         swaps_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', {date_field}) as date,
                 source,
                 SUM(affiliate_fee_usd) as revenue
             FROM swaps
@@ -1323,7 +1318,7 @@ def get_revenue():
 
         arkham_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', timestamp) as date,
                 protocol as source,
                 COALESCE(SUM(actual_fee_usd), 0) as revenue
             FROM dex_aggregator_revenue
@@ -1379,7 +1374,7 @@ def get_revenue():
         platform_case = get_normalized_platform_case()
         platform_revenue_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', {date_field}) as date,
                 {platform_case} as platform,
                 SUM(affiliate_fee_usd) as revenue
             FROM swaps
@@ -1485,11 +1480,11 @@ def get_revenue():
         return jsonify({
             'totalRevenue': {'total_revenue': total_revenue_value},
             'revenueOverTime': [
-                {'date': r['date'], 'source': r['source'], 'revenue': safe_float(r['revenue'])}
+                {'date': iso_utc(r['date']), 'source': r['source'], 'revenue': safe_float(r['revenue'])}
                 for r in revenue_over_time
             ],
             'revenueByPlatformOverTime': [
-                {'date': r['date'], 'platform': r['platform'], 'revenue': safe_float(r['revenue'])}
+                {'date': iso_utc(r['date']), 'platform': r['platform'], 'revenue': safe_float(r['revenue'])}
                 for r in revenue_by_platform_over_time
             ],
             'revenueByProvider': [
@@ -1535,7 +1530,7 @@ def get_revenue_by_provider(provider):
             # Fetch from dex_aggregator_revenue
             time_series_query = f"""
                 SELECT
-                    to_char(DATE_TRUNC('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    DATE_TRUNC('{granularity}', timestamp) as date,
                     COALESCE(SUM(actual_fee_usd), 0) as revenue
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
@@ -1548,7 +1543,7 @@ def get_revenue_by_provider(provider):
 
             chain_breakdown_query = f"""
                 SELECT
-                    to_char(DATE_TRUNC('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    DATE_TRUNC('{granularity}', timestamp) as date,
                     chain,
                     COALESCE(SUM(actual_fee_usd), 0) as revenue
                 FROM dex_aggregator_revenue
@@ -1567,11 +1562,11 @@ def get_revenue_by_provider(provider):
             return jsonify({
                 'provider': provider,
                 'totalRevenue': [
-                    {'date': r['date'], 'revenue': safe_float(r['revenue'])}
+                    {'date': iso_utc(r['date']), 'revenue': safe_float(r['revenue'])}
                     for r in time_series
                 ],
                 'platformBreakdown': [
-                    {'date': r['date'], 'chain': r['chain'], 'revenue': safe_float(r['revenue'])}
+                    {'date': iso_utc(r['date']), 'chain': r['chain'], 'revenue': safe_float(r['revenue'])}
                     for r in chain_breakdown
                 ]
             })
@@ -1580,7 +1575,7 @@ def get_revenue_by_provider(provider):
 
             time_series_query = f"""
                 SELECT
-                    to_char(DATE_TRUNC('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    DATE_TRUNC('{granularity}', {date_field}) as date,
                     SUM(affiliate_fee_usd) as revenue
                 FROM swaps
                 WHERE source = %s
@@ -1592,7 +1587,7 @@ def get_revenue_by_provider(provider):
             platform_expr = get_platform_expression(provider)
             platform_breakdown_query = f"""
                 SELECT
-                    to_char(DATE_TRUNC('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    DATE_TRUNC('{granularity}', {date_field}) as date,
                     {platform_expr} as platform,
                     SUM(affiliate_fee_usd) as revenue
                 FROM swaps
@@ -1608,11 +1603,11 @@ def get_revenue_by_provider(provider):
             return jsonify({
                 'provider': provider,
                 'totalRevenue': [
-                    {'date': r['date'], 'revenue': safe_float(r['revenue'])}
+                    {'date': iso_utc(r['date']), 'revenue': safe_float(r['revenue'])}
                     for r in time_series
                 ],
                 'platformBreakdown': [
-                    {'date': r['date'], 'platform': r['platform'], 'revenue': safe_float(r['revenue'])}
+                    {'date': iso_utc(r['date']), 'platform': r['platform'], 'revenue': safe_float(r['revenue'])}
                     for r in platform_breakdown
                 ]
             })
@@ -1909,7 +1904,7 @@ def get_swap_volume():
 
         volume_over_time = sorted(
             list(swaps_time) + list(arkham_time),
-            key=get_sort_key_for_timestamp
+            key=lambda x: x['time_period']
         )
 
         # 3. Total Volume by Provider
@@ -2057,7 +2052,7 @@ def get_swap_volume():
             'globalStats': global_stats,
             'volumeOverTime': [
                 {
-                    'date': r['time_period'].isoformat() if r['time_period'] else None,
+                    'date': iso_utc(r['time_period']),
                     'source': r['source'],
                     'volume': safe_float(r['volume'])
                 }
@@ -2065,7 +2060,7 @@ def get_swap_volume():
             ],
             'volumeByPlatformOverTime': [
                 {
-                    'date': r['time_period'].isoformat() if r['time_period'] else None,
+                    'date': iso_utc(r['time_period']),
                     'platform': r['platform'],
                     'volume': safe_float(r['volume'])
                 }
@@ -2154,14 +2149,14 @@ def get_swap_volume_by_provider(provider):
                 'provider': provider,
                 'totalVolume': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'volume': safe_float(r['volume'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'chain': r['chain'],
                         'volume': safe_float(r['volume'])
                     }
@@ -2202,14 +2197,14 @@ def get_swap_volume_by_provider(provider):
                 'provider': provider,
                 'totalVolume': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'volume': safe_float(r['volume'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'platform': r['platform'],
                         'volume': safe_float(r['volume'])
                     }
@@ -2265,7 +2260,7 @@ def get_swap_count():
         # 2. Count by Provider (Over Time)
         swaps_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', {date_field}) as date,
                 source,
                 COUNT(*) as count
             FROM swaps
@@ -2277,7 +2272,7 @@ def get_swap_count():
 
         arkham_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', timestamp), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', timestamp) as date,
                 protocol as source,
                 COUNT(*) as count
             FROM dex_aggregator_revenue
@@ -2424,12 +2419,12 @@ def get_swap_count():
         return jsonify({
             'totalCount': {'total_count': total_count},
             'countOverTime': [
-                {'date': r['date'], 'source': r['source'], 'count': safe_int(r['count'])}
+                {'date': iso_utc(r['date']), 'source': r['source'], 'count': safe_int(r['count'])}
                 for r in count_over_time
             ],
             'countByPlatformOverTime': [
                 {
-                    'date': r['time_period'].isoformat() if r['time_period'] else None,
+                    'date': iso_utc(r['time_period']),
                     'platform': r['platform'],
                     'count': safe_int(r['count'])
                 }
@@ -2506,14 +2501,14 @@ def get_swap_count_by_provider(provider):
                 'provider': provider,
                 'totalCount': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'count': safe_int(r['count'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'chain': r['chain'],
                         'count': safe_int(r['count'])
                     }
@@ -2554,14 +2549,14 @@ def get_swap_count_by_provider(provider):
                 'provider': provider,
                 'totalCount': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'count': safe_int(r['count'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'platform': r['platform'],
                         'count': safe_int(r['count'])
                     }
@@ -2611,7 +2606,7 @@ def get_users():
         if granularity == 'hour':
             users_over_time_query = f"""
                 SELECT
-                    to_char(date_trunc('hour', date), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    date_trunc('hour', date) as date,
                     source,
                     COUNT(DISTINCT user_address) as users
                 FROM (
@@ -2630,7 +2625,7 @@ def get_users():
         else:
             users_over_time_query = f"""
                 SELECT
-                    to_char(date_trunc('{granularity}', date), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    date_trunc('{granularity}', date) as date,
                     source,
                     COUNT(DISTINCT user_address) as users
                 FROM (
@@ -2653,7 +2648,7 @@ def get_users():
         platform_case = get_normalized_platform_case()
         users_by_platform_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', {date_field}) as date,
                 {platform_case} as platform,
                 COUNT(DISTINCT user_address) as users
             FROM swaps
@@ -2764,7 +2759,7 @@ def get_users():
                     GROUP BY user_address
                 )
                 SELECT
-                    to_char(date_trunc('hour', first_date), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    date_trunc('hour', first_date) as date,
                     first_source as source,
                     COUNT(*) as users
                 FROM first_appearances
@@ -2790,7 +2785,7 @@ def get_users():
                     GROUP BY user_address
                 )
                 SELECT
-                    to_char(date_trunc('{granularity}', first_date), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                    date_trunc('{granularity}', first_date) as date,
                     first_source as source,
                     COUNT(*) as users
                 FROM first_appearances
@@ -2804,11 +2799,11 @@ def get_users():
         return jsonify({
             'totalUsers': {'unique_users': safe_int(total_users['unique_users'])},
             'usersOverTime': [
-                {'date': r['date'], 'source': r['source'], 'users': safe_int(r['users'])}
+                {'date': iso_utc(r['date']), 'source': r['source'], 'users': safe_int(r['users'])}
                 for r in users_over_time
             ],
             'newUsersOverTime': [
-                {'date': r['date'], 'source': r['source'], 'users': safe_int(r['users'])}
+                {'date': iso_utc(r['date']), 'source': r['source'], 'users': safe_int(r['users'])}
                 for r in new_users_over_time
             ],
             'usersByPlatform': [
@@ -2828,7 +2823,7 @@ def get_users():
                 for r in swap_count_by_provider
             ],
             'usersByPlatformOverTime': [
-                {'date': r['date'], 'platform': r['platform'], 'users': safe_int(r['users'])}
+                {'date': iso_utc(r['date']), 'platform': r['platform'], 'users': safe_int(r['users'])}
                 for r in users_by_platform_over_time
             ],
             'usersByPlatformNormalized': [
@@ -2892,14 +2887,14 @@ def get_users_by_provider(provider):
                 'provider': provider,
                 'totalUsers': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'users': safe_int(r['users'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'chain': r['chain'],
                         'users': safe_int(r['users'])
                     }
@@ -2940,14 +2935,14 @@ def get_users_by_provider(provider):
                 'provider': provider,
                 'totalUsers': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'users': safe_int(r['users'])
                     }
                     for r in time_series
                 ],
                 'platformBreakdown': [
                     {
-                        'date': r['time_period'].isoformat() if r['time_period'] else None,
+                        'date': iso_utc(r['time_period']),
                         'platform': r['platform'],
                         'users': safe_int(r['users'])
                     }
@@ -3169,7 +3164,7 @@ def get_referrals():
         # 2. Referral Metrics Over Time
         metrics_over_time_query = f"""
             SELECT
-                to_char(date_trunc('{granularity}', {date_field}), 'YYYY-MM-DD"T"HH24:MI:SS') as date,
+                date_trunc('{granularity}', {date_field}) as date,
                 COALESCE(SUM(
                     in_amount_usd * GREATEST(0, 50 - COALESCE((SELECT SUM(x) FROM unnest(affiliate_fees_bps) AS x), 0)) / 10000
                 ), 0) as fees_saved,
@@ -3252,7 +3247,7 @@ def get_referrals():
             # Over time data
             'metricsOverTime': [
                 {
-                    'date': r['date'],
+                    'date': iso_utc(r['date']),
                     'feesSaved': safe_float(r['fees_saved']),
                     'referrerRevenue': safe_float(r['referrer_revenue']),
                     'volume': safe_float(r['volume']),
@@ -3418,8 +3413,8 @@ def get_system_status():
         return jsonify([
             {
                 'source': row['source'],
-                'last_synced_timestamp': row['last_synced_timestamp'].isoformat() if row['last_synced_timestamp'] else None,
-                'latest_data_timestamp': row['latest_data_timestamp'].isoformat() if row['latest_data_timestamp'] else None,
+                'last_synced_timestamp': iso_utc(row['last_synced_timestamp']),
+                'latest_data_timestamp': iso_utc(row['latest_data_timestamp']),
                 'last_error': row['last_error'],
                 'is_active': row['is_active']
             }
