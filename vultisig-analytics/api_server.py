@@ -313,27 +313,13 @@ def safe_int(value, default=0):
 
 
 def iso_utc(value):
-    """Serialize a DB timestamp as ISO-8601, treating naive values as UTC."""
-    if value is None:
-        return None
-    if isinstance(value, datetime) and value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.isoformat()
+    """Serialize a DB timestamp as ISO-8601 UTC.
 
-
-def get_sort_key_for_timestamp(row, field='time_period'):
-    """Get a timezone-naive datetime for sorting mixed timezone-aware and naive datetimes.
-
-    This handles the case where swaps table has timestamp with time zone but
-    dex_aggregator_revenue has timestamp without time zone.
+    Every timestamp column is TIMESTAMPTZ and sessions are pinned to UTC
+    (migrations/dex_aggregator_revenue_timestamptz.sql), so values arrive
+    timezone-aware; this is the API's single serialization boundary.
     """
-    tp = row.get(field)
-    if tp is None:
-        return datetime.min
-    # Convert timezone-aware to naive for comparison
-    if hasattr(tp, 'tzinfo') and tp.tzinfo is not None:
-        return tp.replace(tzinfo=None)
-    return tp
+    return value.isoformat() if value is not None else None
 
 
 # =============================================================================
@@ -1125,7 +1111,7 @@ def get_revenue():
 
         revenue_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
-            key=lambda x: get_sort_key_for_timestamp(x, 'date')
+            key=lambda x: x['date']
         )
 
         # 3. Total Revenue by Provider
@@ -1486,7 +1472,7 @@ def get_swap_volume():
 
         volume_over_time = sorted(
             list(swaps_time) + list(arkham_time),
-            key=get_sort_key_for_timestamp
+            key=lambda x: x['time_period']
         )
 
         # 3. Total Volume by Provider
@@ -1871,7 +1857,7 @@ def get_swap_count():
 
         count_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
-            key=lambda x: get_sort_key_for_timestamp(x, 'date')
+            key=lambda x: x['date']
         )
 
         # 3. Count by Platform Over Time

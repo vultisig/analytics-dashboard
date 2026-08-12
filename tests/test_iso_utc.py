@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'vultisig-analyt
 # api_server imports flask at module level; import just the helper's source instead
 # of the app so the test needs no dependencies.
 _src = (Path(__file__).resolve().parent.parent / 'vultisig-analytics' / 'api_server.py').read_text()
-_match = re.search(r'def iso_utc\(value\):\n(?:    .*\n|\n)*?    return value\.isoformat\(\)\n', _src)
+_match = re.search(r'def iso_utc\(value\):\n(?:    .*\n|\n)*?    return value\.isoformat\(\) if value is not None else None\n', _src)
 assert _match, 'iso_utc not found in api_server.py'
 _ns = {'datetime': datetime, 'timezone': timezone}
 exec(_match.group(0), _ns)
@@ -22,16 +22,8 @@ iso_utc = _ns['iso_utc']
 OFFSET_SUFFIX = re.compile(r'[+-]\d{2}:\d{2}$')
 
 
-def test_naive_gets_utc_offset():
-    assert iso_utc(datetime(2026, 8, 10)) == '2026-08-10T00:00:00+00:00'
-
-
-def test_aware_unchanged():
+def test_aware_serializes_with_offset():
     assert iso_utc(datetime(2026, 8, 10, tzinfo=timezone.utc)) == '2026-08-10T00:00:00+00:00'
-
-
-def test_naive_and_aware_serialize_identically():
-    assert iso_utc(datetime(2026, 8, 10)) == iso_utc(datetime(2026, 8, 10, tzinfo=timezone.utc))
 
 
 def test_none_passes_through():
@@ -42,9 +34,11 @@ def test_date_passes_through():
     assert iso_utc(date(2026, 8, 10)) == '2026-08-10'
 
 
-def test_every_datetime_output_carries_offset():
-    for value in (datetime(2026, 8, 10), datetime(2026, 8, 10, 14, 30, tzinfo=timezone.utc)):
-        assert OFFSET_SUFFIX.search(iso_utc(value)), f'no offset on {iso_utc(value)}'
+def test_aware_output_carries_offset():
+    # Naive datetimes are a schema violation since the TIMESTAMPTZ migration;
+    # the integration suite's response walker is the guard that catches them.
+    value = iso_utc(datetime(2026, 8, 10, 14, 30, tzinfo=timezone.utc))
+    assert OFFSET_SUFFIX.search(value), f'no offset on {value}'
 
 
 if __name__ == '__main__':
