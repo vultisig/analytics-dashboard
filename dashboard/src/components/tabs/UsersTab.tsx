@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { parseApiDate } from '../../lib/dateUtils';
 import { StackedBarChart } from '@/components/StackedBarChart';
 import { DonutChart } from '@/components/DonutChart';
 import { HeroMetric } from '@/components/HeroMetric';
@@ -281,19 +282,20 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
 
         const platformByDate: Record<string, any> = {};
         allData.usersByPlatformOverTime.forEach((row: any) => {
-            const date = new Date(row.date);
+            const date = parseApiDate(row.date);
             let dateStr: string;
             if (granularity === 'h') {
                 dateStr = date.toLocaleString('en-US', {
+                    timeZone: 'UTC',
                     month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
                     hour12: false
                 }).replace(',', '');
             } else if (granularity === 'm') {
-                dateStr = date.toLocaleString('en-US', { year: 'numeric', month: 'short' });
+                dateStr = date.toLocaleString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short' });
             } else {
-                dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                dateStr = date.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
             }
 
             if (!platformByDate[dateStr]) {

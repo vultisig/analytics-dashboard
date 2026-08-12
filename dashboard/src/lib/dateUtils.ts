@@ -22,6 +22,24 @@ export type DateRangeType =
  * @param range - The date range type
  * @returns Start date or null for 'all' range
  */
+/**
+ * Parse a timestamp from the analytics API. The API contract is UTC ISO-8601 with
+ * an explicit offset; a datetime string without one is treated as UTC rather than
+ * left to Date's local-time default (the mixed-format bug class fixed in PR #57).
+ */
+export function parseApiDate(value: string): Date {
+  const isOffsetlessDatetime =
+    /^\d{4}-\d{2}-\d{2}T\d{2}/.test(value) && !/(?:[+-]\d{2}:\d{2}|Z)$/.test(value);
+  return new Date(isOffsetlessDatetime ? `${value}Z` : value);
+}
+
+/** Start of the UTC week (Sunday) containing the given instant. */
+export function utcWeekStart(date: Date): Date {
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+  return start;
+}
+
 export function getStartDateForRange(range: DateRangeType): Date | null {
   const now = new Date();
 
