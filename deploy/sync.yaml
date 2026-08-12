@@ -18,7 +18,7 @@ spec:
         - name: ghcr
       containers:
         - name: sync
-          image: ghcr.io/vultisig/analytics-dashboard/sync:1.0.20
+          image: ghcr.io/vultisig/analytics-dashboard/sync:1.0.21
           env:
             - name: DATABASE_URL
               valueFrom:
