@@ -12,6 +12,7 @@ Run with: python3 -m unittest tests.test_sql_injection -v
 """
 
 import ast
+import ipaddress
 import re
 import time
 import unittest
@@ -40,6 +41,13 @@ def load_function(name, namespace):
     """Exec a top-level api_server.py function into namespace and return it."""
     exec(read_handler_source(name), namespace)
     return namespace[name]
+
+
+def load_functions(names, namespace):
+    """Exec multiple top-level api_server.py functions into namespace."""
+    for name in names:
+        load_function(name, namespace)
+    return namespace
 
 
 # Replicate the validation logic from api_server.py build_date_filter
@@ -168,14 +176,20 @@ class TestEthereumAddressValidation(unittest.TestCase):
 class TestSystemStatusDisclosure(unittest.TestCase):
     """The public system-status response must never expose raw error text."""
 
-    def test_last_error_absent(self):
-        """Neither the query nor the response of get_system_status touches last_error."""
-        self.assertNotIn('last_error', read_handler_source('get_system_status'))
+    def test_last_error_response_key_absent(self):
+        """The JSON response must not include the raw last_error field."""
+        node, _ = find_function_node('get_system_status')
+        response_keys = {
+            key.value
+            for dict_node in ast.walk(node) if isinstance(dict_node, ast.Dict)
+            for key in dict_node.keys if isinstance(key, ast.Constant)
+        }
+        self.assertNotIn('last_error', response_keys)
 
     def test_public_fields_present(self):
         """The non-sensitive public contract fields remain in the response."""
         src = read_handler_source('get_system_status')
-        for field in ('source', 'last_synced_timestamp', 'latest_data_timestamp', 'is_active'):
+        for field in ('source', 'last_synced_timestamp', 'latest_data_timestamp', 'has_error', 'is_active'):
             self.assertIn(f"'{field}'", src)
 
 
@@ -220,8 +234,8 @@ class TestPublicLimitBounds(unittest.TestCase):
 class TestPublicRateLimit(unittest.TestCase):
     """All public API routes get a per-IP limit; holder lookup keeps its stricter one."""
 
-    def _check_rate_limit(self):
-        namespace = {'time': time, 'RATE_LIMIT_WINDOW_MS': 60 * 1000, 'MAX_TRACKED_IPS': 10000}
+    def _check_rate_limit(self, max_tracked_ips=10000):
+        namespace = {'time': time, 'RATE_LIMIT_WINDOW_MS': 60 * 1000, 'MAX_TRACKED_IPS': max_tracked_ips}
         return load_function('check_rate_limit', namespace)
 
     def test_blocks_after_max_requests(self):
@@ -240,6 +254,13 @@ class TestPublicRateLimit(unittest.TestCase):
             check('1.2.3.4', store, 10)
         self.assertFalse(check('1.2.3.4', store, 10)['allowed'])
         self.assertTrue(check('5.6.7.8', store, 10)['allowed'])
+
+    def test_store_does_not_exceed_tracked_ip_cap(self):
+        check = self._check_rate_limit(max_tracked_ips=3)
+        store = defaultdict(lambda: {'count': 0, 'reset_time': 0})
+        for index in range(5):
+            self.assertTrue(check(f'1.2.3.{index}', store, 10)['allowed'])
+            self.assertLessEqual(len(store), 3)
 
     def test_general_limiter_registered_before_request(self):
         node, _ = find_function_node('limit_public_api')
@@ -267,6 +288,37 @@ class TestPublicRateLimit(unittest.TestCase):
             if isinstance(n.value, ast.Constant)
         }
         self.assertEqual(strict.get('RATE_LIMIT_MAX_REQUESTS'), 10)
+
+
+class TestClientIpTrustBoundary(unittest.TestCase):
+    """Forwarding headers must not let direct clients evade rate limits."""
+
+    def _namespace(self):
+        return load_functions(
+            ('parse_ip_address', 'is_trusted_proxy', 'get_forwarded_for_client_ip', 'get_client_ip'),
+            {
+                'ipaddress': ipaddress,
+                'TRUSTED_PROXY_NETWORKS': (
+                    ipaddress.ip_network('127.0.0.0/8'),
+                    ipaddress.ip_network('10.0.0.0/8'),
+                ),
+            }
+        )
+
+    def test_direct_client_cannot_spoof_forwarded_headers(self):
+        namespace = self._namespace()
+
+        class Request:
+            remote_addr = '203.0.113.9'
+            headers = {'X-Forwarded-For': '198.51.100.1', 'CF-Connecting-IP': '198.51.100.2'}
+
+        namespace['request'] = Request()
+        self.assertEqual(namespace['get_client_ip'](), '203.0.113.9')
+
+    def test_trusted_proxy_uses_rightmost_untrusted_forwarded_for_hop(self):
+        namespace = self._namespace()
+        forwarded = '198.51.100.200, 203.0.113.50, 10.1.2.3'
+        self.assertEqual(namespace['get_forwarded_for_client_ip'](forwarded), '203.0.113.50')
 
 
 if __name__ == '__main__':

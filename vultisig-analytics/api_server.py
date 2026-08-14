@@ -4,7 +4,10 @@ VultisigAnalytics API Server
 Provides REST endpoints for the frontend dashboard
 """
 import logging
+import ipaddress
+import os
 import re
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -114,8 +117,14 @@ RATE_LIMIT_WINDOW_MS = 60 * 1000  # 1 minute
 RATE_LIMIT_MAX_REQUESTS = 10  # holder lookup: 10 requests per minute per IP
 PUBLIC_RATE_LIMIT_MAX_REQUESTS = 120  # any /api/ route: 120 requests per minute per IP
 MAX_TRACKED_IPS = 10000  # cap per-store memory before pruning expired windows
+TRUSTED_PROXY_CIDRS = os.getenv(
+    'TRUSTED_PROXY_CIDRS',
+    '127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7,fe80::/10'
+)
 rate_limit_store = defaultdict(lambda: {'count': 0, 'reset_time': 0})
 public_rate_limit_store = defaultdict(lambda: {'count': 0, 'reset_time': 0})
+rate_limit_lock = threading.Lock()
+public_rate_limit_lock = threading.Lock()
 
 # Row-count caps for externally supplied `limit` values on public endpoints
 MAX_ACTIVITY_LIMIT = 200
@@ -156,6 +165,23 @@ def parse_limit(args, default, maximum):
     except ValueError:
         raise ValueError('Invalid limit parameter, expected an integer')
     return min(max(value, 1), maximum)
+
+
+def parse_trusted_proxy_networks(raw):
+    """Parse trusted proxy CIDR configuration, ignoring invalid entries."""
+    networks = []
+    for item in raw.split(','):
+        cidr = item.strip()
+        if not cidr:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid TRUSTED_PROXY_CIDRS entry: %s", cidr)
+    return tuple(networks)
+
+
+TRUSTED_PROXY_NETWORKS = parse_trusted_proxy_networks(TRUSTED_PROXY_CIDRS)
 
 
 def parse_granularity(granularity_param):
@@ -262,52 +288,114 @@ def get_normalized_platform_case():
 
 def get_client_ip():
     """Get client IP from request headers"""
-    forwarded_for = request.headers.get('X-Forwarded-For')
-    real_ip = request.headers.get('X-Real-IP')
-    cf_ip = request.headers.get('CF-Connecting-IP')
+    remote_addr = request.remote_addr or 'unknown'
+    if not is_trusted_proxy(remote_addr):
+        return remote_addr
 
-    if cf_ip:
-        return cf_ip
-    if real_ip:
-        return real_ip
+    forwarded_for = get_forwarded_for_client_ip(request.headers.get('X-Forwarded-For'))
     if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
-    return request.remote_addr or 'unknown'
+        return forwarded_for
+
+    for header_name in ('CF-Connecting-IP', 'X-Real-IP'):
+        candidate = parse_ip_address(request.headers.get(header_name))
+        if candidate:
+            return candidate
+
+    return remote_addr
 
 
-def check_rate_limit(ip, store, max_requests):
+def parse_ip_address(value):
+    """Return normalized IP text for a syntactically valid address."""
+    if not value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def is_trusted_proxy(address):
+    """Whether an immediate peer is allowed to supply forwarding headers."""
+    ip_text = parse_ip_address(address)
+    if not ip_text:
+        return False
+    ip = ipaddress.ip_address(ip_text)
+    return any(ip in network for network in TRUSTED_PROXY_NETWORKS)
+
+
+def get_forwarded_for_client_ip(value):
+    """Extract client IP from X-Forwarded-For, skipping trusted proxy hops."""
+    if not value:
+        return None
+
+    chain = []
+    for part in value.split(','):
+        ip_text = parse_ip_address(part)
+        if ip_text:
+            chain.append(ip_text)
+
+    if not chain:
+        return None
+
+    for ip_text in reversed(chain):
+        if not is_trusted_proxy(ip_text):
+            return ip_text
+
+    return chain[0]
+
+
+def check_rate_limit(ip, store, max_requests, lock=None):
     """
     Check a fixed-window per-IP rate limit against the given store.
     Returns dict with 'allowed', 'remaining', 'reset_in' keys.
     """
-    now = int(time.time() * 1000)
-    record = store[ip]
+    if lock is None:
+        class _NoopLock:
+            def __enter__(self):
+                return None
 
-    # Clean up old entries periodically
-    if len(store) > MAX_TRACKED_IPS:
-        cutoff = now
-        to_delete = [k for k, v in store.items() if v['reset_time'] < cutoff]
-        for k in to_delete:
-            del store[k]
+            def __exit__(self, exc_type, exc, tb):
+                return False
 
-    if record['reset_time'] == 0 or now > record['reset_time']:
-        # New window
-        store[ip] = {'count': 1, 'reset_time': now + RATE_LIMIT_WINDOW_MS}
-        return {'allowed': True, 'remaining': max_requests - 1, 'reset_in': RATE_LIMIT_WINDOW_MS}
+        lock = _NoopLock()
 
-    if record['count'] >= max_requests:
+    with lock:
+        now = int(time.time() * 1000)
+
+        record = store.get(ip)
+        if record is None and len(store) >= MAX_TRACKED_IPS:
+            to_delete = [k for k, v in store.items() if v['reset_time'] < now]
+            for k in to_delete:
+                del store[k]
+
+            if len(store) >= MAX_TRACKED_IPS:
+                overflow = len(store) - MAX_TRACKED_IPS + 1
+                oldest_keys = [
+                    k for k, _ in sorted(store.items(), key=lambda item: item[1]['reset_time'])[:overflow]
+                ]
+                for k in oldest_keys:
+                    del store[k]
+
+        record = store.get(ip, {'count': 0, 'reset_time': 0})
+
+        if record['reset_time'] == 0 or now > record['reset_time']:
+            # New window
+            store[ip] = {'count': 1, 'reset_time': now + RATE_LIMIT_WINDOW_MS}
+            return {'allowed': True, 'remaining': max_requests - 1, 'reset_in': RATE_LIMIT_WINDOW_MS}
+
+        if record['count'] >= max_requests:
+            return {
+                'allowed': False,
+                'remaining': 0,
+                'reset_in': record['reset_time'] - now
+            }
+
+        record['count'] += 1
         return {
-            'allowed': False,
-            'remaining': 0,
+            'allowed': True,
+            'remaining': max_requests - record['count'],
             'reset_in': record['reset_time'] - now
         }
-
-    record['count'] += 1
-    return {
-        'allowed': True,
-        'remaining': max_requests - record['count'],
-        'reset_in': record['reset_time'] - now
-    }
 
 
 @app.before_request
@@ -318,7 +406,12 @@ def limit_public_api():
     if not request.path.startswith('/api/') or request.method == 'OPTIONS':
         return None
 
-    rate = check_rate_limit(get_client_ip(), public_rate_limit_store, PUBLIC_RATE_LIMIT_MAX_REQUESTS)
+    rate = check_rate_limit(
+        get_client_ip(),
+        public_rate_limit_store,
+        PUBLIC_RATE_LIMIT_MAX_REQUESTS,
+        public_rate_limit_lock
+    )
     if rate['allowed']:
         return None
 
@@ -2641,7 +2734,7 @@ def lookup_holder():
     """Look up holder tier information by address with rate limiting"""
     # Check rate limit
     ip = get_client_ip()
-    rate_limit = check_rate_limit(ip, rate_limit_store, RATE_LIMIT_MAX_REQUESTS)
+    rate_limit = check_rate_limit(ip, rate_limit_store, RATE_LIMIT_MAX_REQUESTS, rate_limit_lock)
 
     headers = {
         'X-RateLimit-Limit': str(RATE_LIMIT_MAX_REQUESTS),
@@ -3010,19 +3103,25 @@ def get_system_status():
     """Get sync status for all data sources"""
     try:
         query = """
-            SELECT source, last_synced_timestamp, latest_data_timestamp, is_active
+            SELECT
+                source,
+                last_synced_timestamp,
+                latest_data_timestamp,
+                (last_error IS NOT NULL AND last_error <> '') AS has_error,
+                is_active
             FROM sync_status
             ORDER BY source ASC
         """
         result = db_manager.execute_query(query, fetch=True)
 
-        # Public endpoint: sync timestamps and active state only — raw
+        # Public endpoint: sync timestamps and health state only; raw
         # ingestion error text is operational disclosure.
         return jsonify([
             {
                 'source': row['source'],
                 'last_synced_timestamp': iso_utc(row['last_synced_timestamp']),
                 'latest_data_timestamp': iso_utc(row['latest_data_timestamp']),
+                'has_error': row['has_error'],
                 'is_active': row['is_active']
             }
             for row in result
