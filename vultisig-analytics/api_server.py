@@ -847,7 +847,8 @@ def health_check():
         else:
             return jsonify({'status': 'unhealthy', 'database': 'disconnected'}), 500
     except Exception as e:
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+        logger.error(f"Health check failed: {e}")
+        return jsonify({'status': 'unhealthy', 'error': 'Internal server error'}), 500
 
 
 @app.route('/api/stats')

@@ -231,6 +231,15 @@ class TestPublicLimitBounds(unittest.TestCase):
         self.assertNotIn("int(request.args.get('limit'", src)
 
 
+class TestPublicErrorRedaction(unittest.TestCase):
+    """Public endpoints must not return raw exception text."""
+
+    def test_health_check_returns_a_generic_error(self):
+        src = read_handler_source('health_check')
+        self.assertIn("'Internal server error'", src)
+        self.assertNotIn("'error': str(e)", src)
+
+
 class TestPublicRateLimit(unittest.TestCase):
     """All public API routes get a per-IP limit; holder lookup keeps its stricter one."""
 
