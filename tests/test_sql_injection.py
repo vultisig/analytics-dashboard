@@ -1,15 +1,31 @@
 #!/usr/bin/env python3
 """
-Unit tests for SQL injection prevention in build_date_filter.
+Unit tests for SQL injection prevention in build_date_filter and for
+public API hardening (no operational disclosure in system-status).
 
 Tests the date validation regex and address validation independently
-of the Flask app, so no backend dependencies are required.
+of the Flask app, so no backend dependencies are required. The Flask
+app itself is not importable here (no flask installed), so handler
+checks parse the api_server.py source instead.
 
 Run with: python3 -m unittest tests.test_sql_injection -v
 """
 
+import ast
 import re
 import unittest
+from pathlib import Path
+
+API_SERVER_PATH = Path(__file__).resolve().parent.parent / 'vultisig-analytics' / 'api_server.py'
+
+
+def read_handler_source(name):
+    """Return the source segment of a top-level function in api_server.py."""
+    source = API_SERVER_PATH.read_text()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return ast.get_source_segment(source, node)
+    raise AssertionError(f'handler {name!r} not found in {API_SERVER_PATH}')
 
 
 # Replicate the validation logic from api_server.py build_date_filter
@@ -133,6 +149,20 @@ class TestEthereumAddressValidation(unittest.TestCase):
 
     def test_invalid_characters(self):
         self.assertFalse(is_valid_ethereum_address('0x' + 'g' * 40))
+
+
+class TestSystemStatusDisclosure(unittest.TestCase):
+    """The public system-status response must never expose raw error text."""
+
+    def test_last_error_absent(self):
+        """Neither the query nor the response of get_system_status touches last_error."""
+        self.assertNotIn('last_error', read_handler_source('get_system_status'))
+
+    def test_public_fields_present(self):
+        """The non-sensitive public contract fields remain in the response."""
+        src = read_handler_source('get_system_status')
+        for field in ('source', 'last_synced_timestamp', 'latest_data_timestamp', 'is_active'):
+            self.assertIn(f"'{field}'", src)
 
 
 if __name__ == '__main__':

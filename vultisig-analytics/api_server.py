@@ -2972,18 +2972,19 @@ def get_system_status():
     """Get sync status for all data sources"""
     try:
         query = """
-            SELECT source, last_synced_timestamp, latest_data_timestamp, last_error, is_active
+            SELECT source, last_synced_timestamp, latest_data_timestamp, is_active
             FROM sync_status
             ORDER BY source ASC
         """
         result = db_manager.execute_query(query, fetch=True)
 
+        # Public endpoint: sync timestamps and active state only — raw
+        # ingestion error text is operational disclosure.
         return jsonify([
             {
                 'source': row['source'],
                 'last_synced_timestamp': iso_utc(row['last_synced_timestamp']),
                 'latest_data_timestamp': iso_utc(row['latest_data_timestamp']),
-                'last_error': row['last_error'],
                 'is_active': row['is_active']
             }
             for row in result
