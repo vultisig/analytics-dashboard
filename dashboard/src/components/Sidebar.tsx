@@ -11,6 +11,7 @@ import {
     IconHashtag,
     IconPeopleAdded,
     IconTrophyV,
+    IconReceiptCheck,
     IconLayoutLeft,
 } from '@/icons';
 import SystemStatus from './SystemStatus';
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
     { id: SHORT_VALUES.TAB_COUNT, label: 'Count', icon: IconHashtag },
     { id: SHORT_VALUES.TAB_REFERRALS, label: 'Referrals', icon: IconPeopleAdded },
     { id: SHORT_VALUES.TAB_HOLDERS, label: 'Holders', icon: IconTrophyV },
+    { id: SHORT_VALUES.TAB_TRANSPARENCY, label: 'Transparency', icon: IconReceiptCheck },
 ];
 
 const STORAGE_KEY = 'vult-analytics-sidebar-collapsed';

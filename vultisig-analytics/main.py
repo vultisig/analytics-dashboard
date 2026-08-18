@@ -10,6 +10,7 @@ from ingestors.thorchain import THORChainIngestor
 from ingestors.mayachain import MayaChainIngestor
 from ingestors.lifi import LiFiIngestor
 from ingestors.etherscan_ingestor import EtherscanIngestor
+from ingestors.buyback_ingestor import BuybackIngestor
 from ingestors.router_source_classifier import (
     reclassify_all as reclassify_etherscan_rows,
     sync_attributed_gap_rows,
@@ -58,6 +59,7 @@ class SyncService:
             'mayachain': MayaChainIngestor(),
             'lifi': LiFiIngestor(),
         }
+        self.buyback_ingestor = BuybackIngestor()
 
     def sync_source(self, source_name: str):
         """Sync data from a specific source"""
@@ -88,6 +90,16 @@ class SyncService:
                         error_count=0 if r['error'] is None else 1,
                         last_error=r['error'],
                     )
+
+                buyback_result = self.buyback_ingestor.ingest()
+                db_manager.update_sync_status(
+                    'buybacks',
+                    next_page_token=None,
+                    last_synced_timestamp=datetime.utcnow(),
+                    error_count=0 if buyback_result['error'] is None else 1,
+                    last_error=buyback_result['error'],
+                )
+                logger.info(f"Completed buyback sync: {buyback_result}")
 
                 # Router-source classifier: verify each fresh row's tx.to
                 # against the known-router set for its tagged protocol;

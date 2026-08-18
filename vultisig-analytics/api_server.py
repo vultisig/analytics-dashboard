@@ -11,12 +11,14 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+from decimal import Decimal
 from functools import wraps
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from database.connection import db_manager
+from chain_reader import ChainReader, ChainReaderError, Q192, sqrt_ratio_at_tick
 from config import config
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +39,8 @@ ARKHAM_SWAP_PATH_EXPR = """
         ELSE COALESCE(NULLIF(chain, ''), 'Unknown chain') || ': token symbols unavailable'
     END
 """
+TRANSPARENCY_TOTAL_VULT_SUPPLY = Decimal("100000000")
+transparency_reader = ChainReader()
 
 
 @app.errorhandler(ValueError)
@@ -453,9 +457,224 @@ def iso_utc(value):
     return value.isoformat() if value is not None else None
 
 
+def _transparency_rate_limit_response(rate_limit):
+    reset_seconds = max(1, rate_limit['reset_in'] // 1000)
+    headers = {'Retry-After': str(reset_seconds)}
+    return jsonify({'error': 'Rate limit exceeded'}), 429, headers
+
+
+def _transparency_response(loader):
+    rate_limit = check_rate_limit(get_client_ip())
+    if not rate_limit['allowed']:
+        return _transparency_rate_limit_response(rate_limit)
+    try:
+        return jsonify(loader())
+    except ChainReaderError as error:
+        logger.error("Transparency chain read failed: %s", error)
+        return jsonify({'error': 'Transparency chain data unavailable'}), 503
+
+
+def _transparency_fees():
+    swaps = db_manager.execute_query("""
+        SELECT COALESCE(SUM(affiliate_fee_usd), 0) AS fees
+        FROM swaps WHERE source != '1inch'
+    """, fetch=True)[0]
+    arkham = db_manager.execute_query("""
+        SELECT COALESCE(SUM(actual_fee_usd), 0) AS fees
+        FROM dex_aggregator_revenue
+        WHERE protocol IN %s AND (fee_data_source = 'etherscan'
+            OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+    """, (ARKHAM_PROVIDERS,), fetch=True)[0]
+    return safe_float(swaps['fees']) + safe_float(arkham['fees'])
+
+
+def _transparency_monthly_fees():
+    swaps = db_manager.execute_query("""
+        SELECT to_char(date_trunc('month', date_only), 'YYYY-MM-DD') AS date,
+            COALESCE(SUM(affiliate_fee_usd), 0) AS fees
+        FROM swaps WHERE source != '1inch' GROUP BY 1
+    """, fetch=True)
+    arkham = db_manager.execute_query("""
+        SELECT to_char(date_trunc('month', timestamp), 'YYYY-MM-DD') AS date,
+            COALESCE(SUM(actual_fee_usd), 0) AS fees
+        FROM dex_aggregator_revenue
+        WHERE protocol IN %s AND (fee_data_source = 'etherscan'
+            OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+        GROUP BY 1
+    """, (ARKHAM_PROVIDERS,), fetch=True)
+    return _merge_monthly_fees(swaps, arkham)
+
+
+def _transparency_current_month_fees():
+    swaps = db_manager.execute_query("""
+        SELECT COALESCE(SUM(affiliate_fee_usd), 0) AS fees FROM swaps
+        WHERE source != '1inch' AND date_only >= date_trunc('month', CURRENT_DATE)
+    """, fetch=True)[0]
+    arkham = db_manager.execute_query("""
+        SELECT COALESCE(SUM(actual_fee_usd), 0) AS fees FROM dex_aggregator_revenue
+        WHERE protocol IN %s AND timestamp >= date_trunc('month', CURRENT_DATE)
+            AND (fee_data_source = 'etherscan'
+                OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+    """, (ARKHAM_PROVIDERS,), fetch=True)[0]
+    return safe_float(swaps['fees']) + safe_float(arkham['fees'])
+
+
+def _last_successful_sync(sources):
+    rows = db_manager.execute_query("""
+        SELECT MIN(last_synced_timestamp) AS last_successful_sync
+        FROM sync_status
+        WHERE source IN %s AND last_error IS NULL AND last_synced_timestamp IS NOT NULL
+        HAVING COUNT(*) = %s
+    """, (tuple(sources), len(sources)), fetch=True)
+    timestamp = rows[0]['last_successful_sync'] if rows else None
+    return timestamp.isoformat() if timestamp else None
+
+
+def _merge_monthly_fees(*rows_by_source):
+    totals = defaultdict(float)
+    for rows in rows_by_source:
+        for row in rows:
+            totals[row['date']] += safe_float(row['fees'])
+    return [{'date': date, 'feesUsd': fees} for date, fees in sorted(totals.items())]
+
+
+def _transparency_buyback_trades():
+    rows = db_manager.execute_query("""
+        SELECT date, tx_hash, usdc_spent, vult_bought, price
+        FROM buyback_trades ORDER BY block_number DESC, tx_hash DESC
+    """, fetch=True)
+    return [{
+        'date': row['date'].isoformat(), 'txHash': row['tx_hash'],
+        'usdcSpent': safe_float(row['usdc_spent']),
+        'vultBought': safe_float(row['vult_bought']), 'price': safe_float(row['price']),
+    } for row in rows]
+
+
+def _buyback_summary(trades):
+    usdc_spent = sum(Decimal(str(trade['usdcSpent'])) for trade in trades)
+    vult_bought = sum(Decimal(str(trade['vultBought'])) for trade in trades)
+    return {
+        'usdcSpent': float(usdc_spent), 'vultBought': float(vult_bought),
+        'averagePrice': float(usdc_spent / vult_bought) if vult_bought else 0,
+        'lastSuccessfulSync': _last_successful_sync(('buybacks',)),
+    }
+
+
+def _position_assets(position):
+    if position.token0.lower() == config.VULT_ADDRESS.lower():
+        return position.amount0, position.amount1
+    return position.amount1, position.amount0
+
+
+def _vult_price_at_tick(tick):
+    sqrt_price_x96 = sqrt_ratio_at_tick(tick)
+    numerator = Decimal(Q192) * (Decimal(10) ** 12)
+    return numerator / Decimal(sqrt_price_x96 * sqrt_price_x96)
+
+
+def _locked_position(position, spot_price):
+    vult, usdc = _position_assets(position)
+    return {
+        'tokenId': position.token_id, 'nftContractAddress': config.NFPM_ADDRESS,
+        'tickRange': {'lower': position.tick_lower, 'upper': position.tick_upper},
+        'priceRangeUsd': {
+            'low': safe_float(_vult_price_at_tick(position.tick_upper)),
+            'high': safe_float(_vult_price_at_tick(position.tick_lower)),
+        },
+        'composition': {'VULT': safe_float(vult), 'USDC': safe_float(usdc)},
+        'valueUsd': safe_float(vult * spot_price + usdc),
+    }
+
+
+def _locked_data():
+    spot_price = transparency_reader.get_spot_price()
+    positions = [_locked_position(position, spot_price)
+                 for position in transparency_reader.get_locked_positions()]
+    total_vult = sum(Decimal(str(position['composition']['VULT'])) for position in positions)
+    total_usdc = sum(Decimal(str(position['composition']['USDC'])) for position in positions)
+    return {
+        'ownerAddress': config.DEAD_ADDRESS, 'spotPriceUsd': safe_float(spot_price),
+        'positions': positions, 'positionCount': len(positions),
+        'vultLocked': float(total_vult), 'usdcLocked': float(total_usdc),
+        'valueUsd': float(total_vult * spot_price + total_usdc),
+        'percentOfSupply': float(total_vult / TRANSPARENCY_TOTAL_VULT_SUPPLY * 100),
+    }
+
+
+def _transparency_supply(locked, treasury_balances):
+    treasury_vult = treasury_balances['VULT']
+    circulating = TRANSPARENCY_TOTAL_VULT_SUPPLY
+    circulating -= Decimal(str(locked['vultLocked'])) + treasury_vult
+    return {
+        'totalVult': float(TRANSPARENCY_TOTAL_VULT_SUPPLY),
+        'circulatingVult': float(circulating),
+        'protocolLockedVult': locked['vultLocked'],
+        'treasuryUnallocatedVult': safe_float(treasury_vult),
+    }
+
+
+def _transparency_summary():
+    treasury = transparency_reader.get_fee_treasury_balances()
+    locked = _locked_data()
+    trades = _transparency_buyback_trades()
+    return {
+        'fees': {
+            'allTimeUsd': _transparency_fees(),
+            'thisMonthUsd': _transparency_current_month_fees(),
+            'lastSuccessfulSync': _last_successful_sync(KNOWN_PROVIDERS),
+        },
+        'buybacks': _buyback_summary(trades), 'locked': locked,
+        'supply': _transparency_supply(locked, treasury),
+        'treasuryAddress': config.FEE_TREASURY_ADDRESS,
+        'buybackWalletAddress': config.BUYBACK_WALLET_ADDRESS,
+    }
+
+
+def _transparency_treasury():
+    balances = transparency_reader.get_fee_treasury_balances()
+    return {
+        'address': config.FEE_TREASURY_ADDRESS,
+        'balances': {asset: safe_float(amount) for asset, amount in balances.items()},
+        'spotPriceUsd': safe_float(transparency_reader.get_spot_price()),
+        'monthlyInflow': _transparency_monthly_fees(),
+    }
+
+
+def _transparency_buybacks():
+    trades = _transparency_buyback_trades()
+    return {
+        'walletAddress': config.BUYBACK_WALLET_ADDRESS,
+        'trades': trades, 'summary': _buyback_summary(trades),
+    }
+
+
 # =============================================================================
 # Existing Endpoints (Preserved)
 # =============================================================================
+
+@app.route('/api/transparency/summary')
+def get_transparency_summary():
+    """Return the fee-to-lock pipeline and supply ledger."""
+    return _transparency_response(_transparency_summary)
+
+
+@app.route('/api/transparency/treasury')
+def get_transparency_treasury():
+    """Return live fee-treasury balances and monthly collected fees."""
+    return _transparency_response(_transparency_treasury)
+
+
+@app.route('/api/transparency/buybacks')
+def get_transparency_buybacks():
+    """Return Etherscan-indexed buyback transaction receipts."""
+    return _transparency_response(_transparency_buybacks)
+
+
+@app.route('/api/transparency/locked')
+def get_transparency_locked():
+    """Return dead-owned liquidity positions and their current composition."""
+    return _transparency_response(_locked_data)
+
 
 @app.route('/api/summary')
 def get_summary():
