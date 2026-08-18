@@ -8,7 +8,7 @@ interface SyncStatus {
     source: string;
     last_synced_timestamp: string;
     latest_data_timestamp: string | null;
-    last_error: string | null;
+    has_error: boolean;
     is_active: boolean;
 }
 
@@ -54,7 +54,7 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
                     const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
                     // Check if source has actual error
-                    if (s.last_error) {
+                    if (s.has_error) {
                         hasActualError = true;
                     }
 
@@ -122,8 +122,8 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         const lastSync = new Date(source.last_synced_timestamp);
         const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
-        // Error state: has last_error
-        if (source.last_error) return 'bg-red-500';
+        // Error state
+        if (source.has_error) return 'bg-red-500';
 
         // Stale: > 24 hours (likely real issue)
         if (hoursSinceSync > 24) return 'bg-red-500';
@@ -140,7 +140,7 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         const lastSync = new Date(source.last_synced_timestamp);
         const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
-        if (source.last_error) return '(error)';
+        if (source.has_error) return '(error)';
         if (hoursSinceSync > 24) return '(stale)';
         if (hoursSinceSync > 1) return '(idle)';
         return '';
