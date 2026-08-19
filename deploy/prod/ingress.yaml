@@ -11,8 +11,21 @@ spec:
     - secretName: analytics-dashboard-tls
       hosts:
         - analytics-dashboard-api.prod.plugins.vultisig.com
+    - secretName: analytics-api-vultisig-tls
+      hosts:
+        - analytics-api.vultisig.com
   rules:
     - host: analytics-dashboard-api.prod.plugins.vultisig.com
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+    - host: analytics-api.vultisig.com
       http:
         paths:
           - path: /
