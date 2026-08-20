@@ -285,6 +285,7 @@ export interface MarketVolumeShare {
   benchmarks: MarketVolumeBenchmark[];
   requestedGranularity: 'hour' | 'day' | 'week' | 'month';
   effectiveGranularity: 'day' | 'week' | 'month';
+  asOfDate?: string;
   updatedAt: string;
   source: string;
   sourceUrl: string;

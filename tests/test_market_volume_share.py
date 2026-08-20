@@ -1,6 +1,6 @@
 """Tests for historical Vultisig/comparable-market volume share."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import importlib.util
 import os
 import sys
@@ -79,11 +79,11 @@ class FakeMidgardResponse:
             "intervals": [
                 {
                     "startTime": str(_timestamp("2023-11-14")),
-                    "totalVolumeUSD": "1500",
+                    "totalVolumeUSD": "150000",
                 },
                 {
                     "startTime": str(_timestamp("2023-11-15")),
-                    "totalVolumeUSD": "3000",
+                    "totalVolumeUSD": "300000",
                 },
             ],
         }
@@ -93,6 +93,7 @@ class MarketVolumeShareApiTests(unittest.TestCase):
     def setUp(self):
         market_api._global_market_cache["data"] = None
         market_api._global_market_cache["expires_at"] = 0
+        market_api._global_market_cache["filling"] = False
         self.database = Mock()
         self.database.execute_query.side_effect = self._execute_query
         self.client = market_api.app.test_client()
@@ -172,11 +173,11 @@ class MarketVolumeShareApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         result = response.get_json()
-        thorchain = self._point(result, "thorchain", "2023-11-13")
+        thorchain = self._point(result, "thorchain", "2023-11-12")
         self.assertEqual(thorchain["vultisigVolumeUsd"], 300)
         self.assertEqual(thorchain["marketVolumeUsd"], 3_000)
         self.assertAlmostEqual(thorchain["sharePercent"], 10)
-        all_routes = self._point(result, "all", "2023-11-13")
+        all_routes = self._point(result, "all", "2023-11-12")
         self.assertEqual(all_routes["vultisigVolumeUsd"], 675)
         self.assertEqual(all_routes["marketVolumeUsd"], 9_000)
         self.assertAlmostEqual(all_routes["sharePercent"], 7.5)
@@ -190,7 +191,7 @@ class MarketVolumeShareApiTests(unittest.TestCase):
             response.json.return_value = {
                 "intervals": [{
                     "startTime": str(_timestamp("2023-11-14")),
-                    "totalVolumeUSD": "1500",
+                    "totalVolumeUSD": "150000",
                 }],
             }
             return response
@@ -270,6 +271,88 @@ class MarketVolumeShareApiTests(unittest.TestCase):
             response.get_json()["error"],
             "Comparable market volume is temporarily unavailable",
         )
+
+    def test_mayachain_total_volume_usd_is_cents(self):
+        self.assertEqual(
+            market_api._mayachain_interval_volume_usd({"totalVolumeUSD": "200000000"}),
+            2_000_000.0,
+        )
+        self.assertEqual(
+            market_api._mayachain_interval_volume_usd({"totalVolumeUSD": "150000"}),
+            1_500.0,
+        )
+
+    def test_drops_incomplete_current_utc_day(self):
+        with patch.object(market_api, "_utc_today", return_value=date(2023, 11, 15)), patch.object(
+            market_api, "db_manager", self.database
+        ), patch.object(market_api.requests, "get", side_effect=self._get_market):
+            response = self.client.get(
+                "/api/market-volume-share?r=custom&g=d&sd=2023-11-14&ed=2023-11-15"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(result["asOfDate"], "2023-11-14")
+        dates = {point["date"] for point in result["series"]}
+        self.assertEqual(dates, {"2023-11-14"})
+
+    def test_one_day_range_uses_last_complete_utc_day(self):
+        with patch.object(market_api, "_utc_today", return_value=date(2023, 11, 15)), patch.object(
+            market_api, "db_manager", self.database
+        ), patch.object(market_api.requests, "get", side_effect=self._get_market):
+            response = self.client.get("/api/market-volume-share?r=1d&g=d")
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(result["asOfDate"], "2023-11-14")
+        dates = {point["date"] for point in result["series"]}
+        self.assertEqual(dates, {"2023-11-14"})
+        swaps_call = self.database.execute_query.call_args_list[0]
+        swaps_query = swaps_call.args[0]
+        swaps_params = swaps_call.args[1]
+        self.assertIn("date_only >= %s::date", swaps_query)
+        self.assertIn("date_only <= %s::date", swaps_query)
+        self.assertEqual(swaps_params[1:], ('2023-11-14', '2023-11-14'))
+        self.assertNotIn("INTERVAL '24 hours'", swaps_query)
+
+    def test_all_routes_omitted_when_a_benchmark_is_missing(self):
+        def get_market(url, **_kwargs):
+            if "midgard.mayachain.info" in url:
+                raise market_api.requests.RequestException("midgard timeout")
+            return FakeDefiLlamaResponse(url)
+
+        with patch.object(market_api, "db_manager", self.database), patch.object(
+            market_api.requests, "get", side_effect=get_market
+        ):
+            response = self.client.get(
+                "/api/market-volume-share?r=custom&g=d&sd=2023-11-14&ed=2023-11-15"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertFalse(result["isStale"])
+        providers = {benchmark["provider"] for benchmark in result["benchmarks"]}
+        self.assertEqual(providers, {"thorchain", "lifi"})
+        series_providers = {point["provider"] for point in result["series"]}
+        self.assertEqual(series_providers, {"thorchain", "lifi"})
+
+    def test_snapshot_fetch_runs_without_cache_lock(self):
+        held = []
+        real_fetch = market_api._fetch_market_benchmark
+
+        def fetch_and_check(provider, benchmark):
+            held.append(market_api._global_market_cache_lock.locked())
+            return real_fetch(provider, benchmark)
+
+        with patch.object(
+            market_api, "_fetch_market_benchmark", side_effect=fetch_and_check
+        ), patch.object(market_api.requests, "get", side_effect=self._get_market):
+            snapshot = market_api.get_global_market_snapshot()
+
+        self.assertIn("thorchain", snapshot["providers"])
+        self.assertTrue(held)
+        self.assertFalse(any(held))
+        self.assertFalse(market_api._global_market_cache["filling"])
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import {
 import { IconActivityV, IconExternalLinkV } from '@/icons';
 import {
     fetchMarketVolumeShare,
+    type MarketVolumeBenchmark,
     type MarketVolumePoint,
     type MarketVolumeShare as MarketVolumeShareData,
 } from '@/lib/api';
@@ -66,6 +67,33 @@ function formatShare(value: number): string {
     if (value < 0.01) return `${value.toFixed(4)}%`;
     if (value < 1) return `${value.toFixed(3)}%`;
     return `${value.toFixed(2)}%`;
+}
+
+function chartCaption(
+    data: MarketVolumeShareData,
+    viewLabel: string,
+    rangeLabel: string,
+): string {
+    const asOf = data.asOfDate ? ` · as of ${formatDate(data.asOfDate, true)}` : '';
+    const stale = data.isStale ? ' · stale upstream cache' : '';
+    return `${viewLabel} · ${rangeLabel}${asOf}${stale}`;
+}
+
+function marketFootnote(
+    selectedProvider: string,
+    selectedBenchmark: MarketVolumeBenchmark | undefined,
+): string {
+    if (selectedProvider === 'all') {
+        return 'All routes blends unlike venue series on overlapping dates. It is not a unique global market.';
+    }
+    if (selectedProvider === 'lifi') {
+        return 'LI.FI uses same-chain Vultisig swaps to match DefiLlama’s same-chain methodology.';
+    }
+    const market = selectedBenchmark?.market ?? 'market';
+    const latest = selectedBenchmark
+        ? formatDate(selectedBenchmark.latestMarketDate, true)
+        : 'unavailable';
+    return `Latest ${market} benchmark: ${latest}.`;
 }
 
 function formatAxisShare(value: number): string {
@@ -311,12 +339,12 @@ export function MarketVolumeShare({
                         <div className="flex items-center gap-2">
                             <h3 id="market-volume-title" className="t-title-3">Share of Routed Markets</h3>
                             <Tooltip
-                                content="Each provider is compared like-for-like. All routes is a weighted blend of those comparisons; provider markets can overlap, so it is directional rather than a unique global-market share."
+                                content="Each provider share is of that venue's published series. THOR/Maya and LI.FI are not the same market definition, so the percents are not comparable to each other. All routes is a directional blend of those unlike series, not a single market."
                                 iconOnly
                             />
                         </div>
                         <p className="t-footnote mt-1 text-[var(--text-tertiary)]">
-                            {viewLabel} · {rangeLabel}{data.isStale ? ' · cached benchmark data' : ''}
+                            {chartCaption(data, viewLabel, rangeLabel)}
                         </p>
                     </div>
                 </div>
@@ -497,14 +525,8 @@ export function MarketVolumeShare({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-tertiary)]">
-                <p>
-                    {selectedProvider === 'all'
-                        ? 'All routes is directional: provider market totals may overlap.'
-                        : selectedProvider === 'lifi'
-                            ? 'LI.FI uses same-chain Vultisig swaps to match DefiLlama’s same-chain methodology.'
-                            : `Latest ${selectedBenchmark?.market ?? 'market'} benchmark: ${selectedBenchmark ? formatDate(selectedBenchmark.latestMarketDate, true) : 'unavailable'}.`}
-                </p>
-                <p>MayaChain network volume comes from the protocol&apos;s official Midgard history.</p>
+                <p>{marketFootnote(selectedProvider, selectedBenchmark)}</p>
+                <p>MayaChain Midgard totalVolumeUSD is USD cents; the chart converts it to dollars.</p>
             </div>
         </section>
     );
