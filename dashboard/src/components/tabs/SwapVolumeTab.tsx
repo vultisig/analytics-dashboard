@@ -6,6 +6,7 @@ import { StackedBarChart } from '@/components/StackedBarChart';
 import { DonutChart } from '@/components/DonutChart';
 import { TopPathsChart } from '@/components/TopPathsChart';
 import { HeroMetric } from '@/components/HeroMetric';
+import { MarketVolumeShare } from '@/components/MarketVolumeShare';
 import { ProviderSection } from '@/components/ProviderSection';
 import { ProviderToggleControl } from '@/components/ProviderToggleControl';
 import { VolumeViewToggle } from '@/components/VolumeViewToggle';
@@ -433,6 +434,13 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                     />
                 )}
             </div>
+
+            <MarketVolumeShare
+                range={range}
+                startDate={startDate}
+                endDate={endDate}
+                granularity={granularity}
+            />
 
             {/* Provider Sections */}
             <div className="space-y-6">

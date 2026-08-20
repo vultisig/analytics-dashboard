@@ -261,3 +261,47 @@ export async function fetchReferrals(params: CommonQueryParams) {
 export async function fetchSystemStatus() {
   return fetchApi('/api/system-status');
 }
+
+export interface MarketVolumeBenchmark {
+  provider: string;
+  label: string;
+  market: string;
+  comparison: string;
+  latestMarketDate: string;
+  source: string;
+  sourceUrl: string;
+}
+
+export interface MarketVolumePoint {
+  date: string;
+  provider: string;
+  vultisigVolumeUsd: number;
+  marketVolumeUsd: number;
+  sharePercent: number;
+}
+
+export interface MarketVolumeShare {
+  series: MarketVolumePoint[];
+  benchmarks: MarketVolumeBenchmark[];
+  requestedGranularity: 'hour' | 'day' | 'week' | 'month';
+  effectiveGranularity: 'day' | 'week' | 'month';
+  asOfDate?: string;
+  updatedAt: string;
+  source: string;
+  sourceUrl: string;
+  isStale: boolean;
+  notes: string[];
+}
+
+/** Fetch historical Vultisig share of comparable routed markets. */
+export async function fetchMarketVolumeShare(params: CommonQueryParams, signal?: AbortSignal) {
+  const queryParams = buildQueryParams({
+    r: params.range,
+    g: params.granularity,
+    sd: params.startDate,
+    ed: params.endDate,
+  });
+  return fetchApi<MarketVolumeShare>(`/api/market-volume-share?${queryParams.toString()}`, {
+    signal,
+  });
+}
