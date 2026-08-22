@@ -412,7 +412,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
                             {showNewUsersOnly ? 'First-time users only' : `${getGranularityLabel()} breakdown`}
-                            {chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
+                            {chartView === 'platform' ? ' · excludes 1inch + KyberSwap + SwapKit' : ''}
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
@@ -425,7 +425,7 @@ export function UsersTab({ range, startDate, endDate, granularity }: UsersTabPro
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch + KyberSwap excluded (no platform info)</span>
+                            <span>1inch + KyberSwap + SwapKit excluded (no platform info)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

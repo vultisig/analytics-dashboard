@@ -9,19 +9,19 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   lifi: 'LI.FI',
   '1inch': '1inch',
   kyberswap: 'KyberSwap',
+  swapkit: 'SwapKit',
 };
 
-// Providers fed by the shared Arkham ingestor (rows live in
-// dex_aggregator_revenue, not the `swaps` table). Mirrors the backend
-// `config.ARKHAM_PROVIDERS` tuple.
+// Dex-revenue providers have chain attribution, not platform.
 export const ARKHAM_PROVIDERS: readonly string[] = ['1inch', 'kyberswap'];
+export const DEX_REVENUE_PROVIDERS: readonly string[] = [...ARKHAM_PROVIDERS, 'swapkit'];
 
-export function isArkhamProvider(name: string): boolean {
-  return ARKHAM_PROVIDERS.includes(name.toLowerCase());
+export function isDexRevenueProvider(name: string): boolean {
+  return DEX_REVENUE_PROVIDERS.includes(name.toLowerCase());
 }
 
 // Preferred provider order for sorting
-const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap'];
+const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap', 'swapkit'];
 
 /**
  * Format a provider name for display.

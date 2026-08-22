@@ -28,11 +28,22 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Providers whose rows live in dex_aggregator_revenue (via Arkham ingest), not
-# in the `swaps` table. Derived from config.ARKHAM_FEE_RECEIVERS so adding a
-# new Vultisig fee receiver is a single-site change.
+# Dex-revenue rows live in dex_aggregator_revenue; swapkit is sender-classified.
 ARKHAM_PROVIDERS = config.ARKHAM_PROVIDERS
-KNOWN_PROVIDERS = ('thorchain', 'mayachain', 'lifi') + ARKHAM_PROVIDERS
+DEX_REVENUE_PROVIDERS = config.DEX_REVENUE_PROVIDERS
+SWAPKIT_PROTOCOL = config.SWAPKIT_PROTOCOL
+KNOWN_PROVIDERS = ('thorchain', 'mayachain', 'lifi') + DEX_REVENUE_PROVIDERS
+# Volume/count must not treat batched payouts as swaps.
+DEX_VOLUME_PAYOUT_EXCLUDE = (
+    "AND NOT (protocol = %s AND LOWER(from_address) IN %s)"
+)
+DEX_VOLUME_PARAMS = (
+    DEX_REVENUE_PROVIDERS,
+    SWAPKIT_PROTOCOL,
+    tuple(sorted(config.SWAPKIT_PAYOUT_SENDERS)),
+)
+DEX_REVENUE_PARAMS = (DEX_REVENUE_PROVIDERS,)
+SWAPKIT_FEE_SENDERS = tuple(sorted(config.SWAPKIT_FEE_SENDERS))
 ARKHAM_SWAP_PATH_EXPR = """
     CASE
         WHEN token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL
@@ -964,6 +975,23 @@ def _market_volume_share_payload(args) -> dict:
     }
 
 
+def merge_rows_by_key(rows, key, float_fields=(), int_fields=()):
+    """Sum numeric fields when the same provider lands in two tables."""
+    merged = {}
+    order = []
+    for row in rows:
+        name = row[key]
+        if name not in merged:
+            merged[name] = dict(row)
+            order.append(name)
+            continue
+        for field in float_fields:
+            merged[name][field] = safe_float(merged[name].get(field)) + safe_float(row.get(field))
+        for field in int_fields:
+            merged[name][field] = safe_int(merged[name].get(field)) + safe_int(row.get(field))
+    return [merged[name] for name in order]
+
+
 def iso_utc(value):
     """Serialize a DB timestamp as ISO-8601 UTC.
 
@@ -1728,7 +1756,7 @@ def get_revenue():
         """
 
         swaps_total = db_manager.execute_query(swaps_revenue_query, fetch=True)[0]
-        arkham_total = db_manager.execute_query(arkham_revenue_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
+        arkham_total = db_manager.execute_query(arkham_revenue_query, DEX_REVENUE_PARAMS, fetch=True)[0]
 
         total_revenue_value = safe_float(swaps_total['total_revenue']) + safe_float(arkham_total['total_revenue'])
 
@@ -1760,7 +1788,7 @@ def get_revenue():
         """
 
         swaps_over_time = db_manager.execute_query(swaps_over_time_query, fetch=True)
-        arkham_over_time = db_manager.execute_query(arkham_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_over_time = db_manager.execute_query(arkham_over_time_query, DEX_REVENUE_PARAMS, fetch=True)
 
         revenue_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
@@ -1791,10 +1819,14 @@ def get_revenue():
         """
 
         swaps_by_provider = db_manager.execute_query(swaps_by_provider_query, fetch=True)
-        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, DEX_REVENUE_PARAMS, fetch=True)
 
         revenue_by_provider = sorted(
-            list(swaps_by_provider) + list(arkham_by_provider),
+            merge_rows_by_key(
+                list(swaps_by_provider) + list(arkham_by_provider),
+                "name",
+                float_fields=("value",),
+            ),
             key=lambda x: safe_float(x['value']),
             reverse=True
         )
@@ -1866,7 +1898,7 @@ def get_revenue():
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, DEX_REVENUE_PARAMS, fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
@@ -1875,7 +1907,7 @@ def get_revenue():
         provider_data = {}
 
         for provider in providers_list:
-            if provider not in ARKHAM_PROVIDERS:
+            if provider not in DEX_REVENUE_PROVIDERS:
                 platform_expr = get_platform_expression(provider)
                 platform_query = f"""
                     SELECT
@@ -1955,7 +1987,7 @@ def get_revenue_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider in ARKHAM_PROVIDERS:
+        if provider in DEX_REVENUE_PROVIDERS:
             # Fetch from dex_aggregator_revenue
             time_series_query = f"""
                 SELECT
@@ -2095,13 +2127,14 @@ def get_swap_volume():
                 COUNT(*) as total_swaps
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
         """
 
         swaps_stats = db_manager.execute_query(swaps_stats_query, fetch=True)[0]
-        arkham_stats = db_manager.execute_query(arkham_stats_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
+        arkham_stats = db_manager.execute_query(arkham_stats_query, DEX_VOLUME_PARAMS, fetch=True)[0]
 
         global_stats = {
             'total_volume': safe_float(swaps_stats['total_volume']) + safe_float(arkham_stats['total_volume']),
@@ -2128,6 +2161,7 @@ def get_swap_volume():
                 COALESCE(SUM(swap_volume_usd), 0) as volume
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
@@ -2136,7 +2170,7 @@ def get_swap_volume():
         """
 
         swaps_time = db_manager.execute_query(swaps_time_query, fetch=True)
-        arkham_time = db_manager.execute_query(arkham_time_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_time = db_manager.execute_query(arkham_time_query, DEX_VOLUME_PARAMS, fetch=True)
 
         volume_over_time = sorted(
             list(swaps_time) + list(arkham_time),
@@ -2162,6 +2196,7 @@ def get_swap_volume():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
@@ -2169,10 +2204,15 @@ def get_swap_volume():
         """
 
         swaps_provider = db_manager.execute_query(swaps_provider_query, fetch=True)
-        arkham_provider = db_manager.execute_query(arkham_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_provider = db_manager.execute_query(arkham_provider_query, DEX_VOLUME_PARAMS, fetch=True)
 
         volume_by_provider = sorted(
-            list(swaps_provider) + list(arkham_provider),
+            merge_rows_by_key(
+                list(swaps_provider) + list(arkham_provider),
+                "source",
+                float_fields=("total_volume",),
+                int_fields=("swap_count",),
+            ),
             key=lambda x: safe_float(x['total_volume']),
             reverse=True
         )
@@ -2237,6 +2277,7 @@ def get_swap_volume():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 {date_filter_arkham}
             GROUP BY protocol, swap_path
             ORDER BY total_volume DESC
@@ -2244,7 +2285,7 @@ def get_swap_volume():
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, DEX_VOLUME_PARAMS, fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
@@ -2253,13 +2294,20 @@ def get_swap_volume():
         provider_data = {}
 
         for prov in providers:
-            if prov in ARKHAM_PROVIDERS:
+            if prov in DEX_REVENUE_PROVIDERS:
+                fee_only = (
+                    "AND LOWER(from_address) IN %s" if prov == SWAPKIT_PROTOCOL else ""
+                )
+                chain_params = (
+                    (prov, SWAPKIT_FEE_SENDERS) if prov == SWAPKIT_PROTOCOL else (prov,)
+                )
                 chain_query = f"""
                     SELECT
                         chain,
                         COALESCE(SUM(swap_volume_usd), 0) as volume
                     FROM dex_aggregator_revenue
                     WHERE protocol = %s
+                        {fee_only}
                         AND chain IS NOT NULL
                         AND (fee_data_source = 'etherscan'
                              OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
@@ -2267,7 +2315,7 @@ def get_swap_volume():
                     GROUP BY chain
                     ORDER BY volume DESC
                 """
-                chain_result = db_manager.execute_query(chain_query, (prov,), fetch=True)
+                chain_result = db_manager.execute_query(chain_query, chain_params, fetch=True)
                 provider_data[prov] = {'chains': list(chain_result)}
             else:
                 platform_expr = get_platform_expression(prov)
@@ -2348,6 +2396,78 @@ def get_swap_volume_by_provider(provider):
 
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
+
+        if provider == SWAPKIT_PROTOCOL:
+            date_field = 'timestamp' if granularity == 'hour' else 'date_only'
+            time_series_query = f"""
+                SELECT time_period, SUM(volume) as volume
+                FROM (
+                    SELECT
+                        DATE_TRUNC('{granularity}', timestamp) as time_period,
+                        COALESCE(SUM(swap_volume_usd), 0) as volume
+                    FROM dex_aggregator_revenue
+                    WHERE protocol = %s
+                      AND LOWER(from_address) IN %s
+                      AND (fee_data_source = 'etherscan'
+                           OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+                      {date_filter_arkham}
+                    GROUP BY 1
+                    UNION ALL
+                    SELECT
+                        DATE_TRUNC('{granularity}', {date_field}) as time_period,
+                        SUM(in_amount_usd) as volume
+                    FROM swaps
+                    WHERE source = %s
+                      {date_filter}
+                    GROUP BY 1
+                ) combined
+                GROUP BY time_period
+                ORDER BY time_period ASC
+            """
+            chain_breakdown_query = f"""
+                SELECT
+                    DATE_TRUNC('{granularity}', timestamp) as time_period,
+                    chain,
+                    COALESCE(SUM(swap_volume_usd), 0) as volume
+                FROM dex_aggregator_revenue
+                WHERE protocol = %s
+                    AND LOWER(from_address) IN %s
+                    AND chain IS NOT NULL
+                    AND (fee_data_source = 'etherscan'
+                         OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+                    {date_filter_arkham}
+                GROUP BY time_period, chain
+                ORDER BY time_period ASC
+            """
+            time_series = db_manager.execute_query(
+                time_series_query,
+                (provider, SWAPKIT_FEE_SENDERS, provider),
+                fetch=True,
+            )
+            chain_breakdown = db_manager.execute_query(
+                chain_breakdown_query,
+                (provider, SWAPKIT_FEE_SENDERS),
+                fetch=True,
+            )
+
+            return jsonify({
+                'provider': provider,
+                'totalVolume': [
+                    {
+                        'date': iso_utc(r['time_period']),
+                        'volume': safe_float(r['volume'])
+                    }
+                    for r in time_series
+                ],
+                'platformBreakdown': [
+                    {
+                        'date': iso_utc(r['time_period']),
+                        'chain': r['chain'],
+                        'volume': safe_float(r['volume'])
+                    }
+                    for r in chain_breakdown
+                ]
+            })
 
         if provider in ARKHAM_PROVIDERS:
             time_series_query = f"""
@@ -2483,13 +2603,14 @@ def get_swap_count():
             SELECT COUNT(*) as total_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
         """
 
         swaps_total = db_manager.execute_query(swaps_count_query, fetch=True)[0]
-        arkham_total = db_manager.execute_query(arkham_count_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
+        arkham_total = db_manager.execute_query(arkham_count_query, DEX_VOLUME_PARAMS, fetch=True)[0]
 
         total_count = safe_int(swaps_total['total_count']) + safe_int(arkham_total['total_count'])
 
@@ -2513,6 +2634,7 @@ def get_swap_count():
                 COUNT(*) as count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
@@ -2521,7 +2643,7 @@ def get_swap_count():
         """
 
         swaps_over_time = db_manager.execute_query(swaps_over_time_query, fetch=True)
-        arkham_over_time = db_manager.execute_query(arkham_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_over_time = db_manager.execute_query(arkham_over_time_query, DEX_VOLUME_PARAMS, fetch=True)
 
         count_over_time = sorted(
             list(swaps_over_time) + list(arkham_over_time),
@@ -2561,6 +2683,7 @@ def get_swap_count():
                 COUNT(*) as value
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 AND (fee_data_source = 'etherscan'
                      OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                 {date_filter_arkham}
@@ -2568,10 +2691,14 @@ def get_swap_count():
         """
 
         swaps_by_provider = db_manager.execute_query(swaps_by_provider_query, fetch=True)
-        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, DEX_VOLUME_PARAMS, fetch=True)
 
         count_by_provider = sorted(
-            list(swaps_by_provider) + list(arkham_by_provider),
+            merge_rows_by_key(
+                list(swaps_by_provider) + list(arkham_by_provider),
+                "name",
+                int_fields=("value",),
+            ),
             key=lambda x: safe_int(x['value']),
             reverse=True
         )
@@ -2605,6 +2732,7 @@ def get_swap_count():
                 COUNT(*) as swap_count
             FROM dex_aggregator_revenue
             WHERE protocol IN %s
+                {DEX_VOLUME_PAYOUT_EXCLUDE}
                 {date_filter_arkham}
             GROUP BY protocol, swap_path
             ORDER BY swap_count DESC
@@ -2612,7 +2740,7 @@ def get_swap_count():
         """
 
         swaps_paths = db_manager.execute_query(swaps_paths_query, fetch=True)
-        arkham_paths = db_manager.execute_query(arkham_paths_query, (ARKHAM_PROVIDERS,), fetch=True)
+        arkham_paths = db_manager.execute_query(arkham_paths_query, DEX_VOLUME_PARAMS, fetch=True)
 
         top_paths = list(swaps_paths) + list(arkham_paths)
 
@@ -2621,7 +2749,7 @@ def get_swap_count():
         provider_data = {}
 
         for prov in providers_list:
-            if prov not in ARKHAM_PROVIDERS:
+            if prov not in DEX_REVENUE_PROVIDERS:
                 platform_expr = get_platform_expression(prov)
                 platform_query = f"""
                     SELECT
@@ -2636,12 +2764,19 @@ def get_swap_count():
                 platform_result = db_manager.execute_query(platform_query, (prov,), fetch=True)
                 provider_data[prov] = {'platforms': list(platform_result)}
             else:
+                fee_only = (
+                    "AND LOWER(from_address) IN %s" if prov == SWAPKIT_PROTOCOL else ""
+                )
+                chain_params = (
+                    (prov, SWAPKIT_FEE_SENDERS) if prov == SWAPKIT_PROTOCOL else (prov,)
+                )
                 chain_query = f"""
                     SELECT
                         chain as chain_id,
                         COUNT(*) as value
                     FROM dex_aggregator_revenue
                     WHERE protocol = %s
+                        {fee_only}
                         AND chain IS NOT NULL
                         AND (fee_data_source = 'etherscan'
                              OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
@@ -2649,7 +2784,7 @@ def get_swap_count():
                     GROUP BY 1
                     ORDER BY value DESC
                 """
-                chain_result = db_manager.execute_query(chain_query, (prov,), fetch=True)
+                chain_result = db_manager.execute_query(chain_query, chain_params, fetch=True)
                 provider_data[prov] = {'chains': list(chain_result)}
 
         return jsonify({
@@ -2701,13 +2836,22 @@ def get_swap_count_by_provider(provider):
         granularity = parse_granularity(granularity_param)
         date_filter, date_filter_arkham = build_date_filter(range_param, start_date_param, end_date_param)
 
-        if provider in ARKHAM_PROVIDERS:
+        if provider in DEX_REVENUE_PROVIDERS:
+            fee_only = (
+                "AND LOWER(from_address) IN %s" if provider == SWAPKIT_PROTOCOL else ""
+            )
+            count_params = (
+                (provider, SWAPKIT_FEE_SENDERS)
+                if provider == SWAPKIT_PROTOCOL
+                else (provider,)
+            )
             time_series_query = f"""
                 SELECT
                     DATE_TRUNC('{granularity}', timestamp) as time_period,
                     COUNT(*) as count
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
+                    {fee_only}
                     AND (fee_data_source = 'etherscan'
                          OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
                     {date_filter_arkham}
@@ -2722,6 +2866,7 @@ def get_swap_count_by_provider(provider):
                     COUNT(*) as count
                 FROM dex_aggregator_revenue
                 WHERE protocol = %s
+                    {fee_only}
                     AND chain IS NOT NULL
                     AND (fee_data_source = 'etherscan'
                          OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
@@ -2730,8 +2875,8 @@ def get_swap_count_by_provider(provider):
                 ORDER BY time_period ASC
             """
 
-            time_series = db_manager.execute_query(time_series_query, (provider,), fetch=True)
-            chain_breakdown = db_manager.execute_query(chain_breakdown_query, (provider,), fetch=True)
+            time_series = db_manager.execute_query(time_series_query, count_params, fetch=True)
+            chain_breakdown = db_manager.execute_query(chain_breakdown_query, count_params, fetch=True)
 
             return jsonify({
                 'provider': provider,

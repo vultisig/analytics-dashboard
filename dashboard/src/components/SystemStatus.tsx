@@ -150,6 +150,9 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         arkham: '1inch (Arkham)', // legacy row; replaced by '1inch' once Etherscan ingest writes the new key
         '1inch': '1inch',
         kyberswap: 'KyberSwap',
+        swapkit: 'SwapKit',
+        chainflip: 'SwapKit (Chainflip)',
+        'near-intents': 'SwapKit (Near Intents)',
         thorchain: 'THORChain',
         mayachain: 'MAYAChain',
         lifi: 'LI.FI',

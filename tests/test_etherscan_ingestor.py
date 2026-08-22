@@ -44,6 +44,12 @@ SAMPLE_OUTBOUND = {
 }
 
 RECEIVER = "0x8E247a480449c84a5fDD25974A8501f3EFa4ABb9"
+SKWRAP = "0x9025B8ff35Ca44f7018C3a37FE0f69e63DBb0743"
+SAMPLE_SWAPKIT = {
+    **SAMPLE_TRANSFER,
+    "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "from": SKWRAP,
+}
 
 
 def _make_ingestor():
@@ -109,6 +115,19 @@ class TestBuildRow(unittest.TestCase):
         row = _build_row(t, "kyberswap", "Ethereum", RECEIVER)
         named = dict(zip(INSERT_COLUMNS, row))
         self.assertEqual(named['amount_in'], Decimal('42'))
+
+    def test_skwrap_sender_tagged_swapkit(self):
+        from ingestors.etherscan_ingestor import _build_row, INSERT_COLUMNS
+        row = _build_row(SAMPLE_SWAPKIT, "kyberswap", "Ethereum", RECEIVER)
+        named = dict(zip(INSERT_COLUMNS, row))
+        self.assertEqual(named['protocol'], 'swapkit')
+        self.assertEqual(named['from_address'], SKWRAP.lower())
+
+    def test_kyber_router_sender_stays_kyberswap(self):
+        from ingestors.etherscan_ingestor import _build_row, INSERT_COLUMNS
+        row = _build_row(SAMPLE_TRANSFER, "kyberswap", "Ethereum", RECEIVER)
+        named = dict(zip(INSERT_COLUMNS, row))
+        self.assertEqual(named['protocol'], 'kyberswap')
 
 
 # ---------------------------------------------------------------------------

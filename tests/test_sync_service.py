@@ -39,6 +39,16 @@ _stubs = {
         reclassify_all=Mock(),
         sync_attributed_gap_rows=Mock(),
     ),
+    "ingestors.swapkit_senders": _module(
+        "ingestors.swapkit_senders",
+        backfill_swapkit_rows=Mock(return_value=0),
+    ),
+    "ingestors.chainflip": _module(
+        "ingestors.chainflip", ChainflipIngestor=Mock
+    ),
+    "ingestors.near_intents": _module(
+        "ingestors.near_intents", NearIntentsIngestor=Mock
+    ),
     "ingestors.vult_holders": _module(
         "ingestors.vult_holders", VultHoldersIngestor=Mock
     ),
@@ -161,6 +171,28 @@ class SyncServiceReconciliationTests(unittest.TestCase):
             [[row["tx_hash"] for row in batch] for batch in database.inserted_batches],
             [["late"]],
         )
+
+
+class VolumeSyncTests(unittest.TestCase):
+    def test_chainflip_uses_ingest_not_midgard_loop(self):
+        ingestor = Mock()
+        ingestor.ingest.return_value = {
+            "source": "chainflip",
+            "inserted": 2,
+            "latest_ts": None,
+            "error": None,
+        }
+        database = FakeDatabase()
+        service = sync_main.SyncService.__new__(sync_main.SyncService)
+        service.ingestors = {"chainflip": ingestor}
+
+        with patch.object(sync_main, "db_manager", database):
+            service.sync_source("chainflip")
+
+        ingestor.ingest.assert_called_once()
+        ingestor.fetch_data.assert_not_called()
+        self.assertEqual(database.status_updates[0][0], "chainflip")
+        self.assertEqual(database.status_updates[0][1]["error_count"], 0)
 
 
 if __name__ == "__main__":

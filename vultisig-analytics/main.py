@@ -1,4 +1,6 @@
 # main.py
+from __future__ import annotations
+
 import time
 import logging
 import schedule
@@ -14,6 +16,9 @@ from ingestors.router_source_classifier import (
     reclassify_all as reclassify_etherscan_rows,
     sync_attributed_gap_rows,
 )
+from ingestors.swapkit_senders import backfill_swapkit_rows
+from ingestors.chainflip import ChainflipIngestor
+from ingestors.near_intents import NearIntentsIngestor
 from ingestors.vult_holders import VultHoldersIngestor
 from enrichers.enrich_arkham_volumes import VolumeEnricher
 
@@ -30,6 +35,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MIDGARD_RECONCILIATION_SOURCES = frozenset({'thorchain', 'mayachain'})
+VOLUME_SYNC_SOURCES = frozenset({'chainflip', 'near-intents'})
 MAX_PAGES_PER_SYNC = 10
 DUPLICATE_PAGE_STOP_LIMIT = 3
 
@@ -57,6 +63,8 @@ class SyncService:
             'thorchain': THORChainIngestor(),
             'mayachain': MayaChainIngestor(),
             'lifi': LiFiIngestor(),
+            'chainflip': ChainflipIngestor(),
+            'near-intents': NearIntentsIngestor(),
         }
 
     def sync_source(self, source_name: str):
@@ -99,6 +107,15 @@ class SyncService:
                 except Exception as e:
                     logger.error(f"Router-source classifier crashed: {e}")
 
+                # After router demotes SKWrap to `other`, re-tag allowlisted senders.
+                try:
+                    with db_manager.get_connection() as conn:
+                        promoted = backfill_swapkit_rows(conn)
+                        conn.commit()
+                    logger.info(f"SwapKit sender backfill: {promoted} rows promoted")
+                except Exception as e:
+                    logger.error(f"SwapKit sender backfill crashed: {e}")
+
                 # Attributed swaps without an on-chain fee transfer (fee-less
                 # or native-fee) get a synthetic revenue row so they aren't
                 # credited nowhere after leaving the lifi series.
@@ -118,6 +135,10 @@ class SyncService:
                         enricher.close()
                 except Exception as e:
                     logger.error(f"Arkham volume enrichment crashed: {e}")
+                return
+
+            if source_name in VOLUME_SYNC_SOURCES:
+                self._sync_volume_source(source_name, ingestor)
                 return
 
             sync_status = None
@@ -312,6 +333,20 @@ class SyncService:
                     error_count=sync_status.get('error_count', 0) + 1,
                     last_error=str(e)
                 )
+
+    def _sync_volume_source(self, source_name: str, ingestor):
+        result = ingestor.ingest()
+        db_manager.update_sync_status(
+            source_name,
+            next_page_token=None,
+            last_synced_timestamp=datetime.utcnow(),
+            latest_data_timestamp=result.get('latest_ts'),
+            error_count=0 if result.get('error') is None else 1,
+            last_error=result.get('error'),
+        )
+        logger.info(
+            f"Completed {source_name} volume sync: inserted={result.get('inserted')} error={result.get('error')}"
+        )
     
     def sync_all_sources(self):
         """Sync all active sources in parallel"""

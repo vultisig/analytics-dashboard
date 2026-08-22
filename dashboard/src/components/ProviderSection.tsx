@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatProviderName, isArkhamProvider } from '@/lib/providerUtils';
+import { formatProviderName, isDexRevenueProvider } from '@/lib/providerUtils';
 import { IconChevronDownSmall } from '@/icons';
 
 interface ProviderSectionProps {
@@ -19,8 +19,8 @@ export function ProviderSection({
 }: ProviderSectionProps) {
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
 
-    // Arkham-sourced aggregators only carry chain info (no platform attribution).
-    const view = isArkhamProvider(provider) ? 'chain' : 'platform';
+    // Dex-revenue providers only carry chain info (no platform attribution).
+    const view = isDexRevenueProvider(provider) ? 'chain' : 'platform';
 
     // Persist expansion state to localStorage
     useEffect(() => {

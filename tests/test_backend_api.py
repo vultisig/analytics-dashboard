@@ -10,6 +10,7 @@ This script tests all backend API endpoints to verify they are:
 Usage:
     python test_backend_api.py [--base-url http://localhost:8080]
 """
+from __future__ import annotations
 
 import argparse
 import json

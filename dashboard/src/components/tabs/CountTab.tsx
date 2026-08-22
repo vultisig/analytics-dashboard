@@ -365,7 +365,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                             Total Swap Count{chartView === 'platform' ? ' by Platform' : ''}
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap + SwapKit' : ''}
                         </p>
                     </div>
                     <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
@@ -375,7 +375,7 @@ export function CountTab({ range, startDate, endDate, granularity }: CountTabPro
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch + KyberSwap excluded (no platform info)</span>
+                            <span>1inch + KyberSwap + SwapKit excluded (no platform info)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

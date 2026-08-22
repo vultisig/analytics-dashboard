@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Dict, Optional, Tuple
 from config import config
+from ingestors.swapkit_senders import protocol_for_sender
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +76,13 @@ def _build_row(
     raw_wei = int(transfer.get('value') or 0)
     # Decimal arithmetic avoids float precision loss on 18+ decimal tokens.
     human_amount_dec = Decimal(raw_wei) / (Decimal(10) ** decimals) if decimals else Decimal(raw_wei)
+    from_addr = (transfer.get('from') or '').lower()
+    protocol = protocol_for_sender(from_addr) or source_name
 
     return (
         tx_hash,
         chain_name,
-        source_name,
+        protocol,
         timestamp,
         0,  # actual_fee_usd — column is NOT NULL; enricher overwrites with the real block-time USD value
         transfer.get('tokenSymbol') or '',
@@ -90,7 +93,7 @@ def _build_row(
         human_amount_dec,  # amount_in (NUMERIC column accepts Decimal)
         None,  # amount_out
         block_number,
-        (transfer.get('from') or '').lower(),
+        from_addr,
         to_addr,
         'etherscan',
         None,  # volume_data_source

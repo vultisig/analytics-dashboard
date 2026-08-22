@@ -18,6 +18,10 @@ load_dotenv()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import config  # noqa: E402
+from ingestors.swapkit_senders import (  # noqa: E402
+    is_swapkit_payout_sender,
+    plan_swapkit_enrichment,
+)
 from utils.price_fetcher import PriceFetcher  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -27,7 +31,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Vultisig charges 50 bps on aggregator swaps, so volume = fee / 0.005.
 # Matches the volume_to_fee_ratio of historical Arkham-sourced rows.
-VOLUME_TO_FEE_MULTIPLIER = 200
+VOLUME_TO_FEE_MULTIPLIER = config.AFFILIATE_VOLUME_TO_FEE_MULTIPLIER
 
 # CoinGecko ids for fee tokens we can price. Fees in unmapped (long-tail)
 # tokens stay at 0 — the row is still marked processed so it never loops.
@@ -231,11 +235,9 @@ class VolumeEnricher:
             ),
         }
 
-    def apply_updates(self, tx_hash: str, updates: dict) -> None:
-        """Persist enrichment results. Always stamps volume_data_source =
-        'estimated' so the row is never re-selected — that stamp is the
-        loop-breaker for rows whose fee token can't be priced."""
-        updates = {**updates, 'volume_data_source': 'estimated'}
+    def apply_updates(self, tx_hash: str, updates: dict, stamp: str = 'estimated') -> None:
+        """Persist enrichment. Stamp is the loop-breaker for unpriceable/payout rows."""
+        updates = {**updates, 'volume_data_source': stamp}
         set_clause = ', '.join(f"{col} = %s" for col in updates)
         cursor = self.db.cursor()
         cursor.execute(
@@ -252,17 +254,29 @@ class VolumeEnricher:
         logger.info(f"Enriching {tx_hash} on {record['chain']}")
 
         updates = {}
-        if record.get('swap_volume_usd') is None:
+        stamp = 'estimated'
+        is_payout = is_swapkit_payout_sender(record.get('from_address'))
+        if record.get('protocol') == config.SWAPKIT_PROTOCOL:
+            fee_usd = self.resolve_fee_usd(record)
+            planned, stamp = plan_swapkit_enrichment(
+                record.get('from_address'),
+                fee_usd,
+                float(record.get('actual_fee_usd') or 0),
+            )
+            updates.update(planned)
+        elif record.get('swap_volume_usd') is None:
             fee_usd = self.resolve_fee_usd(record)
             if fee_usd:
                 updates['swap_volume_usd'] = fee_usd * VOLUME_TO_FEE_MULTIPLIER
                 if not record.get('actual_fee_usd'):
                     updates['actual_fee_usd'] = fee_usd
 
-        if not record.get('token_in_symbol') or not record.get('token_out_symbol'):
+        if not is_payout and (
+            not record.get('token_in_symbol') or not record.get('token_out_symbol')
+        ):
             updates.update(self.extract_swap_path(record))
 
-        self.apply_updates(tx_hash, updates)
+        self.apply_updates(tx_hash, updates, stamp=stamp)
 
         path = f"{updates.get('token_in_symbol', '?')} → {updates.get('token_out_symbol', '?')}"
         volume = updates.get('swap_volume_usd')
@@ -287,15 +301,18 @@ class VolumeEnricher:
         query = """
             SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd,
                    token_in_symbol, token_out_symbol,
-                   fee_token_symbol, fee_amount_raw, fee_data_source
+                   fee_token_symbol, fee_amount_raw, fee_data_source,
+                   protocol, from_address
             FROM dex_aggregator_revenue
             WHERE (swap_volume_usd IS NULL OR token_in_symbol IS NULL OR token_out_symbol IS NULL)
               AND protocol IN %s
+              AND volume_data_source IS DISTINCT FROM 'estimated'
+              AND volume_data_source IS DISTINCT FROM 'payout'
               AND (
                     (fee_data_source = 'etherscan' AND volume_data_source = 'router_check')
+                 OR (fee_data_source = 'etherscan' AND protocol = %s)
                  OR (fee_data_source IS DISTINCT FROM 'etherscan'
-                     AND (token_in_symbol IS NULL OR token_out_symbol IS NULL)
-                     AND volume_data_source IS DISTINCT FROM 'estimated')
+                     AND (token_in_symbol IS NULL OR token_out_symbol IS NULL))
               )
             ORDER BY timestamp DESC
         """
@@ -303,7 +320,7 @@ class VolumeEnricher:
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor.execute(query, (config.ARKHAM_PROVIDERS,))
+        cursor.execute(query, (config.DEX_REVENUE_PROVIDERS, config.SWAPKIT_PROTOCOL))
         records = cursor.fetchall()
 
         if not records:
