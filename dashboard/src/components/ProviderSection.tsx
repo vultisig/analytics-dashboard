@@ -1,8 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatProviderName, isDexRevenueProvider } from '@/lib/providerUtils';
+import {
+    formatProviderName,
+    isDexRevenueProvider,
+    SWAPKIT_COVERAGE_TOOLTIP,
+    SWAPKIT_PROTOCOL,
+} from '@/lib/providerUtils';
 import { IconChevronDownSmall } from '@/icons';
+import { Tooltip } from './Tooltip';
 
 interface ProviderSectionProps {
     provider: string;
@@ -34,25 +40,42 @@ export function ProviderSection({
         localStorage.setItem(`provider-${provider}-expanded`, JSON.stringify(isExpanded));
     }, [isExpanded, provider]);
 
+    const isSwapKit = provider.toLowerCase() === SWAPKIT_PROTOCOL;
+
     return (
         <div className="glass-card glass-card-hover will-change-blur rounded-xl overflow-hidden">
-            {/* Header */}
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center justify-between p-6 hover:bg-white/5 transition-colors"
-                aria-expanded={isExpanded}
-                aria-controls={`provider-${provider}-content`}
-            >
-                <h3 className="text-xl font-bold text-[var(--text-primary)]">
-                    {formatProviderName(provider)}
-                </h3>
-                <IconChevronDownSmall
-                    className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform duration-300 ${
-                        isExpanded ? 'rotate-180' : ''
-                    }`}
-                />
-            </button>
+            <div className="w-full flex items-center justify-between p-6 hover:bg-white/5 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                    <button
+                        type="button"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="text-left"
+                        aria-expanded={isExpanded}
+                        aria-controls={`provider-${provider}-content`}
+                    >
+                        <h3 className="text-xl font-bold text-[var(--text-primary)]">
+                            {formatProviderName(provider)}
+                        </h3>
+                    </button>
+                    {isSwapKit && (
+                        <Tooltip content={SWAPKIT_COVERAGE_TOOLTIP} iconOnly wide />
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="shrink-0"
+                    aria-expanded={isExpanded}
+                    aria-controls={`provider-${provider}-content`}
+                    aria-label={isExpanded ? 'Collapse provider' : 'Expand provider'}
+                >
+                    <IconChevronDownSmall
+                        className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform duration-300 ${
+                            isExpanded ? 'rotate-180' : ''
+                        }`}
+                    />
+                </button>
+            </div>
 
             {/* Content */}
             {isExpanded && (

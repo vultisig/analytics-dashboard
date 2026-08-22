@@ -14,14 +14,18 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 
 // Dex-revenue providers have chain attribution, not platform.
 export const ARKHAM_PROVIDERS: readonly string[] = ['1inch', 'kyberswap'];
-export const DEX_REVENUE_PROVIDERS: readonly string[] = [...ARKHAM_PROVIDERS, 'swapkit'];
+export const SWAPKIT_PROTOCOL = 'swapkit';
+export const DEX_REVENUE_PROVIDERS: readonly string[] = [...ARKHAM_PROVIDERS, SWAPKIT_PROTOCOL];
 
 export function isDexRevenueProvider(name: string): boolean {
   return DEX_REVENUE_PROVIDERS.includes(name.toLowerCase());
 }
 
+export const SWAPKIT_COVERAGE_TOOLTIP =
+  'SKWrap in-tx fees, Near and Flashnet payouts to the fee wallet, and Chainflip volume. Not Flashnet / Jupiter / Garden / Harbor / Mayan volume. THOR/Maya via SwapKit is already counted separately.';
+
 // Preferred provider order for sorting
-const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap', 'swapkit'];
+const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap', SWAPKIT_PROTOCOL];
 
 /**
  * Format a provider name for display.
