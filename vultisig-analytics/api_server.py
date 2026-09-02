@@ -21,6 +21,17 @@ from flask_cors import CORS
 
 from database.connection import db_manager
 from config import config
+from fee_wallet_gap import (
+    UNATTRIBUTED_QUERY,
+    clamp_window_days,
+    query_params,
+    summarize_unattributed,
+)
+from swapkit_accruals import (
+    LATEST_ACCRUALS_QUERY,
+    query_params as accrual_query_params,
+    summarize_accruals,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -3812,6 +3823,36 @@ def get_system_status():
     except Exception as e:
         logger.error(f"Error getting system status: {e}")
         return jsonify({'error': 'Failed to fetch system status'}), 500
+
+
+@app.route('/api/fee-wallet-unattributed')
+def get_fee_wallet_unattributed():
+    """Fee-wallet inflows no provider claims — the attribution gap, by sender."""
+    days = clamp_window_days(request.args.get('days'))
+    try:
+        rows = db_manager.execute_query(UNATTRIBUTED_QUERY, query_params(days), fetch=True)
+        return jsonify(summarize_unattributed(rows, days))
+    except Exception as e:
+        logger.error(f"Error getting fee-wallet gap: {e}")
+        return jsonify({'error': 'Failed to fetch fee-wallet gap'}), 500
+
+
+NEAR_INTENTS_ACCRUAL_PROVIDER = 'near-intents'
+
+
+@app.route('/api/swapkit/accruals')
+def get_swapkit_accruals():
+    """Affiliate fees accrued at Near-Intents per app, not yet paid to the fee wallet."""
+    try:
+        rows = db_manager.execute_query(
+            LATEST_ACCRUALS_QUERY,
+            accrual_query_params(NEAR_INTENTS_ACCRUAL_PROVIDER),
+            fetch=True,
+        )
+        return jsonify(summarize_accruals(NEAR_INTENTS_ACCRUAL_PROVIDER, rows, iso_utc))
+    except Exception as e:
+        logger.error(f"Error getting SwapKit accruals: {e}")
+        return jsonify({'error': 'Failed to fetch SwapKit accruals'}), 500
 
 
 # =============================================================================

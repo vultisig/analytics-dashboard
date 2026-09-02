@@ -388,7 +388,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch + KyberSwap + SwapKit excluded (no platform info)</span>
+                            <span>1inch + KyberSwap + SwapKit excluded (revenue rows carry no platform)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

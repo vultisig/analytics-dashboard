@@ -262,6 +262,46 @@ export async function fetchSystemStatus() {
   return fetchApi('/api/system-status');
 }
 
+export interface FeeWalletUnattributedSender {
+  from_address: string;
+  transfers: number;
+  stable_usd: number;
+}
+
+export interface FeeWalletUnattributed {
+  days: number;
+  transfers: number;
+  stable_usd: number;
+  top_senders: FeeWalletUnattributedSender[];
+}
+
+/**
+ * Fee-wallet inflows no provider claims — the attribution gap, made visible.
+ */
+export async function fetchFeeWalletUnattributed(days = 30): Promise<FeeWalletUnattributed> {
+  return fetchApi(`/api/fee-wallet-unattributed?days=${days}`);
+}
+
+export interface SwapKitAccrualPlatform {
+  platform: string;
+  stable_usd: number;
+  unpriced_tokens: number;
+}
+
+export interface SwapKitAccruals {
+  provider: string;
+  snapshot_at: string | null;
+  stable_usd: number;
+  platforms: SwapKitAccrualPlatform[];
+}
+
+/**
+ * Affiliate fees accrued at Near-Intents per app, not yet paid to the fee wallet.
+ */
+export async function fetchSwapKitAccruals(): Promise<SwapKitAccruals> {
+  return fetchApi('/api/swapkit/accruals');
+}
+
 export interface MarketVolumeBenchmark {
   provider: string;
   label: string;

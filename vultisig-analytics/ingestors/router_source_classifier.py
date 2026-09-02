@@ -314,19 +314,44 @@ def sync_attributed_gap_rows(db) -> int:
     return inserted
 
 
+def iter_never_router_checked_rows(db, batch_size: int = 500) -> Iterable[Tuple[int, str, str, str, datetime]]:
+    """Every provider-tagged row the classifier has never seen, whatever
+    ingestor wrote it — Arkham-era rows and pre-classifier estimates included."""
+    cur = db.cursor(name='never_router_checked_cursor')
+    cur.itersize = batch_size
+    cur.execute(
+        """
+        SELECT id, tx_hash, chain, protocol, timestamp
+        FROM dex_aggregator_revenue
+        WHERE protocol IN ('1inch', 'kyberswap')
+          AND volume_data_source IS DISTINCT FROM %s
+          AND volume_data_source IS DISTINCT FROM 'lifi_attribution'
+        ORDER BY id ASC
+        """,
+        (VERIFICATION_TAG,),
+    )
+    try:
+        for row in cur:
+            yield row
+    finally:
+        cur.close()
+
+
 def reclassify_all(
     api_key: str,
     db,
     delay: float = PER_REQUEST_DELAY_SECONDS,
     session: Optional[requests.Session] = None,
+    rows: Optional[List[Tuple[int, str, str, str, datetime]]] = None,
 ) -> Dict[str, int]:
-    """Run classifier across every unverified row. Returns counts dict."""
+    """Run classifier across every unverified row (or the given rows). Returns counts dict."""
     counts = {
         'kept': 0, 'demoted': 0, 'attributed': 0, 'deferred': 0,
         'skipped_error': 0, 'skipped_unknown_chain': 0,
     }
 
-    rows = list(iter_unverified_rows(db))
+    if rows is None:
+        rows = list(iter_unverified_rows(db))
     logger.info(f"Classifying {len(rows)} unverified rows")
 
     for row_id, tx_hash, chain, protocol, row_ts in rows:

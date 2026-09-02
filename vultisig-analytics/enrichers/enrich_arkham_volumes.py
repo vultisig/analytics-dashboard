@@ -308,6 +308,7 @@ class VolumeEnricher:
               AND protocol IN %s
               AND volume_data_source IS DISTINCT FROM 'estimated'
               AND volume_data_source IS DISTINCT FROM 'payout'
+              AND volume_data_source IS DISTINCT FROM 'unpriced'
               AND (
                     (fee_data_source = 'etherscan' AND volume_data_source = 'router_check')
                  OR (fee_data_source = 'etherscan' AND protocol = %s)

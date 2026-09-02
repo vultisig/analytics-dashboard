@@ -19,6 +19,8 @@ from ingestors.router_source_classifier import (
 from ingestors.swapkit_senders import backfill_swapkit_rows
 from ingestors.chainflip import ChainflipIngestor
 from ingestors.near_intents import NearIntentsIngestor
+from ingestors.near_intents_accrual import NearIntentsAccrualReader
+from ingestors.rpc_fee_ingestor import RpcFeeIngestor
 from ingestors.vult_holders import VultHoldersIngestor
 from enrichers.enrich_arkham_volumes import VolumeEnricher
 
@@ -35,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MIDGARD_RECONCILIATION_SOURCES = frozenset({'thorchain', 'mayachain'})
-VOLUME_SYNC_SOURCES = frozenset({'chainflip', 'near-intents'})
+VOLUME_SYNC_SOURCES = frozenset({'chainflip', 'near-intents', 'near-intents-accrual', 'rpc-fees'})
 MAX_PAGES_PER_SYNC = 10
 DUPLICATE_PAGE_STOP_LIMIT = 3
 
@@ -65,12 +67,15 @@ class SyncService:
             'lifi': LiFiIngestor(),
             'chainflip': ChainflipIngestor(),
             'near-intents': NearIntentsIngestor(),
+            'near-intents-accrual': NearIntentsAccrualReader(),
+            'rpc-fees': RpcFeeIngestor(),
         }
 
     def sync_source(self, source_name: str):
         """Sync data from a specific source"""
         logger.info(f"Starting sync for {source_name}")
 
+        sync_status = {}
         try:
             ingestor = self.ingestors[source_name]
 
@@ -335,17 +340,23 @@ class SyncService:
                 )
 
     def _sync_volume_source(self, source_name: str, ingestor):
-        result = ingestor.ingest()
-        db_manager.update_sync_status(
-            source_name,
-            next_page_token=None,
-            last_synced_timestamp=datetime.utcnow(),
-            latest_data_timestamp=result.get('latest_ts'),
-            error_count=0 if result.get('error') is None else 1,
-            last_error=result.get('error'),
-        )
+        status = db_manager.get_sync_status(source_name) or {}
+        result = ingestor.ingest(status.get('next_page_token'))
+        error = result.get('error')
+        # Progress made before a failure is real; only the "healthy at" stamp waits for success.
+        update = {
+            'next_page_token': result.get('next_state'),
+            'error_count': 0 if error is None else int(status.get('error_count') or 0) + 1,
+            'last_error': error,
+        }
+        if result.get('latest_ts') is not None:
+            update['latest_data_timestamp'] = result['latest_ts']
+        if error is None:
+            update['last_synced_timestamp'] = datetime.utcnow()
+        db_manager.update_sync_status(source_name, **update)
         logger.info(
-            f"Completed {source_name} volume sync: inserted={result.get('inserted')} error={result.get('error')}"
+            f"Completed {source_name} volume sync: inserted={result.get('inserted')} "
+            f"pages={result.get('pages')} error={error}"
         )
     
     def sync_all_sources(self):

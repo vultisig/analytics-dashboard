@@ -129,6 +129,15 @@ class TestBuildRow(unittest.TestCase):
         named = dict(zip(INSERT_COLUMNS, row))
         self.assertEqual(named['protocol'], 'kyberswap')
 
+    def test_thorchain_router_settlement_never_inherits_kyberswap(self):
+        from ingestors.etherscan_ingestor import _build_row, INSERT_COLUMNS
+        thorchain_router = "0xD37BbE5744D730a1d98d8DC97c42F0Ca46aD7146"
+        transfer = {**SAMPLE_TRANSFER, "from": thorchain_router}
+        row = _build_row(transfer, "kyberswap", "Ethereum", RECEIVER)
+        named = dict(zip(INSERT_COLUMNS, row))
+        self.assertEqual(named['protocol'], 'other')
+        self.assertEqual(named['from_address'], thorchain_router.lower())
+
 
 # ---------------------------------------------------------------------------
 # fetch_chain_page — the silent-failure regression suite

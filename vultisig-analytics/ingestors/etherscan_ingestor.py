@@ -19,14 +19,14 @@ ETHERSCAN_API_KEY = os.getenv('ETHERSCAN_API_KEY')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 # (chainid, dex_aggregator_revenue.chain) — display names align with frontend.
+# Optimism, Base and Avalanche moved to config.RPC_FEE_CHAINS: the Etherscan free plan
+# refuses them. BSC stays so its refusal remains a visible sync error until a plan or
+# keyed RPC covers it.
 DEFAULT_CHAINS: List[Tuple[int, str]] = [
     (1, 'Ethereum'),
     (56, 'BSC'),
     (137, 'Polygon'),
     (42161, 'Arbitrum'),
-    (10, 'Optimism'),
-    (8453, 'Base'),
-    (43114, 'Avalanche'),
     (81457, 'Blast'),
 ]
 

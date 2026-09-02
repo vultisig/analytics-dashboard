@@ -31,6 +31,8 @@ class SwapKitVolumeDraft:
     in_amount_raw: str
     raw_data: Dict[str, Any]
     block_height: Optional[int] = None
+    platform: str = SWAPKIT_PLATFORM
+    in_tx_id: Optional[str] = None
 
 
 def parse_decimal(value: Any, default: float = 0.0) -> float:
@@ -67,10 +69,10 @@ def build_swapkit_swap_record(draft: SwapKitVolumeDraft) -> Dict[str, Any]:
         "is_streaming_swap": False,
         "swap_slip": None,
         "volume_tier": classify_volume_tier(draft.in_amount_usd),
-        "platform": SWAPKIT_PLATFORM,
+        "platform": draft.platform,
         "raw_data": json.dumps(draft.raw_data),
         "in_address": draft.user_address or "",
-        "in_tx_id": draft.tx_hash,
+        "in_tx_id": draft.in_tx_id or draft.tx_hash,
         "in_amount_raw": draft.in_amount_raw,
         "out_addresses": json.dumps([draft.user_address] if draft.user_address else []),
         "out_tx_ids": None,

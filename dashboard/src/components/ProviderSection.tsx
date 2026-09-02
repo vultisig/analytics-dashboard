@@ -8,6 +8,7 @@ import {
     SWAPKIT_PROTOCOL,
 } from '@/lib/providerUtils';
 import { IconChevronDownSmall } from '@/icons';
+import { fetchSwapKitAccruals, type SwapKitAccruals } from '@/lib/api';
 import { Tooltip } from './Tooltip';
 
 interface ProviderSectionProps {
@@ -25,7 +26,8 @@ export function ProviderSection({
 }: ProviderSectionProps) {
     const [isExpanded, setIsExpanded] = useState(!defaultCollapsed);
 
-    // Dex-revenue providers only carry chain info (no platform attribution).
+    // Dex-revenue cards break down by chain: their receipts carry no platform.
+    // SwapKit's Chainflip rows do carry one, but only the aggregate platform charts show it.
     const view = isDexRevenueProvider(provider) ? 'chain' : 'platform';
 
     // Persist expansion state to localStorage
@@ -41,6 +43,22 @@ export function ProviderSection({
     }, [isExpanded, provider]);
 
     const isSwapKit = provider.toLowerCase() === SWAPKIT_PROTOCOL;
+    const [accruals, setAccruals] = useState<SwapKitAccruals | null>(null);
+
+    useEffect(() => {
+        if (!isSwapKit) return;
+        fetchSwapKitAccruals()
+            .then(setAccruals)
+            .catch((error) => console.error('Error fetching SwapKit accruals:', error));
+    }, [isSwapKit]);
+
+    const accrualLine = accruals && accruals.snapshot_at && (
+        <p className="text-xs text-[var(--text-tertiary)]">
+            Near-Intents accrued, not yet paid out: ~${Math.round(accruals.stable_usd).toLocaleString()} in stables
+            {' · '}
+            {accruals.platforms.map((p) => `${p.platform} $${Math.round(p.stable_usd).toLocaleString()}`).join(' · ')}
+        </p>
+    );
 
     return (
         <div className="glass-card glass-card-hover will-change-blur rounded-xl overflow-hidden">
@@ -83,6 +101,7 @@ export function ProviderSection({
                     id={`provider-${provider}-content`}
                     className="px-6 pb-6 space-y-6 animate-expand"
                 >
+                    {accrualLine}
                     {typeof children === 'function' ? children(view) : children}
                 </div>
             )}

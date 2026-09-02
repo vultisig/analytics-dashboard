@@ -49,6 +49,12 @@ _stubs = {
     "ingestors.near_intents": _module(
         "ingestors.near_intents", NearIntentsIngestor=Mock
     ),
+    "ingestors.near_intents_accrual": _module(
+        "ingestors.near_intents_accrual", NearIntentsAccrualReader=Mock
+    ),
+    "ingestors.rpc_fee_ingestor": _module(
+        "ingestors.rpc_fee_ingestor", RpcFeeIngestor=Mock
+    ),
     "ingestors.vult_holders": _module(
         "ingestors.vult_holders", VultHoldersIngestor=Mock
     ),
@@ -174,25 +180,55 @@ class SyncServiceReconciliationTests(unittest.TestCase):
 
 
 class VolumeSyncTests(unittest.TestCase):
-    def test_chainflip_uses_ingest_not_midgard_loop(self):
+    STATE_IN = '{"cursors": {"Web": "c9"}, "done": {}}'
+    STATE_OUT = '{"cursors": {}, "done": {"Web": true}}'
+
+    def run_volume_sync(self, status, error=None):
         ingestor = Mock()
         ingestor.ingest.return_value = {
             "source": "chainflip",
             "inserted": 2,
+            "pages": 1,
             "latest_ts": None,
-            "error": None,
+            "error": error,
+            "next_state": self.STATE_OUT,
         }
         database = FakeDatabase()
+        database.get_sync_status = lambda source_name: status
         service = sync_main.SyncService.__new__(sync_main.SyncService)
         service.ingestors = {"chainflip": ingestor}
 
         with patch.object(sync_main, "db_manager", database):
             service.sync_source("chainflip")
 
-        ingestor.ingest.assert_called_once()
         ingestor.fetch_data.assert_not_called()
-        self.assertEqual(database.status_updates[0][0], "chainflip")
-        self.assertEqual(database.status_updates[0][1]["error_count"], 0)
+        return ingestor, database.status_updates[0][1]
+
+    def test_chainflip_resumes_from_persisted_state(self):
+        ingestor, update = self.run_volume_sync(
+            status={"source": "chainflip", "error_count": 0, "next_page_token": self.STATE_IN}
+        )
+
+        ingestor.ingest.assert_called_once_with(self.STATE_IN)
+        self.assertEqual(update["next_page_token"], self.STATE_OUT)
+        self.assertEqual(update["error_count"], 0)
+        self.assertIn("last_synced_timestamp", update)
+
+    def test_failed_sync_keeps_progress_but_not_the_healthy_stamp(self):
+        _, update = self.run_volume_sync(
+            error="iOS: account not found",
+            status={"source": "chainflip", "error_count": 2, "next_page_token": None},
+        )
+
+        self.assertEqual(update["next_page_token"], self.STATE_OUT)
+        self.assertEqual(update["error_count"], 3)
+        self.assertEqual(update["last_error"], "iOS: account not found")
+        self.assertNotIn("last_synced_timestamp", update)
+
+    def test_first_sync_without_status_row(self):
+        ingestor, update = self.run_volume_sync(status=None)
+        ingestor.ingest.assert_called_once_with(None)
+        self.assertEqual(update["error_count"], 0)
 
 
 if __name__ == "__main__":

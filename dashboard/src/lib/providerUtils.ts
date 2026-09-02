@@ -22,7 +22,7 @@ export function isDexRevenueProvider(name: string): boolean {
 }
 
 export const SWAPKIT_COVERAGE_TOOLTIP =
-  'SKWrap in-tx fees, Near and Flashnet payouts to the fee wallet, and Chainflip volume. Not Flashnet / Jupiter / Garden / Harbor / Mayan volume. THOR/Maya via SwapKit is already counted separately.';
+  'Volume: Chainflip, measured per app (the split shows on the platform charts, not on this card). SwapKit EVM swaps are counted but their volume is unknown (fee rates vary). Near volume needs partner credentials and has no platform. Not covered: Flashnet, Jupiter, Garden, Harbor, Mayan. Revenue: fee-wallet receipts, dated at payout, not per provider. THOR/Maya via SwapKit is already counted separately.';
 
 // Preferred provider order for sorting
 const PROVIDER_ORDER: string[] = ['thorchain', 'mayachain', 'lifi', '1inch', 'kyberswap', SWAPKIT_PROTOCOL];
