@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import psycopg2
@@ -253,7 +253,7 @@ def _resolve_lifi_diamond(db, row_id: int, tx_hash: str, row_ts: datetime, count
     if swap and swap['tool'] in config.ATTRIBUTED_LIFI_TOOLS:
         apply_attribution(db, row_id, swap)
         counts['attributed'] += 1
-    elif swap or datetime.utcnow() - row_ts > timedelta(days=config.LIFI_MATCH_GRACE_DAYS):
+    elif swap or datetime.now(timezone.utc) - row_ts > timedelta(days=config.LIFI_MATCH_GRACE_DAYS):
         apply_classification(db, row_id, 'other')
         counts['demoted'] += 1
     else:
