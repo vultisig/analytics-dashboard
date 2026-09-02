@@ -395,7 +395,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch + KyberSwap excluded (no platform info)</span>
+                            <span>1inch + KyberSwap excluded (no platform info); SwapKit Chainflip is per platform, SwapKit Near counts as Other</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

@@ -21,6 +21,7 @@ export const providerColorMap: Record<string, string> = {
   lifi: '#10B981',
   '1inch': '#F59E0B',
   kyberswap: '#31CB9E',
+  swapkit: '#6366F1',
 };
 
 // Chain/Platform color map

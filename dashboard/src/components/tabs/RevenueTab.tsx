@@ -378,7 +378,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                             {chartView === 'provider' ? 'Total Revenue' : 'Total Revenue by Platform'}
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
+                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap + SwapKit' : ''}
                         </p>
                     </div>
                     <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
@@ -388,7 +388,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                     {chartView === 'platform' ? (
                         <div className="flex items-center gap-1.5 t-footnote text-[var(--text-tertiary)]">
                             <IconCircleInfo />
-                            <span>1inch + KyberSwap excluded (no platform info)</span>
+                            <span>1inch + KyberSwap + SwapKit excluded (revenue rows carry no platform)</span>
                         </div>
                     ) : (
                         <ProviderToggleControl

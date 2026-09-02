@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { fetchSystemStatus } from '@/lib/api';
+import { fetchFeeWalletUnattributed, fetchSystemStatus, type FeeWalletUnattributed } from '@/lib/api';
 
 interface SyncStatus {
     source: string;
@@ -21,7 +21,14 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
     const [loading, setLoading] = useState(true);
     const [overallStatus, setOverallStatus] = useState<'operational' | 'degraded' | 'outage'>('operational');
     const [showLatestData, setShowLatestData] = useState(false);
+    const [unattributed, setUnattributed] = useState<FeeWalletUnattributed | null>(null);
     const resetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        fetchFeeWalletUnattributed()
+            .then(setUnattributed)
+            .catch((error) => console.error('Error fetching fee-wallet gap:', error));
+    }, []);
 
     // Cleanup timeout on unmount
     useEffect(() => {
@@ -150,6 +157,11 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         arkham: '1inch (Arkham)', // legacy row; replaced by '1inch' once Etherscan ingest writes the new key
         '1inch': '1inch',
         kyberswap: 'KyberSwap',
+        swapkit: 'SwapKit',
+        chainflip: 'SwapKit (Chainflip)',
+        'near-intents': 'SwapKit (Near Intents)',
+        'near-intents-accrual': 'SwapKit (Near accruals)',
+        'rpc-fees': 'Fee wallet (Robinhood RPC)',
         thorchain: 'THORChain',
         mayachain: 'MAYAChain',
         lifi: 'LI.FI',
@@ -242,6 +254,20 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
                             })
                         )}
                     </div>
+
+                    {unattributed && unattributed.transfers > 0 && (
+                        <div
+                            className="mt-3 pt-2 border-t border-[var(--border-light)] text-[10px] text-[var(--text-tertiary)] flex items-center justify-between"
+                            title={unattributed.top_senders
+                                .map((s) => `${s.from_address} · ${s.transfers} tx · $${s.stable_usd.toLocaleString()}`)
+                                .join('\n')}
+                        >
+                            <span>Fee-wallet inflow unattributed ({unattributed.days}d)</span>
+                            <span className="tabular-nums">
+                                {unattributed.transfers} tx · ~${Math.round(unattributed.stable_usd).toLocaleString()} stable
+                            </span>
+                        </div>
+                    )}
 
                     <div className="mt-3 pt-2 border-t border-[var(--border-light)] text-[10px] text-[var(--text-tertiary)] text-center">
                         Auto-updates every 15 mins

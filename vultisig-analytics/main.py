@@ -1,4 +1,6 @@
 # main.py
+from __future__ import annotations
+
 import time
 import logging
 import schedule
@@ -14,6 +16,11 @@ from ingestors.router_source_classifier import (
     reclassify_all as reclassify_etherscan_rows,
     sync_attributed_gap_rows,
 )
+from ingestors.swapkit_senders import backfill_swapkit_rows
+from ingestors.chainflip import ChainflipIngestor
+from ingestors.near_intents import NearIntentsIngestor
+from ingestors.near_intents_accrual import NearIntentsAccrualReader
+from ingestors.rpc_fee_ingestor import RpcFeeIngestor
 from ingestors.vult_holders import VultHoldersIngestor
 from enrichers.enrich_arkham_volumes import VolumeEnricher
 
@@ -30,6 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MIDGARD_RECONCILIATION_SOURCES = frozenset({'thorchain', 'mayachain'})
+VOLUME_SYNC_SOURCES = frozenset({'chainflip', 'near-intents', 'near-intents-accrual', 'rpc-fees'})
 MAX_PAGES_PER_SYNC = 10
 DUPLICATE_PAGE_STOP_LIMIT = 3
 
@@ -57,12 +65,17 @@ class SyncService:
             'thorchain': THORChainIngestor(),
             'mayachain': MayaChainIngestor(),
             'lifi': LiFiIngestor(),
+            'chainflip': ChainflipIngestor(),
+            'near-intents': NearIntentsIngestor(),
+            'near-intents-accrual': NearIntentsAccrualReader(),
+            'rpc-fees': RpcFeeIngestor(),
         }
 
     def sync_source(self, source_name: str):
         """Sync data from a specific source"""
         logger.info(f"Starting sync for {source_name}")
 
+        sync_status = {}
         try:
             ingestor = self.ingestors[source_name]
 
@@ -99,6 +112,15 @@ class SyncService:
                 except Exception as e:
                     logger.error(f"Router-source classifier crashed: {e}")
 
+                # After router demotes SKWrap to `other`, re-tag allowlisted senders.
+                try:
+                    with db_manager.get_connection() as conn:
+                        promoted = backfill_swapkit_rows(conn)
+                        conn.commit()
+                    logger.info(f"SwapKit sender backfill: {promoted} rows promoted")
+                except Exception as e:
+                    logger.error(f"SwapKit sender backfill crashed: {e}")
+
                 # Attributed swaps without an on-chain fee transfer (fee-less
                 # or native-fee) get a synthetic revenue row so they aren't
                 # credited nowhere after leaving the lifi series.
@@ -118,6 +140,10 @@ class SyncService:
                         enricher.close()
                 except Exception as e:
                     logger.error(f"Arkham volume enrichment crashed: {e}")
+                return
+
+            if source_name in VOLUME_SYNC_SOURCES:
+                self._sync_volume_source(source_name, ingestor)
                 return
 
             sync_status = None
@@ -312,6 +338,26 @@ class SyncService:
                     error_count=sync_status.get('error_count', 0) + 1,
                     last_error=str(e)
                 )
+
+    def _sync_volume_source(self, source_name: str, ingestor):
+        status = db_manager.get_sync_status(source_name) or {}
+        result = ingestor.ingest(status.get('next_page_token'))
+        error = result.get('error')
+        # Progress made before a failure is real; only the "healthy at" stamp waits for success.
+        update = {
+            'next_page_token': result.get('next_state'),
+            'error_count': 0 if error is None else int(status.get('error_count') or 0) + 1,
+            'last_error': error,
+        }
+        if result.get('latest_ts') is not None:
+            update['latest_data_timestamp'] = result['latest_ts']
+        if error is None:
+            update['last_synced_timestamp'] = datetime.utcnow()
+        db_manager.update_sync_status(source_name, **update)
+        logger.info(
+            f"Completed {source_name} volume sync: inserted={result.get('inserted')} "
+            f"pages={result.get('pages')} error={error}"
+        )
     
     def sync_all_sources(self):
         """Sync all active sources in parallel"""

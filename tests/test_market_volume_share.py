@@ -26,7 +26,13 @@ _stubs = {
     "database.connection": _module("database.connection", db_manager=_db_stub),
     "config": _module(
         "config",
-        config=SimpleNamespace(ARKHAM_PROVIDERS=("1inch", "kyberswap")),
+        config=SimpleNamespace(
+            ARKHAM_PROVIDERS=("1inch", "kyberswap"),
+            DEX_REVENUE_PROVIDERS=("1inch", "kyberswap", "swapkit"),
+            SWAPKIT_PROTOCOL="swapkit",
+            SWAPKIT_PAYOUT_SENDERS=frozenset(),
+            SWAPKIT_FEE_SENDERS=frozenset(),
+        ),
     ),
 }
 

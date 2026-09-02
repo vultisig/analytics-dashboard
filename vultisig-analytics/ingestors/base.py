@@ -10,6 +10,30 @@ from config import config
 logger = logging.getLogger(__name__)
 
 
+def classify_volume_tier(volume_usd: float) -> str:
+    if volume_usd <= 100:
+        return '<=$100'
+    if volume_usd <= 1000:
+        return '100-1000'
+    if volume_usd <= 5000:
+        return '1000-5000'
+    if volume_usd <= 10000:
+        return '5000-10000'
+    if volume_usd <= 50000:
+        return '10000-50000'
+    if volume_usd <= 100000:
+        return '50000-100000'
+    if volume_usd <= 250000:
+        return '100000-250000'
+    if volume_usd <= 500000:
+        return '250000-500000'
+    if volume_usd <= 750000:
+        return '500000-750000'
+    if volume_usd <= 1000000:
+        return '750000-1000000'
+    return '>1000000'
+
+
 class BackoffRetry:
     """Reusable backoff retry utility with additive backoff strategy"""
 
@@ -119,29 +143,7 @@ class BaseIngestor(ABC):
         raise Exception(f"Max retries exceeded for {url}")
     
     def classify_volume_tier(self, volume_usd: float) -> str:
-        """Classify swap volume into tiers"""
-        if volume_usd <= 100:
-            return '<=$100'
-        elif volume_usd <= 1000:
-            return '100-1000'
-        elif volume_usd <= 5000:
-            return '1000-5000'
-        elif volume_usd <= 10000:
-            return '5000-10000'
-        elif volume_usd <= 50000:
-            return '10000-50000'
-        elif volume_usd <= 100000:
-            return '50000-100000'
-        elif volume_usd <= 250000:
-            return '100000-250000'
-        elif volume_usd <= 500000:
-            return '250000-500000'
-        elif volume_usd <= 750000:
-            return '500000-750000'
-        elif volume_usd <= 1000000:
-            return '750000-1000000'
-        else:
-            return '>1000000'
+        return classify_volume_tier(volume_usd)
     
     def parse_timestamp(self, timestamp_str: str) -> datetime:
         """Parse timestamp string to datetime object"""

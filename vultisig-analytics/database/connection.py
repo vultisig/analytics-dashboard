@@ -67,7 +67,22 @@ class DatabaseManager:
                 cursor.executemany(insert_query, swaps_data)
                 conn.commit()
                 return cursor.rowcount
-    
+
+    def insert_swapkit_accruals(self, rows):
+        """One snapshot row per (provider, platform, token); repeats are no-ops."""
+        insert_query = """
+        INSERT INTO swapkit_accruals (
+            snapshot_at, provider, platform, token_id, amount_raw, amount_usd
+        ) VALUES (
+            %(snapshot_at)s, %(provider)s, %(platform)s, %(token_id)s, %(amount_raw)s, %(amount_usd)s
+        ) ON CONFLICT (snapshot_at, provider, platform, token_id) DO NOTHING
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.executemany(insert_query, rows)
+                conn.commit()
+                return cursor.rowcount
+
     # Columns callers may set on sync_status via update_sync_status. Anything
     # else is rejected — the method interpolates column names as raw SQL
     # identifiers (psycopg2 has no parameterized identifier substitution), so
