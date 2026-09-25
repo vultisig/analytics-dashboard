@@ -260,15 +260,7 @@ export function MarketVolumeShare({
         return () => controller.abort();
     }, [chartRange, range, startDate, endDate, granularity, retryCount]);
 
-    const rawPoints = useMemo(
-        () => (data?.series ?? [])
-            .filter(
-                (point) => Number.isFinite(point.sharePercent)
-                    && Number.isFinite(point.marketVolumeUsd),
-            )
-            .sort((left, right) => left.date.localeCompare(right.date)),
-        [data],
-    );
+    const rawPoints = useMemo(() => data?.series ?? [], [data]);
     const chartPoints = useMemo(
         () => calculateRollingTrend(rawPoints, trendWindow),
         [rawPoints, trendWindow],
