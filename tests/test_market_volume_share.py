@@ -170,6 +170,15 @@ class MarketVolumeShareApiTests(unittest.TestCase):
         dates = [point["date"] for point in response.get_json()["series"]]
         self.assertEqual(dates, ["2023-11-14", "2023-11-15"])
 
+    def test_custom_range_after_last_published_day_is_empty(self):
+        response, _ = self._get(
+            "/api/market-volume-share?r=custom&g=d&sd=2023-11-16&ed=2023-11-16"
+        )
+
+        result = response.get_json()
+        self.assertEqual(result["series"], [])
+        self.assertIsNone(result["asOfDate"])
+
     def test_drops_incomplete_current_utc_day(self):
         with patch.object(market_api, "_utc_today", return_value=date(2023, 11, 15)):
             response, _ = self._get("/api/market-volume-share?r=1d&g=d")

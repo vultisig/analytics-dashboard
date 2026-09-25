@@ -550,9 +550,7 @@ def _get_market_date_bounds(last_date, range_param, start_date_param=None, end_d
     end_date_param = _require_iso_date(end_date_param, 'end date')
 
     if range_value == 'custom' and start_date_param and end_date_param:
-        end_date = min(end_date_param, last_iso)
-        start_date = min(start_date_param, end_date)
-        return start_date, end_date
+        return start_date_param, min(end_date_param, last_iso)
 
     if range_value in MARKET_RANGE_DAY_SPANS:
         span = MARKET_RANGE_DAY_SPANS[range_value]

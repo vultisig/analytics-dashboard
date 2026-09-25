@@ -466,7 +466,7 @@ export function MarketVolumeShare({
                                 name={trendWindow > 0 ? `${trendWindow}D trend` : 'Vultisig share'}
                                 stroke={LINE_COLOR}
                                 strokeWidth={trendWindow > 0 ? 3 : 2.25}
-                                dot={false}
+                                dot={chartPoints.length === 1}
                                 activeDot={{ r: 5, fill: LINE_COLOR, stroke: '#FFFFFF', strokeWidth: 2 }}
                                 isAnimationActive
                                 animationDuration={500}
