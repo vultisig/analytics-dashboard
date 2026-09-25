@@ -9,7 +9,6 @@ import os
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from functools import wraps
@@ -133,48 +132,16 @@ public_rate_limit_lock = threading.Lock()
 MAX_ACTIVITY_LIMIT = 200
 MAX_TOP_PATHS_LIMIT = 100
 
-# Compare each Vultisig route with its matching venue instead of combining DEX
-# and aggregator totals (which would double-count trades routed by an
-# aggregator into an underlying DEX). THORChain and LI.FI use DefiLlama's
-# independently indexed series. MayaChain uses the protocol's official
-# Midgard swap history because DefiLlama only reports THORSwap-routed volume
-# for the Mayachain network, not total MAYAChain swap volume.
-DEFILLAMA_API_BASE_URL = 'https://api.llama.fi/summary'
-DEFILLAMA_SOURCE_URL = 'https://defillama.com/dexs'
-MAYACHAIN_MIDGARD_SWAPS_URL = 'https://midgard.mayachain.info/v2/history/swaps'
-MAYACHAIN_MIDGARD_SOURCE_URL = 'https://midgard.mayachain.info/v2/doc'
-MARKET_BENCHMARKS = {
-    'thorchain': {
-        'label': 'THORChain',
-        'market': 'THORChain DEX',
-        'category': 'dexs',
-        'slug': 'thorchain-dex',
-        'comparison': 'All THORChain DEX volume',
-        'source': 'defillama',
-    },
-    'lifi': {
-        'label': 'LI.FI',
-        'market': 'LI.FI DEX Aggregator',
-        'category': 'aggregators',
-        'slug': 'li.fi-dex-aggregator',
-        'comparison': 'Same-chain LI.FI swap volume',
-        'source': 'defillama',
-    },
-    'mayachain': {
-        'label': 'MayaChain',
-        'market': 'MAYAChain network',
-        'comparison': 'All MAYAChain network swap volume',
-        'source': 'midgard',
-    },
-}
-# Midgard SwapHistory `totalVolumeUSD` is Int64(e2) — USD cents of both swap legs.
-MAYACHAIN_VOLUME_USD_CENTS = 100
-MAYACHAIN_MIDGARD_PAGE_SIZE = 400
-MAYACHAIN_MIDGARD_MAX_PAGES = 4
-DEFILLAMA_TIMEOUT_SECONDS = 10
-MAYACHAIN_MIDGARD_TIMEOUT_SECONDS = 15
+# Pro-only endpoint; the Vultisig proxy carries the CoinGecko Pro plan.
+COINGECKO_GLOBAL_CHART_URL = (
+    'https://api.vultisig.com/coingeicko/api/v3/global/market_cap_chart'
+)
+COINGECKO_SOURCE_URL = 'https://www.coingecko.com/en/global-charts'
+COINGECKO_TIMEOUT_SECONDS = 15
+MS_PER_SECOND = 1000
 GLOBAL_MARKET_CACHE_TTL_SECONDS = 600
 GLOBAL_MARKET_CACHE_FAILURE_TTL_SECONDS = 60
+MARKET_UNAVAILABLE_MESSAGE = 'Total market volume is temporarily unavailable'
 SHARE_TO_PERCENT = 100
 MARKET_SHARE_CACHE_CONTROL = 'public, max-age=60, stale-while-revalidate=240'
 MARKET_RANGE_DAY_SPANS = {
@@ -184,13 +151,7 @@ MARKET_RANGE_DAY_SPANS = {
     '90d': 90,
     '365d': 365,
 }
-MARKET_SHARE_NOTES = (
-    "Each provider share is of that venue's published series; THOR/Maya and LI.FI are not the same market definition.",
-    'All routes is a directional blend of unlike venue series on overlapping dates — not a unique global-volume total.',
-    'LI.FI compares same-chain Vultisig swaps with DefiLlama same-chain LI.FI volume.',
-    'MayaChain compares Vultisig routes with MAYAChain Midgard network swap volume (totalVolumeUSD is USD cents).',
-)
-_global_market_cache = {'data': None, 'expires_at': 0.0, 'filling': False}
+_global_market_cache = {'series': None, 'expires_at': 0.0, 'is_stale': False}
 _global_market_cache_lock = Lock()
 ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
@@ -518,13 +479,6 @@ def _last_complete_utc_date():
     return _utc_today() - timedelta(days=1)
 
 
-def _mayachain_interval_volume_usd(interval):
-    volume_cents = safe_float(interval.get('totalVolumeUSD'), default=-1)
-    if volume_cents < 0:
-        return -1.0
-    return volume_cents / MAYACHAIN_VOLUME_USD_CENTS
-
-
 def _require_iso_date(value, field_name):
     if value is None:
         return None
@@ -533,237 +487,86 @@ def _require_iso_date(value, field_name):
     return value
 
 
-def _date_sql(column_sql, start_date, end_date):
-    clauses = []
-    params = []
-    if start_date:
-        clauses.append(f"AND {column_sql} >= %s::date")
-        params.append(start_date)
-    if end_date:
-        clauses.append(f"AND {column_sql} <= %s::date")
-        params.append(end_date)
-    return ' '.join(clauses), params
+def _fetch_global_market_volume():
+    """Daily total crypto market volume (USD) keyed by UTC date.
 
-
-def _fetch_defillama_benchmark(provider, benchmark):
-    """Fetch and validate one DefiLlama daily market-volume series."""
-    url = (
-        f"{DEFILLAMA_API_BASE_URL}/{benchmark['category']}/{benchmark['slug']}"
-        '?dataType=dailyVolume'
-    )
+    CoinGecko stamps each day's volume at the following UTC midnight, and the
+    newest point stays 0 until that day is published.
+    """
     response = requests.get(
-        url,
+        COINGECKO_GLOBAL_CHART_URL,
+        params={'vs_currency': 'usd', 'days': 'max'},
         headers={
             'Accept': 'application/json',
             'User-Agent': 'VultisigAnalytics/1.0'
         },
-        timeout=DEFILLAMA_TIMEOUT_SECONDS,
+        timeout=COINGECKO_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    payload = response.json()
-    chart = payload.get('totalDataChart') or []
-
     series = {}
-    for point in chart:
-        if not isinstance(point, (list, tuple)) or len(point) < 2:
+    for timestamp_ms, volume in response.json()['market_cap_chart']['volume']:
+        if not isinstance(volume, (int, float)) or volume <= 0:
             continue
-        timestamp = safe_int(point[0], default=0)
-        volume = safe_float(point[1], default=-1)
-        if timestamp <= 0 or volume < 0:
-            continue
-        date_key = datetime.fromtimestamp(timestamp, timezone.utc).strftime('%Y-%m-%d')
-        series[date_key] = volume
-
+        stamped = datetime.fromtimestamp(timestamp_ms / MS_PER_SECOND, timezone.utc)
+        series[(stamped.date() - timedelta(days=1)).isoformat()] = float(volume)
     if not series:
-        raise ValueError(f"DefiLlama returned no volume history for {provider}")
-
-    return {
-        'provider': provider,
-        'market': payload.get('name') or benchmark['market'],
-        'series': series,
-        'latest_date': max(series),
-        'source': 'DefiLlama',
-        'source_url': DEFILLAMA_SOURCE_URL,
-    }
+        raise ValueError('CoinGecko returned no market volume history')
+    return series
 
 
-def _parse_midgard_intervals(intervals):
-    series = {}
-    oldest_start = None
-    for interval in intervals:
-        timestamp = safe_int(interval.get('startTime'), default=0)
-        volume = _mayachain_interval_volume_usd(interval)
-        if timestamp <= 0 or volume < 0:
-            continue
-        date_key = datetime.fromtimestamp(timestamp, timezone.utc).strftime('%Y-%m-%d')
-        series[date_key] = volume
-        oldest_start = timestamp if oldest_start is None else min(oldest_start, timestamp)
-    return series, oldest_start
-
-
-def _fetch_mayachain_benchmark(provider, benchmark):
-    """Fetch all available daily MAYAChain network swap volume from Midgard."""
-    series = {}
-    to_timestamp = None
-
-    # Midgard caps each response at 400 intervals; bound the public GET walk.
-    for _ in range(MAYACHAIN_MIDGARD_MAX_PAGES):
-        params = {'interval': 'day', 'count': MAYACHAIN_MIDGARD_PAGE_SIZE}
-        if to_timestamp is not None:
-            params['to'] = to_timestamp
-        response = requests.get(
-            MAYACHAIN_MIDGARD_SWAPS_URL,
-            params=params,
-            headers={
-                'Accept': 'application/json',
-                'User-Agent': 'VultisigAnalytics/1.0'
-            },
-            timeout=MAYACHAIN_MIDGARD_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        intervals = response.json().get('intervals') or []
-        if not intervals:
-            break
-
-        page, oldest_start = _parse_midgard_intervals(intervals)
-        series.update(page)
-        if (
-            len(intervals) < MAYACHAIN_MIDGARD_PAGE_SIZE
-            or oldest_start is None
-            or oldest_start == to_timestamp
-        ):
-            break
-        to_timestamp = oldest_start
-
-    if not series:
-        raise ValueError(f'MAYAChain Midgard returned no volume history for {provider}')
-
-    return {
-        'provider': provider,
-        'market': benchmark['market'],
-        'series': series,
-        'latest_date': max(series),
-        'source': 'MAYAChain Midgard',
-        'source_url': MAYACHAIN_MIDGARD_SOURCE_URL,
-    }
-
-
-def _fetch_market_benchmark(provider, benchmark):
-    """Fetch a provider benchmark from its configured independent source."""
-    if benchmark.get('source') == 'midgard':
-        return _fetch_mayachain_benchmark(provider, benchmark)
-    return _fetch_defillama_benchmark(provider, benchmark)
-
-
-def _build_global_market_snapshot(previous_providers):
-    """Fetch every configured benchmark. Callers must not hold the cache lock."""
-    providers = {}
-    failures = []
-    with ThreadPoolExecutor(max_workers=len(MARKET_BENCHMARKS)) as executor:
-        futures = {
-            executor.submit(_fetch_market_benchmark, provider, benchmark): provider
-            for provider, benchmark in MARKET_BENCHMARKS.items()
-        }
-        for future in as_completed(futures):
-            provider = futures[future]
-            try:
-                providers[provider] = future.result()
-            except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
-                failures.append(provider)
-                if provider in previous_providers:
-                    providers[provider] = previous_providers[provider]
-                logger.warning(f"Market benchmark unavailable for {provider}: {exc}")
-
-    if not providers:
-        raise RuntimeError('Comparable market volume is temporarily unavailable')
-
-    latest_date = max(item['latest_date'] for item in providers.values())
-    served_previous = any(provider in previous_providers for provider in failures)
-    return {
-        'providers': providers,
-        'updated_at': f'{latest_date}T00:00:00Z',
-        'source': 'DefiLlama + MAYAChain Midgard',
-        'source_url': DEFILLAMA_SOURCE_URL,
-        'is_stale': served_previous,
-    }
-
-
-def _store_market_snapshot(snapshot):
-    ttl = (
-        GLOBAL_MARKET_CACHE_FAILURE_TTL_SECONDS
-        if snapshot['is_stale']
-        else GLOBAL_MARKET_CACHE_TTL_SECONDS
-    )
+def get_global_market_volume():
+    """Return (daily market volume series, is_stale), cached between refreshes."""
     with _global_market_cache_lock:
-        _global_market_cache['data'] = snapshot
-        _global_market_cache['expires_at'] = time.time() + ttl
-    return snapshot
-
-
-def _stale_cached_snapshot():
-    with _global_market_cache_lock:
-        cached_data = _global_market_cache['data']
-        if not cached_data:
-            return None
-        cached_data['is_stale'] = True
-        _global_market_cache['expires_at'] = (
-            time.time() + GLOBAL_MARKET_CACHE_FAILURE_TTL_SECONDS
-        )
-        return cached_data
-
-
-def get_global_market_snapshot():
-    """Return cached daily volume series for Vultisig's comparable markets."""
-    now = time.time()
-    with _global_market_cache_lock:
-        cached_data = _global_market_cache['data']
-        if cached_data and now < _global_market_cache['expires_at']:
-            return cached_data
-        if _global_market_cache['filling']:
-            if cached_data:
-                return cached_data
-            raise RuntimeError('Comparable market volume is temporarily unavailable')
-        _global_market_cache['filling'] = True
-        previous_providers = (cached_data or {}).get('providers', {})
+        if time.time() < _global_market_cache['expires_at']:
+            if not _global_market_cache['series']:
+                raise RuntimeError(MARKET_UNAVAILABLE_MESSAGE)
+            return _global_market_cache['series'], _global_market_cache['is_stale']
 
     try:
-        return _store_market_snapshot(_build_global_market_snapshot(previous_providers))
-    except RuntimeError:
-        cached_data = _stale_cached_snapshot()
-        if cached_data:
-            return cached_data
-        raise
-    finally:
+        series = _fetch_global_market_volume()
+    except (requests.RequestException, ValueError, TypeError, KeyError) as exc:
+        logger.warning(f"Total market volume unavailable: {exc}")
         with _global_market_cache_lock:
-            _global_market_cache['filling'] = False
+            _global_market_cache['expires_at'] = (
+                time.time() + GLOBAL_MARKET_CACHE_FAILURE_TTL_SECONDS
+            )
+            _global_market_cache['is_stale'] = True
+            if not _global_market_cache['series']:
+                raise RuntimeError(MARKET_UNAVAILABLE_MESSAGE) from exc
+            return _global_market_cache['series'], True
+
+    with _global_market_cache_lock:
+        _global_market_cache['series'] = series
+        _global_market_cache['expires_at'] = time.time() + GLOBAL_MARKET_CACHE_TTL_SECONDS
+        _global_market_cache['is_stale'] = False
+    return series, False
 
 
-def _get_market_date_bounds(range_param, start_date_param=None, end_date_param=None):
-    """Inclusive UTC calendar bounds ending on the last complete day."""
+def _get_market_date_bounds(last_date, range_param, start_date_param=None, end_date_param=None):
+    """Inclusive UTC calendar bounds; fixed-length ranges end on last_date."""
     range_value = RANGE_TO_SQL.get(range_param, range_param) if range_param else 'all'
-    last_complete = _last_complete_utc_date()
-    last_complete_iso = last_complete.isoformat()
+    last_iso = last_date.isoformat()
     start_date_param = _require_iso_date(start_date_param, 'start date')
     end_date_param = _require_iso_date(end_date_param, 'end date')
 
     if range_value == 'custom' and start_date_param and end_date_param:
-        end_date = min(end_date_param, last_complete_iso)
+        end_date = min(end_date_param, last_iso)
         start_date = min(start_date_param, end_date)
         return start_date, end_date
 
     if range_value in MARKET_RANGE_DAY_SPANS:
         span = MARKET_RANGE_DAY_SPANS[range_value]
-        start_date = (last_complete - timedelta(days=span - 1)).isoformat()
-        return start_date, last_complete_iso
+        start_date = (last_date - timedelta(days=span - 1)).isoformat()
+        return start_date, last_iso
     if range_value == 'ytd':
-        year_start = f'{last_complete.year}-01-01'
-        start_date = year_start if year_start <= last_complete_iso else last_complete_iso
-        return start_date, last_complete_iso
-    return None, last_complete_iso
+        year_start = f'{last_date.year}-01-01'
+        start_date = year_start if year_start <= last_iso else last_iso
+        return start_date, last_iso
+    return None, last_iso
 
 
 def _market_bucket(date_key, granularity):
-    """Bucket daily benchmark data without averaging market-share percentages."""
+    """Bucket daily data without averaging market-share percentages."""
     parsed = datetime.strptime(date_key, '%Y-%m-%d').date()
     if granularity == 'week':
         parsed -= timedelta(days=(parsed.weekday() + 1) % 7)
@@ -772,195 +575,67 @@ def _market_bucket(date_key, granularity):
     return parsed.isoformat()
 
 
-def _query_swaps_volume(start_date, end_date, providers):
-    date_filter, date_params = _date_sql('date_only', start_date, end_date)
-    query = """
-        SELECT
-            TO_CHAR(date_only, 'YYYY-MM-DD') AS date,
-            source AS provider,
-            COALESCE(SUM(in_amount_usd), 0) AS volume
-        FROM swaps
-        WHERE source IN %s
-          AND (
-                source != 'lifi'
-                OR (
-                    NULLIF(raw_data #>> '{{bridge_metadata,from_chain_id}}', '') IS NOT NULL
-                    AND raw_data #>> '{{bridge_metadata,from_chain_id}}' =
-                        raw_data #>> '{{bridge_metadata,to_chain_id}}'
-                )
-          )
-          {date_filter}
-        GROUP BY date_only, source
-        ORDER BY date_only ASC
-    """.format(date_filter=date_filter)
-    return list(db_manager.execute_query(
-        query, (providers, *date_params), fetch=True,
-    ))
-
-
-def _query_aggregator_volume(start_date, end_date, providers):
-    date_filter, date_params = _date_sql('DATE(timestamp)', start_date, end_date)
-    query = """
-        SELECT
-            TO_CHAR(DATE(timestamp), 'YYYY-MM-DD') AS date,
-            protocol AS provider,
-            COALESCE(SUM(swap_volume_usd), 0) AS volume
-        FROM dex_aggregator_revenue
-        WHERE protocol IN %s
-          AND (fee_data_source = 'etherscan'
-               OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
-          {date_filter}
-        GROUP BY DATE(timestamp), protocol
-        ORDER BY DATE(timestamp) ASC
-    """.format(date_filter=date_filter)
-    return list(db_manager.execute_query(
-        query, (providers, *date_params), fetch=True,
-    ))
-
-
-def _query_route_volume(start_date, end_date):
-    swaps_providers = tuple(
-        provider for provider in MARKET_BENCHMARKS if provider not in ARKHAM_PROVIDERS
-    )
-    aggregator_providers = tuple(
-        provider for provider in MARKET_BENCHMARKS if provider in ARKHAM_PROVIDERS
-    )
-    rows = _query_swaps_volume(start_date, end_date, swaps_providers)
-    if aggregator_providers:
-        rows.extend(_query_aggregator_volume(start_date, end_date, aggregator_providers))
-    return rows
-
-
 def _row_date_key(date_value):
     if hasattr(date_value, 'strftime'):
         return date_value.strftime('%Y-%m-%d')
     return str(date_value)[:10] if date_value else ''
 
 
-def _index_vultisig_volume(rows):
+def _daily_vultisig_volume(start_date, end_date):
+    """Total Vultisig swap volume per UTC day, as the Swap Volume tab reports it."""
+    date_filter, date_filter_arkham = build_date_filter(
+        'custom' if start_date else 'all', start_date, end_date,
+    )
     by_day = defaultdict(float)
-    earliest = {}
-    for row in rows:
-        date_key = _row_date_key(row.get('date'))
-        provider = str(row.get('provider') or '').lower()
-        if provider not in MARKET_BENCHMARKS or not date_key:
-            continue
-        by_day[(provider, date_key)] += safe_float(row.get('volume'))
-        earliest[provider] = min(date_key, earliest.get(provider, date_key))
-    return by_day, earliest
+    for row in _query_volume_over_time('day', date_filter, date_filter_arkham):
+        by_day[_row_date_key(row['time_period'])] += safe_float(row['volume'])
+    return by_day
 
 
-def _build_share_point(date_key, provider, vultisig, market):
+def _build_share_point(date_key, vultisig, market):
     return {
         'date': date_key,
-        'provider': provider,
         'vultisigVolumeUsd': vultisig,
         'marketVolumeUsd': market,
-        'sharePercent': (vultisig / market) * SHARE_TO_PERCENT if market > 0 else 0.0,
+        'sharePercent': (vultisig / market) * SHARE_TO_PERCENT,
     }
-
-
-def _include_market_day(date_key, start_date, end_date, provider_start, market_volume):
-    if start_date and date_key < start_date:
-        return False
-    if end_date and date_key > end_date:
-        return False
-    if not start_date and provider_start and date_key < provider_start:
-        return False
-    return market_volume > 0
-
-
-def _collect_provider_series(
-    market, vultisig_by_day, earliest, start_date, end_date, granularity,
-):
-    buckets = defaultdict(lambda: {'vultisig': 0.0, 'market': 0.0})
-    benchmarks = []
-    for provider, benchmark in MARKET_BENCHMARKS.items():
-        snapshot = market['providers'].get(provider)
-        if not snapshot:
-            continue
-        benchmarks.append({
-            'provider': provider,
-            'label': benchmark['label'],
-            'market': snapshot['market'],
-            'comparison': benchmark['comparison'],
-            'latestMarketDate': snapshot['latest_date'],
-            'source': snapshot['source'],
-            'sourceUrl': snapshot['source_url'],
-        })
-        provider_start = earliest.get(provider)
-        for date_key, market_volume in snapshot['series'].items():
-            if not _include_market_day(
-                date_key, start_date, end_date, provider_start, market_volume,
-            ):
-                continue
-            bucket = buckets[(provider, _market_bucket(date_key, granularity))]
-            bucket['vultisig'] += vultisig_by_day[(provider, date_key)]
-            bucket['market'] += market_volume
-    return buckets, benchmarks
-
-
-def _series_from_buckets(buckets):
-    series = []
-    blended = defaultdict(lambda: {'vultisig': 0.0, 'market': 0.0, 'providers': set()})
-    for (provider, date_key), values in sorted(buckets.items(), key=lambda item: item[0][1]):
-        series.append(_build_share_point(date_key, provider, values['vultisig'], values['market']))
-        blended[date_key]['vultisig'] += values['vultisig']
-        blended[date_key]['market'] += values['market']
-        blended[date_key]['providers'].add(provider)
-    return series, blended
-
-
-def _append_all_routes(series, benchmarks, blended):
-    present = {item['provider'] for item in benchmarks}
-    configured = set(MARKET_BENCHMARKS)
-    if present != configured:
-        return series, benchmarks
-    all_points = [
-        _build_share_point(date_key, 'all', values['vultisig'], values['market'])
-        for date_key, values in sorted(blended.items())
-        if values['providers'] == configured
-    ]
-    all_benchmark = {
-        'provider': 'all',
-        'label': 'All routes',
-        'market': 'Blended venue series',
-        'comparison': "Directional blend of each venue's published series; not a single market",
-        'latestMarketDate': min(item['latestMarketDate'] for item in benchmarks),
-        'source': 'DefiLlama + MAYAChain Midgard',
-        'sourceUrl': '',
-    }
-    return series + all_points, [all_benchmark, *benchmarks]
 
 
 def _market_volume_share_payload(args) -> dict:
     requested = parse_granularity(get_param(args, 'GRANULARITY') or 'd')
     effective = 'day' if requested == 'hour' else requested
+    market, is_stale = get_global_market_volume()
+    last_published = datetime.strptime(max(market), '%Y-%m-%d').date()
     start_date, end_date = _get_market_date_bounds(
+        min(_last_complete_utc_date(), last_published),
         get_param(args, 'RANGE') or '30d',
         get_param(args, 'START_DATE'),
         get_param(args, 'END_DATE'),
     )
-    vultisig_by_day, earliest = _index_vultisig_volume(
-        _query_route_volume(start_date, end_date)
+    vultisig = _daily_vultisig_volume(start_date, end_date)
+    first_date = start_date or min(vultisig, default=None)
+
+    days = sorted(
+        date_key for date_key in market
+        if first_date and first_date <= date_key <= end_date
     )
-    market = get_global_market_snapshot()
-    buckets, benchmarks = _collect_provider_series(
-        market, vultisig_by_day, earliest, start_date, end_date, effective,
-    )
-    series, blended = _series_from_buckets(buckets)
-    series, benchmarks = _append_all_routes(series, benchmarks, blended)
+    buckets = defaultdict(lambda: {'vultisig': 0.0, 'market': 0.0})
+    for date_key in days:
+        bucket = buckets[_market_bucket(date_key, effective)]
+        bucket['vultisig'] += vultisig.get(date_key, 0.0)
+        bucket['market'] += market[date_key]
+
     return {
-        'series': series,
-        'benchmarks': benchmarks,
+        'series': [
+            _build_share_point(date_key, values['vultisig'], values['market'])
+            for date_key, values in sorted(buckets.items())
+        ],
         'requestedGranularity': requested,
         'effectiveGranularity': effective,
-        'asOfDate': end_date,
-        'updatedAt': market['updated_at'],
-        'source': market['source'],
-        'sourceUrl': market['source_url'],
-        'isStale': market['is_stale'],
-        'notes': list(MARKET_SHARE_NOTES),
+        'asOfDate': days[-1] if days else None,
+        'source': 'CoinGecko',
+        'sourceUrl': COINGECKO_SOURCE_URL,
+        'isStale': is_stale,
     }
 
 
@@ -2052,17 +1727,55 @@ def get_revenue_by_provider(provider):
 
 @app.route('/api/market-volume-share')
 def get_market_volume_share():
-    """Compare Vultisig routes with like-for-like DEX/aggregator markets."""
+    """Vultisig swap volume as a share of total crypto market volume."""
     try:
         response = jsonify(_market_volume_share_payload(request.args))
         response.headers['Cache-Control'] = MARKET_SHARE_CACHE_CONTROL
         return response
     except RuntimeError as exc:
-        logger.warning(f"Comparable market volume unavailable: {exc}")
+        logger.warning(f"Total market volume unavailable: {exc}")
         return jsonify({'error': str(exc)}), 503
     except Exception as exc:
         logger.error(f"Error getting market volume share: {exc}")
         return jsonify({'error': 'Internal server error'}), 500
+
+
+def _query_volume_over_time(granularity, date_filter, date_filter_arkham):
+    """Vultisig swap volume per period and source across swaps and dex-aggregator rows."""
+    date_field = 'timestamp' if granularity == 'hour' else 'date_only'
+    swaps_time_query = f"""
+        SELECT
+            DATE_TRUNC('{granularity}', {date_field}) as time_period,
+            source,
+            SUM(in_amount_usd) as volume
+        FROM swaps
+        WHERE source != '1inch'
+            {date_filter}
+        GROUP BY time_period, source
+        ORDER BY time_period ASC
+    """
+
+    arkham_time_query = f"""
+        SELECT
+            DATE_TRUNC('{granularity}', timestamp) as time_period,
+            protocol as source,
+            COALESCE(SUM(swap_volume_usd), 0) as volume
+        FROM dex_aggregator_revenue
+        WHERE protocol IN %s
+            AND (fee_data_source = 'etherscan'
+                 OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
+            {date_filter_arkham}
+        GROUP BY time_period, protocol
+        ORDER BY time_period ASC
+    """
+
+    swaps_time = db_manager.execute_query(swaps_time_query, fetch=True)
+    arkham_time = db_manager.execute_query(arkham_time_query, (ARKHAM_PROVIDERS,), fetch=True)
+
+    return sorted(
+        list(swaps_time) + list(arkham_time),
+        key=lambda x: x['time_period']
+    )
 
 
 @app.route('/api/swap-volume')
@@ -2109,39 +1822,7 @@ def get_swap_volume():
         }
 
         # 2. Volume by Provider (Over Time)
-        swaps_time_query = f"""
-            SELECT
-                DATE_TRUNC('{granularity}', {date_field}) as time_period,
-                source,
-                SUM(in_amount_usd) as volume
-            FROM swaps
-            WHERE source != '1inch'
-                {date_filter}
-            GROUP BY time_period, source
-            ORDER BY time_period ASC
-        """
-
-        arkham_time_query = f"""
-            SELECT
-                DATE_TRUNC('{granularity}', timestamp) as time_period,
-                protocol as source,
-                COALESCE(SUM(swap_volume_usd), 0) as volume
-            FROM dex_aggregator_revenue
-            WHERE protocol IN %s
-                AND (fee_data_source = 'etherscan'
-                     OR (token_in_symbol IS NOT NULL AND token_out_symbol IS NOT NULL))
-                {date_filter_arkham}
-            GROUP BY time_period, protocol
-            ORDER BY time_period ASC
-        """
-
-        swaps_time = db_manager.execute_query(swaps_time_query, fetch=True)
-        arkham_time = db_manager.execute_query(arkham_time_query, (ARKHAM_PROVIDERS,), fetch=True)
-
-        volume_over_time = sorted(
-            list(swaps_time) + list(arkham_time),
-            key=lambda x: x['time_period']
-        )
+        volume_over_time = _query_volume_over_time(granularity, date_filter, date_filter_arkham)
 
         # 3. Total Volume by Provider
         swaps_provider_query = f"""

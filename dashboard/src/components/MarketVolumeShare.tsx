@@ -14,11 +14,9 @@ import {
 import { IconActivityV, IconExternalLinkV } from '@/icons';
 import {
     fetchMarketVolumeShare,
-    type MarketVolumeBenchmark,
     type MarketVolumePoint,
     type MarketVolumeShare as MarketVolumeShareData,
 } from '@/lib/api';
-import { providerColorMap } from '@/lib/chartStyles';
 import { Tooltip } from './Tooltip';
 
 interface MarketVolumeShareProps {
@@ -36,7 +34,12 @@ interface TrendPoint extends MarketVolumePoint {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const ALL_ROUTES_COLOR = '#4879FD';
+const AXIS_PADDING_RATIO = 0.1;
+const AXIS_TICK_COUNT = 5;
+const NICE_FRACTIONS = [1, 2, 2.5, 5, 10];
+const AXIS_SIGNIFICANT_DIGITS = 2;
+const AXIS_MAX_DECIMALS = 12;
+const LINE_COLOR = '#4879FD';
 const RANGE_OPTIONS: Array<{ value: ChartRange; label: string }> = [
     { value: 'page', label: 'Page' },
     { value: '90d', label: '90D' },
@@ -63,8 +66,7 @@ function formatCompactCurrency(value: number): string {
 function formatShare(value: number): string {
     if (!Number.isFinite(value) || value === 0) return '0%';
     if (value < 0.000001) return '<0.000001%';
-    if (value < 0.0001) return `${value.toFixed(6)}%`;
-    if (value < 0.01) return `${value.toFixed(4)}%`;
+    if (value < 0.01) return `${Number(value.toPrecision(2))}%`;
     if (value < 1) return `${value.toFixed(3)}%`;
     return `${value.toFixed(2)}%`;
 }
@@ -74,35 +76,45 @@ function chartCaption(
     viewLabel: string,
     rangeLabel: string,
 ): string {
-    const asOf = data.asOfDate ? ` · as of ${formatDate(data.asOfDate, true)}` : '';
+    const asOf = data.asOfDate ? ` · market data through ${formatDate(data.asOfDate, true)}` : '';
     const stale = data.isStale ? ' · stale upstream cache' : '';
     return `${viewLabel} · ${rangeLabel}${asOf}${stale}`;
 }
 
-function marketFootnote(
-    selectedProvider: string,
-    selectedBenchmark: MarketVolumeBenchmark | undefined,
-): string {
-    if (selectedProvider === 'all') {
-        return 'All routes blends unlike venue series on overlapping dates. It is not a unique global market.';
-    }
-    if (selectedProvider === 'lifi') {
-        return 'LI.FI uses same-chain Vultisig swaps to match DefiLlama’s same-chain methodology.';
-    }
-    const market = selectedBenchmark?.market ?? 'market';
-    const latest = selectedBenchmark
-        ? formatDate(selectedBenchmark.latestMarketDate, true)
-        : 'unavailable';
-    return `Latest ${market} benchmark: ${latest}.`;
+function formatAxisShare(value: number): string {
+    if (value <= 0) return '0%';
+    if (value >= 1) return `${value.toFixed(1)}%`;
+    const decimals = Math.min(
+        AXIS_MAX_DECIMALS,
+        Math.ceil(-Math.log10(value)) + AXIS_SIGNIFICANT_DIGITS,
+    );
+    return `${value.toFixed(decimals).replace(/\.?0+$/, '')}%`;
 }
 
-function formatAxisShare(value: number): string {
-    if (Math.abs(value) < 0.000000000001) return '0%';
-    if (value < 0.0001) return `${value.toFixed(6)}%`;
-    if (value < 0.001) return `${value.toFixed(5)}%`;
-    if (value < 0.01) return `${value.toFixed(3)}%`;
-    if (value < 1) return `${value.toFixed(2)}%`;
-    return `${value.toFixed(1)}%`;
+function niceStep(rawStep: number): number {
+    const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+    const fraction = rawStep / magnitude;
+    const niceFraction = NICE_FRACTIONS.find((candidate) => fraction <= candidate) ?? 10;
+    return niceFraction * magnitude;
+}
+
+/** Fit the axis to the plotted values, on round ticks, so small daily moves stay visible. */
+function shareAxis(points: TrendPoint[]): { domain: [number, number]; ticks: number[] } {
+    const values = points
+        .map((point) => point.displaySharePercent)
+        .filter((value): value is number => value !== null);
+    const min = values.length > 0 ? Math.min(...values) : 0;
+    const max = values.length > 0 ? Math.max(...values) : 0;
+    const span = max - min || max || 1;
+    const padding = span * AXIS_PADDING_RATIO;
+    const step = niceStep((span + 2 * padding) / (AXIS_TICK_COUNT - 1));
+    const low = Math.max(0, Math.floor((min - padding) / step) * step);
+    const high = Math.ceil((max + padding) / step) * step;
+    const ticks = Array.from(
+        { length: Math.round((high - low) / step) + 1 },
+        (_, index) => Number((low + index * step).toPrecision(12)),
+    );
+    return { domain: [low, high], ticks };
 }
 
 function formatDate(value: string, includeYear = false): string {
@@ -114,12 +126,6 @@ function formatDate(value: string, includeYear = false): string {
         ...(includeYear ? { year: 'numeric' } : {}),
         timeZone: 'UTC',
     });
-}
-
-function colorForProvider(provider: string): string {
-    return provider === 'all'
-        ? ALL_ROUTES_COLOR
-        : (providerColorMap[provider] ?? ALL_ROUTES_COLOR);
 }
 
 function calculateRollingTrend(points: MarketVolumePoint[], windowDays: TrendWindow): TrendPoint[] {
@@ -214,9 +220,8 @@ export function MarketVolumeShare({
     granularity,
 }: MarketVolumeShareProps) {
     const [data, setData] = useState<MarketVolumeShareData | null>(null);
-    const [selectedProvider, setSelectedProvider] = useState('all');
-    const [chartRange, setChartRange] = useState<ChartRange>('1y');
-    const [trendWindow, setTrendWindow] = useState<TrendWindow>(30);
+    const [chartRange, setChartRange] = useState<ChartRange>('page');
+    const [trendWindow, setTrendWindow] = useState<TrendWindow>(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [retryCount, setRetryCount] = useState(0);
@@ -238,19 +243,14 @@ export function MarketVolumeShare({
                     },
                     controller.signal,
                 );
-                if (!Array.isArray(result.series) || !Array.isArray(result.benchmarks)) {
-                    throw new Error('Comparable market response was invalid');
+                if (!Array.isArray(result.series)) {
+                    throw new Error('Total market volume response was invalid');
                 }
                 setData(result);
-                setSelectedProvider((currentProvider) => (
-                    result.benchmarks.some((benchmark) => benchmark.provider === currentProvider)
-                        ? currentProvider
-                        : (result.benchmarks[0]?.provider ?? 'all')
-                ));
             } catch (loadError) {
                 if (controller.signal.aborted) return;
-                console.error('Error fetching comparable market volume:', loadError);
-                setError('Comparable market history is temporarily unavailable.');
+                console.error('Error fetching total market volume share:', loadError);
+                setError('Total market volume is temporarily unavailable.');
             } finally {
                 if (!controller.signal.aborted) setLoading(false);
             }
@@ -260,23 +260,20 @@ export function MarketVolumeShare({
         return () => controller.abort();
     }, [chartRange, range, startDate, endDate, granularity, retryCount]);
 
-    const selectedBenchmark = data?.benchmarks.find(
-        (benchmark) => benchmark.provider === selectedProvider,
-    );
     const rawPoints = useMemo(
         () => (data?.series ?? [])
             .filter(
-                (point) => point.provider === selectedProvider
-                    && Number.isFinite(point.sharePercent)
+                (point) => Number.isFinite(point.sharePercent)
                     && Number.isFinite(point.marketVolumeUsd),
             )
             .sort((left, right) => left.date.localeCompare(right.date)),
-        [data, selectedProvider],
+        [data],
     );
     const chartPoints = useMemo(
         () => calculateRollingTrend(rawPoints, trendWindow),
         [rawPoints, trendWindow],
     );
+    const yAxis = useMemo(() => shareAxis(chartPoints), [chartPoints]);
 
     const totals = useMemo(
         () => rawPoints.reduce(
@@ -289,13 +286,10 @@ export function MarketVolumeShare({
         [rawPoints],
     );
     const periodShare = totals.market > 0 ? (totals.vultisig / totals.market) * 100 : 0;
-    const lineColor = colorForProvider(selectedProvider);
-    const selectedSource = selectedBenchmark?.source ?? data?.source ?? 'Market benchmark';
-    const selectedSourceUrl = selectedBenchmark?.sourceUrl ?? data?.sourceUrl;
 
     if (!data && loading) {
         return (
-            <section className="surface-card p-5 md:p-6" aria-label="Loading routed market share chart">
+            <section className="surface-card p-5 md:p-6" aria-label="Loading total market share chart">
                 <div className="animate-pulse space-y-5">
                     <div className="h-5 w-64 rounded bg-[var(--surface-2)]" />
                     <div className="h-9 w-full max-w-md rounded bg-[var(--surface-2)]/70" />
@@ -310,7 +304,7 @@ export function MarketVolumeShare({
             <section className="surface-card p-5 md:p-6" aria-labelledby="market-volume-title">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h3 id="market-volume-title" className="t-title-3">Share of Routed Markets</h3>
+                        <h3 id="market-volume-title" className="t-title-3">Share of Total Crypto Market Volume</h3>
                         <p className="t-footnote mt-1 text-[var(--text-tertiary)]">{error}</p>
                     </div>
                     <button type="button" className="pill pill-sm" onClick={() => setRetryCount((count) => count + 1)}>
@@ -322,8 +316,8 @@ export function MarketVolumeShare({
     }
 
     const rangeLabel = chartPoints.length > 0
-        ? `${formatDate(chartPoints[0].date, true)} – ${formatDate(chartPoints.at(-1)!.date, true)}`
-        : 'No comparable dates in this range';
+        ? `${formatDate(chartPoints[0].date, true)} – ${formatDate(chartPoints[chartPoints.length - 1].date, true)}`
+        : 'No published market data in this range';
     const viewLabel = trendWindow === 0
         ? `${data.effectiveGranularity[0].toUpperCase()}${data.effectiveGranularity.slice(1)} raw share`
         : `${trendWindow}D rolling trend`;
@@ -337,9 +331,9 @@ export function MarketVolumeShare({
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h3 id="market-volume-title" className="t-title-3">Share of Routed Markets</h3>
+                            <h3 id="market-volume-title" className="t-title-3">Share of Total Crypto Market Volume</h3>
                             <Tooltip
-                                content="Each provider share is of that venue's published series. THOR/Maya and LI.FI are not the same market definition, so the percents are not comparable to each other. All routes is a directional blend of those unlike series, not a single market."
+                                content="Vultisig swap volume across every provider (the same series as Swap Volume above) divided by CoinGecko's total crypto market volume, CEX and DEX combined. CoinGecko publishes each day's total about a day later, so the newest day can lag."
                                 iconOnly
                             />
                         </div>
@@ -348,44 +342,15 @@ export function MarketVolumeShare({
                         </p>
                     </div>
                 </div>
-                {selectedSourceUrl ? (
-                    <a
-                        href={selectedSourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 t-caption text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
-                    >
-                        Market data by {selectedSource}
-                        <IconExternalLinkV size={13} aria-hidden="true" />
-                    </a>
-                ) : (
-                    <span className="t-caption text-[var(--text-tertiary)]">
-                        Market data by {selectedSource}
-                    </span>
-                )}
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-2" aria-label="Select comparison market">
-                {data.benchmarks.map((benchmark) => {
-                    const selected = benchmark.provider === selectedProvider;
-                    return (
-                        <button
-                            key={benchmark.provider}
-                            type="button"
-                            onClick={() => setSelectedProvider(benchmark.provider)}
-                            className="pill pill-sm transition-colors"
-                            aria-pressed={selected}
-                            data-active={selected}
-                        >
-                            <span
-                                className="size-2 rounded-full"
-                                style={{ backgroundColor: colorForProvider(benchmark.provider) }}
-                                aria-hidden="true"
-                            />
-                            {benchmark.label}
-                        </button>
-                    );
-                })}
+                <a
+                    href={data.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 t-caption text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                >
+                    Market data by {data.source}
+                    <IconExternalLinkV size={13} aria-hidden="true" />
+                </a>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border-light)] bg-[var(--surface-2)]/15 px-3 py-2.5">
@@ -409,19 +374,19 @@ export function MarketVolumeShare({
 
             <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <Metric
-                    label={selectedProvider === 'all' ? 'Blended period share' : 'Period market share'}
+                    label="Period market share"
                     value={formatShare(periodShare)}
-                    detail={selectedBenchmark?.comparison ?? 'Comparable market volume'}
+                    detail="Vultisig volume ÷ total market volume"
                 />
                 <Metric
-                    label="Vultisig routed volume"
+                    label="Vultisig swap volume"
                     value={formatCompactCurrency(totals.vultisig)}
-                    detail="Over comparable benchmark dates"
+                    detail="On days with published market data"
                 />
                 <Metric
-                    label={selectedProvider === 'all' ? 'Blended market volume' : 'Matching market volume'}
+                    label="Total market volume"
                     value={formatCompactCurrency(totals.market)}
-                    detail={selectedBenchmark?.market ?? 'Selected market'}
+                    detail="CEX + DEX, all crypto assets"
                 />
             </div>
 
@@ -450,8 +415,9 @@ export function MarketVolumeShare({
                                 fontSize={11}
                                 tickLine={false}
                                 axisLine={false}
-                                width={64}
-                                domain={[0, (maximum: number) => Math.max(maximum * 1.15, 0.0001)]}
+                                width={84}
+                                domain={yAxis.domain}
+                                ticks={yAxis.ticks}
                                 tickFormatter={formatAxisShare}
                             />
                             <RechartsTooltip
@@ -480,7 +446,7 @@ export function MarketVolumeShare({
                                                     <span>{formatCompactCurrency(point.vultisigVolumeUsd)}</span>
                                                 </div>
                                                 <div className="flex justify-between gap-5 text-[var(--text-secondary)]">
-                                                    <span>{selectedBenchmark?.market ?? 'Market'} volume</span>
+                                                    <span>Total market volume</span>
                                                     <span>{formatCompactCurrency(point.marketVolumeUsd)}</span>
                                                 </div>
                                             </div>
@@ -491,6 +457,7 @@ export function MarketVolumeShare({
                             {periodShare > 0 && (
                                 <ReferenceLine
                                     y={periodShare}
+                                    ifOverflow="extendDomain"
                                     stroke="rgba(148, 163, 184, 0.45)"
                                     strokeDasharray="5 5"
                                     label={{
@@ -505,10 +472,10 @@ export function MarketVolumeShare({
                                 type="monotone"
                                 dataKey="displaySharePercent"
                                 name={trendWindow > 0 ? `${trendWindow}D trend` : 'Vultisig share'}
-                                stroke={lineColor}
+                                stroke={LINE_COLOR}
                                 strokeWidth={trendWindow > 0 ? 3 : 2.25}
                                 dot={false}
-                                activeDot={{ r: 5, fill: lineColor, stroke: '#FFFFFF', strokeWidth: 2 }}
+                                activeDot={{ r: 5, fill: LINE_COLOR, stroke: '#FFFFFF', strokeWidth: 2 }}
                                 isAnimationActive
                                 animationDuration={500}
                             />
@@ -517,16 +484,11 @@ export function MarketVolumeShare({
                 ) : (
                     <div className="flex h-[310px] items-center justify-center px-6 text-center">
                         <div>
-                            <p className="t-body-s text-[var(--text-secondary)]">No complete benchmark data in this date range</p>
-                            <p className="t-caption mt-1 text-[var(--text-tertiary)]">Try 90D or a longer history; market benchmarks are published daily.</p>
+                            <p className="t-body-s text-[var(--text-secondary)]">No published market data in this date range</p>
+                            <p className="t-caption mt-1 text-[var(--text-tertiary)]">CoinGecko publishes each day&apos;s total about a day later; try a longer history.</p>
                         </div>
                     </div>
                 )}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-tertiary)]">
-                <p>{marketFootnote(selectedProvider, selectedBenchmark)}</p>
-                <p>MayaChain Midgard totalVolumeUSD is USD cents; the chart converts it to dollars.</p>
             </div>
         </section>
     );
