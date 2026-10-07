@@ -142,14 +142,14 @@ export interface SwapkitEarnedResponse {
 /**
  * Fetch SwapKit-reported earned revenue and volume
  */
-export async function fetchSwapkitEarned(params: CommonQueryParams) {
+export async function fetchSwapkitEarned(params: CommonQueryParams, signal?: AbortSignal) {
   const queryParams = buildQueryParams({
     r: params.range,
     g: params.granularity,
     sd: params.startDate,
     ed: params.endDate,
   });
-  return fetchApi<SwapkitEarnedResponse>(`/api/swapkit/earned?${queryParams.toString()}`);
+  return fetchApi<SwapkitEarnedResponse>(`/api/swapkit/earned?${queryParams.toString()}`, { signal });
 }
 
 /**

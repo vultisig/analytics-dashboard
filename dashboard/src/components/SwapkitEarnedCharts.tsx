@@ -10,6 +10,8 @@ import { providerLabel, sortProviders, SWAPKIT_EARNED_TOOLTIP } from '@/lib/prov
 
 // Same threshold as the daily-source check in SystemStatus.
 const STALE_AFTER_HOURS = 26;
+const TICK_MS = 60 * 1000;
+const REFETCH_MS = 15 * 60 * 1000;
 
 interface SwapkitEarnedChartsProps {
     range: string;
@@ -37,25 +39,44 @@ function pivot(response: SwapkitEarnedResponse, measure: Measure) {
  * NEXT_PUBLIC_SWAPKIT_EARNED flag is on (the parent decides).
  */
 export function SwapkitEarnedCharts({ range, startDate, endDate, granularity }: SwapkitEarnedChartsProps) {
-    const [response, setResponse] = useState<SwapkitEarnedResponse | null>(null);
-    const [stale, setStale] = useState(true);
-    const [failed, setFailed] = useState(false);
+    const requestKey = JSON.stringify([range, startDate ?? null, endDate ?? null, granularity]);
+    // A result belongs to the request that produced it; a different key means loading.
+    const [result, setResult] = useState<{ key: string; response: SwapkitEarnedResponse | null } | null>(null);
+    const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
-        let cancelled = false;
-        fetchSwapkitEarned({ range, granularity, startDate, endDate })
-            .then(result => {
-                if (cancelled) return;
-                const ageHours = result.last_updated
-                    ? (Date.now() - new Date(result.last_updated).getTime()) / (1000 * 60 * 60)
-                    : Infinity;
-                setFailed(false);
-                setStale(ageHours > STALE_AFTER_HOURS);
-                setResponse(result);
-            })
-            .catch(() => { if (!cancelled) { setResponse(null); setFailed(true); } });
-        return () => { cancelled = true; };
-    }, [range, startDate, endDate, granularity]);
+        const controller = new AbortController();
+        const load = () => {
+            fetchSwapkitEarned({ range, granularity, startDate, endDate }, controller.signal)
+                .then(response => {
+                    if (!controller.signal.aborted) setResult({ key: requestKey, response });
+                })
+                .catch(() => {
+                    if (!controller.signal.aborted) setResult({ key: requestKey, response: null });
+                });
+        };
+        load();
+        const refetch = setInterval(load, REFETCH_MS);
+        return () => {
+            controller.abort();
+            clearInterval(refetch);
+        };
+    }, [range, startDate, endDate, granularity, requestKey]);
+
+    // Recompute freshness every minute so an open page goes stale on its own.
+    useEffect(() => {
+        const tick = setInterval(() => setNow(Date.now()), TICK_MS);
+        return () => clearInterval(tick);
+    }, []);
+
+    const current = result && result.key === requestKey ? result : null;
+    const response = current?.response ?? null;
+    const failed = !!current && current.response === null;
+
+    const stale = useMemo(() => {
+        if (!response?.last_updated) return true;
+        return (now - new Date(response.last_updated).getTime()) / (1000 * 60 * 60) > STALE_AFTER_HOURS;
+    }, [response, now]);
 
     const hasSeries = !!response && response.series.length > 0;
     const showSeries = hasSeries && !stale;
