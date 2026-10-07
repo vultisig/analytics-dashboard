@@ -137,6 +137,18 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.sync(None, 'upstream_error')
         self.assertEqual(self.status_row()[2], 2)
 
+    def test_sync_failure_with_a_date_keeps_old_latest(self):
+        self.sync('2026-01-05')
+        _, latest_before, *_ = self.status_row()
+        self.sync('2026-02-01', 'upstream_error')
+        self.assertEqual(self.status_row()[1], latest_before)
+        self.sync('2026-02-01', None)
+        self.assertEqual(self.status_row()[1], datetime(2026, 2, 1, tzinfo=timezone.utc))
+
+    def test_sync_first_failure_with_a_date_stores_no_latest(self):
+        self.sync('2026-02-01', 'upstream_error')
+        self.assertIsNone(self.status_row()[1])
+
     def test_sync_success_after_failure_clears_error(self):
         self.sync(None, 'upstream_error')
         self.sync('2026-01-06')

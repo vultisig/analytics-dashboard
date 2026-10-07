@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS swapkit_daily (
 
 -- Status writer for the external job. The job's role gets EXECUTE on this function
 -- and no direct rights on sync_status, so it can only touch the 'swapkit-earned' row.
--- p_latest: last closed UTC day written (NULL on failure: keeps the previous value).
+-- p_latest: last closed UTC day written. Used only on success; a failed call keeps the previous value.
 -- p_error:  NULL on success; a short fixed error code on failure (no secrets, no IDs).
 CREATE OR REPLACE FUNCTION record_swapkit_sync(p_latest DATE, p_error TEXT DEFAULT NULL)
 RETURNS void
@@ -213,7 +213,7 @@ AS $$
                              error_count, last_error, is_active, updated_at)
     VALUES ('swapkit-earned',
             CASE WHEN p_error IS NULL THEN now() END,
-            (p_latest::timestamp AT TIME ZONE 'UTC'),
+            CASE WHEN p_error IS NULL THEN (p_latest::timestamp AT TIME ZONE 'UTC') END,
             CASE WHEN p_error IS NULL THEN 0 ELSE 1 END,
             left(p_error, 64),
             TRUE,
