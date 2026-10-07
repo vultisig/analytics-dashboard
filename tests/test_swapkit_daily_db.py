@@ -118,6 +118,27 @@ class SwapkitDailyDbTest(unittest.TestCase):
         with self.assertRaises(self.psycopg2.errors.UniqueViolation):
             self.insert('2026-01-01', 'alpha', 1, 1)
 
+    def test_table_rejects_nan(self):
+        for col in ('revenue_usd', 'volume_usd'):
+            with self.assertRaises(self.psycopg2.errors.CheckViolation):
+                self.cur.execute(
+                    "INSERT INTO swapkit_daily (date, provider, revenue_usd, volume_usd) "
+                    "VALUES ('2026-01-01', 'nan', %s, %s)",
+                    ('NaN', 1) if col == 'revenue_usd' else (1, 'NaN'))
+
+    def test_migration_upgrades_a_table_with_old_checks(self):
+        self.cur.execute('DROP TABLE swapkit_daily')
+        self.cur.execute(
+            'CREATE TABLE swapkit_daily (date DATE NOT NULL, provider VARCHAR(32) NOT NULL, '
+            'revenue_usd NUMERIC(20,6) NOT NULL CHECK (revenue_usd >= 0), '
+            'volume_usd NUMERIC(24,6) NOT NULL CHECK (volume_usd >= 0), '
+            'first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(), '
+            'updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (date, provider))')
+        self.cur.execute(self.migration_sql)
+        self.cur.execute(self.migration_sql)
+        with self.assertRaises(self.psycopg2.errors.CheckViolation):
+            self.insert('2026-01-01', 'alpha', 'NaN', 1)
+
     # -- record_swapkit_sync ------------------------------------------------
 
     def test_sync_success_writes_status(self):
@@ -130,40 +151,57 @@ class SwapkitDailyDbTest(unittest.TestCase):
     def test_sync_failure_keeps_previous_values(self):
         self.sync('2026-01-05')
         synced_before, latest_before, *_ = self.status_row()
-        self.sync(None, 'upstream_error')
+        self.sync(None, 'UPSTREAM_ERROR')
         synced, latest, errors, last_error, _ = self.status_row()
         self.assertEqual((synced, latest), (synced_before, latest_before))
-        self.assertEqual((errors, last_error), (1, 'upstream_error'))
-        self.sync(None, 'upstream_error')
+        self.assertEqual((errors, last_error), (1, 'UPSTREAM_ERROR'))
+        self.sync(None, 'UPSTREAM_ERROR')
         self.assertEqual(self.status_row()[2], 2)
 
     def test_sync_failure_with_a_date_keeps_old_latest(self):
         self.sync('2026-01-05')
         _, latest_before, *_ = self.status_row()
-        self.sync('2026-02-01', 'upstream_error')
+        self.sync('2026-02-01', 'UPSTREAM_ERROR')
         self.assertEqual(self.status_row()[1], latest_before)
         self.sync('2026-02-01', None)
         self.assertEqual(self.status_row()[1], datetime(2026, 2, 1, tzinfo=timezone.utc))
 
     def test_sync_first_failure_with_a_date_stores_no_latest(self):
-        self.sync('2026-02-01', 'upstream_error')
+        self.sync('2026-02-01', 'UPSTREAM_ERROR')
         self.assertIsNone(self.status_row()[1])
 
     def test_sync_success_after_failure_clears_error(self):
-        self.sync(None, 'upstream_error')
+        self.sync(None, 'UPSTREAM_ERROR')
         self.sync('2026-01-06')
         _, latest, errors, last_error, _ = self.status_row()
         self.assertEqual(latest, datetime(2026, 1, 6, tzinfo=timezone.utc))
         self.assertEqual((errors, last_error), (0, None))
 
     def test_sync_first_run_failure_with_null_latest(self):
-        self.sync(None, 'auth_failed')
+        self.sync(None, 'AUTH_FAILED')
         synced, latest, errors, last_error, _ = self.status_row()
-        self.assertEqual((synced, latest, errors, last_error), (None, None, 1, 'auth_failed'))
+        self.assertEqual((synced, latest, errors, last_error), (None, None, 1, 'AUTH_FAILED'))
 
-    def test_sync_error_text_is_truncated(self):
-        self.sync(None, 'x' * 200)
-        self.assertEqual(len(self.status_row()[3]), 64)
+    def test_sync_free_text_error_becomes_invalid_code(self):
+        for text in ('x' * 200, 'lower_case', 'Has Space', 'A', 'A' * 33, ''):
+            self.sync(None, text)
+            self.assertEqual(self.status_row()[3], 'INVALID_CODE', text)
+        self.sync(None, 'A' * 32)
+        self.assertEqual(self.status_row()[3], 'A' * 32)
+
+    def test_sync_success_needs_a_closed_day(self):
+        today = datetime.now(timezone.utc).date()
+        for latest in (None, today, today + timedelta(days=1)):
+            with self.assertRaises(self.psycopg2.errors.InvalidParameterValue):
+                self.sync(latest)
+        self.sync(today - timedelta(days=1))
+        self.assertEqual(self.status_row()[2], 0)
+
+    def test_sync_error_counter_saturates(self):
+        self.sync(None, 'UPSTREAM_ERROR')
+        self.cur.execute("UPDATE sync_status SET error_count = 2147483647 WHERE source = 'swapkit-earned'")
+        self.sync(None, 'UPSTREAM_ERROR')
+        self.assertEqual(self.status_row()[2], 2147483647)
 
     # -- endpoint: empty and filled ------------------------------------------
 
@@ -192,7 +230,7 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.assertTrue(body['last_updated'].endswith('+00:00'))
 
     def test_stale_failure_row_returns_no_freshness_from_nothing(self):
-        self.sync(None, 'auth_failed')
+        self.sync(None, 'AUTH_FAILED')
         body = self.get().get_json()
         self.assertIsNone(body['last_updated'])
         self.assertIsNone(body['data_through'])
