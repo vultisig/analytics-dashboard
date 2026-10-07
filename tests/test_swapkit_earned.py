@@ -61,6 +61,20 @@ class RoundMoneyTest(unittest.TestCase):
         self.assertEqual(round_money(Decimal(0)), 0.0)
 
 
+class StrictInputTest(unittest.TestCase):
+    def test_non_finite_money_is_refused(self):
+        for bad in ('NaN', 'Infinity', '-Infinity', Decimal('NaN')):
+            with self.assertRaises(ArithmeticError):
+                round_money(bad)
+
+    def test_dates_accept_ascii_digits_only(self):
+        parse = NS['parse_iso_date']
+        self.assertEqual(parse('2026-03-15', 'x'), date(2026, 3, 15))
+        for bad in ('\u0662\u0660\u0662\u0666-03-15', '2026-03-15\n', ' 2026-03-15'):
+            with self.assertRaises(ValueError):
+                parse(bad, 'x')
+
+
 class GranularityTest(unittest.TestCase):
     def test_default_is_day(self):
         self.assertEqual(parse_granularity(None), 'day')
@@ -81,9 +95,9 @@ class GranularityTest(unittest.TestCase):
 
 
 class DateFilterTest(unittest.TestCase):
-    def test_all_has_no_bounds(self):
-        self.assertEqual(build_filter(None, None, None, TODAY), ('TRUE', []))
-        self.assertEqual(build_filter('all', None, None, TODAY), ('TRUE', []))
+    def test_all_stops_before_today(self):
+        self.assertEqual(build_filter(None, None, None, TODAY), ('date < %s', [TODAY]))
+        self.assertEqual(build_filter('all', None, None, TODAY), ('date < %s', [TODAY]))
 
     def test_one_day_is_last_closed_day(self):
         self.assertEqual(build_filter('1d', None, None, TODAY), ('date = %s', [date(2026, 3, 14)]))
@@ -92,11 +106,11 @@ class DateFilterTest(unittest.TestCase):
     def test_rolling_ranges(self):
         for raw, days in (('7d', 7), ('30d', 30), ('90d', 90), ('1y', 365), ('365d', 365)):
             sql, params = build_filter(raw, None, None, TODAY)
-            self.assertEqual(sql, 'date >= %s')
-            self.assertEqual(params, [TODAY - timedelta(days=days)])
+            self.assertEqual(sql, 'date >= %s AND date < %s')
+            self.assertEqual(params, [TODAY - timedelta(days=days), TODAY])
 
     def test_ytd_starts_on_january_first(self):
-        self.assertEqual(build_filter('ytd', None, None, TODAY), ('date >= %s', [date(2026, 1, 1)]))
+        self.assertEqual(build_filter('ytd', None, None, TODAY), ('date >= %s AND date < %s', [date(2026, 1, 1), TODAY]))
 
     def test_custom_uses_bound_dates(self):
         sql, params = build_filter('custom', '2026-01-02', '2026-02-03', TODAY)

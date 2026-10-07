@@ -154,7 +154,7 @@ MARKET_RANGE_DAY_SPANS = {
 }
 _global_market_cache = {'series': None, 'expires_at': 0.0, 'is_stale': False}
 _global_market_cache_lock = Lock()
-ISO_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+ISO_DATE_RE = re.compile(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
 
 # =============================================================================
 # Helper Functions
@@ -3362,7 +3362,11 @@ MONEY_QUANTUM = Decimal('0.01')
 
 def round_money(value):
     """Round a NUMERIC/Decimal money value to 2 decimals and return a JSON number."""
-    return float(Decimal(value).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP))
+    number = Decimal(value)
+    if not number.is_finite():
+        # NaN or Infinity must never reach JSON. The schema forbids them; this is a second guard.
+        raise ArithmeticError('non-finite money value')
+    return float(number.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP))
 
 
 def parse_swapkit_granularity(granularity_param):
@@ -3378,7 +3382,7 @@ def parse_swapkit_granularity(granularity_param):
 
 def parse_iso_date(value, label):
     """Parse a strict YYYY-MM-DD string into a date."""
-    if not ISO_DATE_RE.match(value):
+    if not ISO_DATE_RE.fullmatch(value):
         raise ValueError(f"Invalid {label} format, expected YYYY-MM-DD")
     try:
         return datetime.strptime(value, '%Y-%m-%d').date()
@@ -3390,7 +3394,9 @@ def build_swapkit_date_filter(range_param, start_date_param, end_date_param, tod
     """Build a bound-parameter filter on swapkit_daily.date.
 
     `today` is the current UTC date. The table holds closed days only, so
-    '1d' (24h) means the last closed day. Returns (where_sql, params).
+    '1d' (24h) means the last closed day. Rolling ranges and 'all' also stop
+    before today (closed days only); a custom range keeps its explicit end.
+    Returns (where_sql, params).
     """
     range_value = RANGE_TO_SQL.get(range_param, range_param) if range_param else 'all'
     if range_value not in SWAPKIT_RANGES:
@@ -3407,11 +3413,11 @@ def build_swapkit_date_filter(range_param, start_date_param, end_date_param, tod
     if range_value == '24h':
         return "date = %s", [today - timedelta(days=1)]
     if range_value == 'ytd':
-        return "date >= %s", [today.replace(month=1, day=1)]
+        return "date >= %s AND date < %s", [today.replace(month=1, day=1), today]
     if range_value == 'all':
-        return "TRUE", []
+        return "date < %s", [today]
     days = {'7d': 7, '30d': 30, '90d': 90, '365d': 365}[range_value]
-    return "date >= %s", [today - timedelta(days=days)]
+    return "date >= %s AND date < %s", [today - timedelta(days=days), today]
 
 
 @app.route('/api/swapkit/earned')
