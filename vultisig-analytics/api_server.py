@@ -11,6 +11,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from threading import Lock
 
@@ -3346,6 +3347,135 @@ def get_system_status():
     except Exception as e:
         logger.error(f"Error getting system status: {e}")
         return jsonify({'error': 'Failed to fetch system status'}), 500
+
+
+# =============================================================================
+# NEW ENDPOINTS - SwapKit earned revenue and volume
+# =============================================================================
+
+SWAPKIT_EARNED_SOURCE = 'swapkit-earned'
+# Canonical range names accepted by /api/swapkit/earned (short names map via RANGE_TO_SQL).
+SWAPKIT_RANGES = ('24h', '7d', '30d', '90d', 'ytd', '365d', 'all', 'custom')
+SWAPKIT_GRANULARITIES = ('day', 'week', 'month')
+MONEY_QUANTUM = Decimal('0.01')
+
+
+def round_money(value):
+    """Round a NUMERIC/Decimal money value to 2 decimals and return a JSON number."""
+    return float(Decimal(value).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP))
+
+
+def parse_swapkit_granularity(granularity_param):
+    """Return the effective granularity: day, week or month. Hourly becomes daily
+    because the table holds one row per UTC day."""
+    if not granularity_param:
+        return 'day'
+    value = GRAN_TO_SQL.get(granularity_param)
+    if value is None:
+        raise ValueError("Invalid granularity, expected h, d, w or m")
+    return 'day' if value == 'hour' else value
+
+
+def parse_iso_date(value, label):
+    """Parse a strict YYYY-MM-DD string into a date."""
+    if not ISO_DATE_RE.match(value):
+        raise ValueError(f"Invalid {label} format, expected YYYY-MM-DD")
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        raise ValueError(f"Invalid {label}, not a calendar date")
+
+
+def build_swapkit_date_filter(range_param, start_date_param, end_date_param, today):
+    """Build a bound-parameter filter on swapkit_daily.date.
+
+    `today` is the current UTC date. The table holds closed days only, so
+    '1d' (24h) means the last closed day. Returns (where_sql, params).
+    """
+    range_value = RANGE_TO_SQL.get(range_param, range_param) if range_param else 'all'
+    if range_value not in SWAPKIT_RANGES:
+        raise ValueError("Invalid range parameter")
+
+    if range_value == 'custom':
+        if not start_date_param or not end_date_param:
+            raise ValueError("Custom range requires both start and end dates")
+        start = parse_iso_date(start_date_param, 'start date')
+        end = parse_iso_date(end_date_param, 'end date')
+        if start > end:
+            raise ValueError("Start date must not be after end date")
+        return "date >= %s AND date <= %s", [start, end]
+    if range_value == '24h':
+        return "date = %s", [today - timedelta(days=1)]
+    if range_value == 'ytd':
+        return "date >= %s", [today.replace(month=1, day=1)]
+    if range_value == 'all':
+        return "TRUE", []
+    days = {'7d': 7, '30d': 30, '90d': 90, '365d': 365}[range_value]
+    return "date >= %s", [today - timedelta(days=days)]
+
+
+@app.route('/api/swapkit/earned')
+def get_swapkit_earned():
+    """SwapKit-reported earned revenue and volume per UTC day and provider.
+
+    Dated by swap day, unlike /api/revenue which dates fee-wallet receipts at
+    payout. The table is filled daily by an external job.
+    """
+    # Parameter errors raise ValueError and become a 400 via the app handler.
+    granularity = parse_swapkit_granularity(get_param(request.args, 'GRANULARITY'))
+    today = datetime.now(timezone.utc).date()
+    where_sql, params = build_swapkit_date_filter(
+        get_param(request.args, 'RANGE'),
+        get_param(request.args, 'START_DATE'),
+        get_param(request.args, 'END_DATE'),
+        today,
+    )
+
+    try:
+        # granularity comes from a fixed whitelist; user values are bound.
+        query = f"""
+            SELECT date_trunc('{granularity}', date::timestamp)::date AS bucket,
+                   provider,
+                   SUM(revenue_usd) AS revenue_usd,
+                   SUM(volume_usd) AS volume_usd
+            FROM swapkit_daily
+            WHERE {where_sql}
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        """
+        rows = db_manager.execute_query(query, params, fetch=True)
+        status = db_manager.execute_query(
+            "SELECT last_synced_timestamp, latest_data_timestamp FROM sync_status WHERE source = %s",
+            (SWAPKIT_EARNED_SOURCE,), fetch=True
+        )
+
+        total_revenue = Decimal(0)
+        total_volume = Decimal(0)
+        series = []
+        for row in rows:
+            total_revenue += row['revenue_usd']
+            total_volume += row['volume_usd']
+            series.append({
+                'date': row['bucket'].isoformat(),
+                'provider': row['provider'],
+                'revenue_usd': round_money(row['revenue_usd']),
+                'volume_usd': round_money(row['volume_usd']),
+            })
+
+        return jsonify({
+            'series': series,
+            'totals': {
+                'revenue_usd': round_money(total_revenue),
+                'volume_usd': round_money(total_volume),
+            },
+            'granularity': granularity,
+            'last_updated': iso_utc(status[0]['last_synced_timestamp']) if status else None,
+            'data_through': iso_utc(status[0]['latest_data_timestamp']) if status else None,
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting SwapKit earned data: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 # =============================================================================
