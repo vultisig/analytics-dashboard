@@ -38,6 +38,20 @@ try:
     """)
     tables = cursor.fetchall()
     print(f"\nCreated tables: {[t[0] for t in tables]}")
+
+    # The swapkit_daily migration also creates a status-writer function
+    if 'create_swapkit_daily' in migration_file:
+        cursor.execute("""
+            SELECT
+                to_regclass('public.swapkit_daily') IS NOT NULL,
+                to_regproc('record_swapkit_sync') IS NOT NULL
+        """)
+        has_table, has_function = cursor.fetchone()
+        if not (has_table and has_function):
+            raise RuntimeError(
+                f"Verification failed: swapkit_daily={has_table}, record_swapkit_sync={has_function}"
+            )
+        print("Verified: table swapkit_daily and function record_swapkit_sync exist")
     
 except Exception as e:
     conn.rollback()
