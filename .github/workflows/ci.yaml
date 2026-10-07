@@ -39,7 +39,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: timescale/timescaledb:latest-pg16
         env:
           POSTGRES_PASSWORD: test
         ports:
@@ -68,4 +68,6 @@ jobs:
         run: pip install -r vultisig-analytics/requirements.txt
 
       - name: Run database tests
-        run: python3 -m unittest tests.test_swapkit_daily_db -v
+        run: |
+          python3 -m unittest tests.test_swapkit_daily_db -v
+          python3 -m unittest tests.test_codex_adversarial_earned_db tests.test_codex_adversarial_earned_api -v
