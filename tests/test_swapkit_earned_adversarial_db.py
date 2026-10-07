@@ -38,8 +38,8 @@ class AdversarialEarnedDatabaseTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.suffix = secrets.token_hex(6)
-        cls.db_name = "codex_pub_" + cls.suffix
-        cls.role_name = "codex_earned_" + cls.suffix
+        cls.db_name = "swapkit_adv_" + cls.suffix
+        cls.role_name = "swapkit_adv_earned_" + cls.suffix
         cls.admin = psycopg2.connect(ADMIN_URL)
         cls.admin.autocommit = True
         with cls.admin.cursor() as cur:

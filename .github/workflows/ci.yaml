@@ -70,4 +70,4 @@ jobs:
       - name: Run database tests
         run: |
           python3 -m unittest tests.test_swapkit_daily_db -v
-          python3 -m unittest tests.test_codex_adversarial_earned_db tests.test_codex_adversarial_earned_api -v
+          python3 -m unittest tests.test_swapkit_earned_adversarial_db tests.test_swapkit_earned_adversarial_api -v

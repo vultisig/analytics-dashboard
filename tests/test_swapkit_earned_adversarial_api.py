@@ -1,5 +1,5 @@
 """Adversarial endpoint tests. Creates and drops only a unique disposable DB.
-Run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_codex_adversarial_earned*.py' -v
+Run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_swapkit_adv_adversarial_earned*.py' -v
 """
 import importlib
 import os
@@ -22,7 +22,7 @@ ADMIN = os.environ.get('TEST_DATABASE_URL', '')
 class EarnedEndpointAttacks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.name = 'codex_pub_api_' + uuid.uuid4().hex[:12]
+        cls.name = 'swapkit_adv_api_' + uuid.uuid4().hex[:12]
         cls.admin = psycopg2.connect(ADMIN)
         cls.admin.autocommit = True
         cls.addClassCleanup(cls.admin.close)
