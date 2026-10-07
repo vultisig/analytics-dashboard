@@ -93,6 +93,11 @@ export function getKnownProviders(): string[] {
   return [...PROVIDER_ORDER];
 }
 
+/** True for the swapkit provider name, in any letter case. */
+export function isSwapkitProvider(name: string): boolean {
+  return name.toLowerCase() === 'swapkit';
+}
+
 // Feature flag for the SwapKit earned charts. Off unless set to '1' at build time.
 export const SWAPKIT_EARNED_ENABLED = process.env.NEXT_PUBLIC_SWAPKIT_EARNED === '1';
 

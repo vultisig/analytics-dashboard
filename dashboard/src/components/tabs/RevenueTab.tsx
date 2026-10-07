@@ -13,7 +13,7 @@ import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders, getKnownProviders, SWAPKIT_EARNED_ENABLED } from '@/lib/providerUtils';
+import { sortProviders, getKnownProviders, isSwapkitProvider, SWAPKIT_EARNED_ENABLED } from '@/lib/providerUtils';
 import { SwapkitEarnedCharts } from '@/components/SwapkitEarnedCharts';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
@@ -280,6 +280,18 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
         return Object.values(platformByDate);
     }, [allData, granularity]);
 
+    // SwapKit-reported earned charts (behind NEXT_PUBLIC_SWAPKIT_EARNED). They sit inside the
+    // swapkit provider section when the revenue data has one, and in their own section otherwise,
+    // so the dashboard never shows two SwapKit sections.
+    const earnedCharts = SWAPKIT_EARNED_ENABLED ? (
+        <SwapkitEarnedCharts
+            range={range}
+            startDate={startDate}
+            endDate={endDate}
+            granularity={granularity}
+        />
+    ) : null;
+
     // Show error if we have no data at all
     if (error && !data) {
         return (
@@ -299,11 +311,16 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
 
     if (!data) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
+            <div className="space-y-6">
+                <div className="flex items-center justify-center py-20">
+                    <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
+                </div>
+                {earnedCharts && <ProviderSection provider="swapkit">{earnedCharts}</ProviderSection>}
             </div>
         );
     }
+
+    const swapkitInProviders = data.providers.some(isSwapkitProvider);
 
     // Filter chart data based on visible providers
     let filteredChartData = data.chartData.map(item => {
@@ -570,6 +587,8 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                                             total={data.providerBreakdowns[provider].totalRevenue}
                                         />
                                     </div>
+
+                                    {isSwapkitProvider(provider) && earnedCharts}
                                 </div>
                             )}
                         </ProviderSection>
@@ -577,15 +596,8 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                 })}
 
                 {/* SwapKit-reported earned series (behind NEXT_PUBLIC_SWAPKIT_EARNED) */}
-                {SWAPKIT_EARNED_ENABLED && (
-                    <ProviderSection provider="swapkit">
-                        <SwapkitEarnedCharts
-                            range={range}
-                            startDate={startDate}
-                            endDate={endDate}
-                            granularity={granularity}
-                        />
-                    </ProviderSection>
+                {earnedCharts && !swapkitInProviders && (
+                    <ProviderSection provider="swapkit">{earnedCharts}</ProviderSection>
                 )}
             </div>
         </div>
