@@ -13,7 +13,8 @@ import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders, getKnownProviders } from '@/lib/providerUtils';
+import { sortProviders, getKnownProviders, SWAPKIT_EARNED_ENABLED } from '@/lib/providerUtils';
+import { SwapkitEarnedCharts } from '@/components/SwapkitEarnedCharts';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
 
@@ -574,6 +575,18 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                         </ProviderSection>
                     );
                 })}
+
+                {/* SwapKit-reported earned series (behind NEXT_PUBLIC_SWAPKIT_EARNED) */}
+                {SWAPKIT_EARNED_ENABLED && (
+                    <ProviderSection provider="swapkit">
+                        <SwapkitEarnedCharts
+                            range={range}
+                            startDate={startDate}
+                            endDate={endDate}
+                            granularity={granularity}
+                        />
+                    </ProviderSection>
+                )}
             </div>
         </div>
     );

@@ -19,6 +19,10 @@ COPY . .
 # Next.js collects anonymous telemetry data about general usage.
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Build-time feature flag (NEXT_PUBLIC_* values are inlined at build)
+ARG NEXT_PUBLIC_SWAPKIT_EARNED=
+ENV NEXT_PUBLIC_SWAPKIT_EARNED=$NEXT_PUBLIC_SWAPKIT_EARNED
+
 RUN npm run build
 
 # Production image, copy all the files and run next
