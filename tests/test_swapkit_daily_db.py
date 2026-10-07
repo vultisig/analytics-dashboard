@@ -351,6 +351,68 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.assertIn('/api/revenue', rules)
         self.assertEqual(sum(1 for r in rules if 'swapkit' in r), 1)
 
+    # -- endpoint: edge cases ---------------------------------------------------
+
+    def test_provider_with_zero_revenue_and_positive_volume_is_kept(self):
+        self.insert('2026-01-05', 'alpha', 0, Decimal('12.5'))
+        body = self.get('?r=all').get_json()
+        self.assertEqual(
+            body['series'],
+            [{'date': '2026-01-05', 'provider': 'alpha', 'revenue_usd': 0.0, 'volume_usd': 12.5}],
+        )
+        self.assertEqual(body['totals'], {'revenue_usd': 0.0, 'volume_usd': 12.5})
+
+    def test_half_cent_rounds_up_and_below_half_cent_rounds_down(self):
+        self.insert('2026-01-05', 'alpha', Decimal('0.005'), Decimal('0.004999'))
+        row = self.get('?r=all').get_json()['series'][0]
+        self.assertEqual((row['revenue_usd'], row['volume_usd']), (0.01, 0.0))
+
+    def test_huge_numeric_stays_finite_and_close(self):
+        self.insert('2026-01-05', 'alpha', Decimal('99999999999999.985'), Decimal('999999999999999999.99'))
+        body = self.get('?r=all').get_json()
+        self.assertEqual(body['series'][0]['revenue_usd'], float(Decimal('99999999999999.99')))
+        self.assertEqual(body['series'][0]['volume_usd'], float(Decimal('999999999999999999.99')))
+
+    def test_future_rows_never_appear_in_rolling_ranges_or_all(self):
+        today = today_utc()
+        self.insert(today - timedelta(days=1), 'alpha', 1, 1)
+        self.insert(today, 'alpha', 2, 2)
+        self.insert(today + timedelta(days=3), 'alpha', 4, 4)
+        for query in ('?r=all', '?r=7d', '?r=1y', '?r=ytd', '?r=1d'):
+            with self.subTest(query=query):
+                body = self.get(query).get_json()
+                self.assertTrue(all(r['date'] < today.isoformat() for r in body['series']), body['series'])
+        explicit = self.get('?r=custom&sd=%s&ed=%s' % (today, today + timedelta(days=3))).get_json()
+        self.assertEqual(len(explicit['series']), 2)
+
+    def test_leap_day_is_a_row_and_buckets_into_its_week_and_month(self):
+        self.insert('2024-02-29', 'alpha', 1, 1)
+        base = '?r=custom&sd=2024-02-01&ed=2024-03-31'
+        self.assertEqual(self.dates(self.get(base)), ['2024-02-29'])
+        self.assertEqual(self.dates(self.get(base + '&g=w')), ['2024-02-26'])
+        self.assertEqual(self.dates(self.get(base + '&g=m')), ['2024-02-01'])
+
+    def test_week_starts_on_monday_and_boundaries_cross_months_and_years(self):
+        # Sunday 2023-12-31 belongs to the week of Monday 2023-12-25; Monday 2024-01-01 starts a new week.
+        for day in ('2023-12-31', '2024-01-01'):
+            self.insert(day, 'alpha', 1, 1)
+        base = '?r=custom&sd=2023-12-01&ed=2024-01-31'
+        weeks = self.dates(self.get(base + '&g=w'))
+        self.assertEqual(weeks, ['2023-12-25', '2024-01-01'])
+        self.assertTrue(all(datetime.strptime(d, '%Y-%m-%d').weekday() == 0 for d in weeks))
+        self.assertEqual(self.dates(self.get(base + '&g=m')), ['2023-12-01', '2024-01-01'])
+
+    def test_empty_table_with_a_status_row_and_missing_status_row(self):
+        self.sync(today_utc() - timedelta(days=1))
+        body = self.get('?r=all').get_json()
+        self.assertEqual(body['series'], [])
+        self.assertEqual(body['totals'], {'revenue_usd': 0.0, 'volume_usd': 0.0})
+        self.assertIsNotNone(body['last_updated'])
+        self.assertIsNotNone(body['data_through'])
+        self.cur.execute('DELETE FROM sync_status')
+        body = self.get('?r=all').get_json()
+        self.assertEqual((body['series'], body['last_updated'], body['data_through']), ([], None, None))
+
 
 if __name__ == '__main__':
     unittest.main()
