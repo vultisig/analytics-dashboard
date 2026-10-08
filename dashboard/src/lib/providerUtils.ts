@@ -9,6 +9,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   lifi: 'LI.FI',
   '1inch': '1inch',
   kyberswap: 'KyberSwap',
+  swapkit: 'SwapKit',
 };
 
 // Providers fed by the shared Arkham ingestor (rows live in
@@ -90,4 +91,25 @@ export function isKnownProvider(name: string): boolean {
  */
 export function getKnownProviders(): string[] {
   return [...PROVIDER_ORDER];
+}
+
+/** True for the swapkit provider name, in any letter case. */
+export function isSwapkitProvider(name: string): boolean {
+  return name.toLowerCase() === 'swapkit';
+}
+
+// Feature flag for the SwapKit earned charts. Off unless set to '1' at build time.
+export const SWAPKIT_EARNED_ENABLED = process.env.NEXT_PUBLIC_SWAPKIT_EARNED === '1';
+
+// Explains how "earned" differs from "received" revenue.
+export const SWAPKIT_EARNED_TOOLTIP =
+  'Earned: revenue and volume as reported by SwapKit, dated by the day of the swap. ' +
+  'Received: fee-wallet receipts, dated when the payout arrives. ' +
+  'The two measures differ in timing and can differ in total.';
+
+/**
+ * Label for a provider returned by an API: the known display name, else the raw name.
+ */
+export function providerLabel(name: string): string {
+  return PROVIDER_DISPLAY_NAMES[name.toLowerCase()] ?? name;
 }

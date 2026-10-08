@@ -94,6 +94,7 @@ Add the following environment variable in Vercel:
 |----------|----------|-------------|
 | `BACKEND_URL` | Yes | Backend API base URL (used server-side by Next.js proxy) |
 | `NEXT_PUBLIC_ENVIRONMENT` | No | Environment identifier (dev/staging/prod) |
+| `NEXT_PUBLIC_SWAPKIT_EARNED` | No | Set to `1` to show the SwapKit earned charts. Read at build time, so set it in the Vercel project settings and redeploy. Docker builds take it from the same variable through `docker-compose.yml`. |
 
 ---
 

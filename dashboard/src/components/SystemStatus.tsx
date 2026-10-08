@@ -12,6 +12,10 @@ interface SyncStatus {
     is_active: boolean;
 }
 
+// Sources that sync once a day: stale after 26 hours, never shown as idle before that.
+const DAILY_SOURCES = ['swapkit-earned'];
+const DAILY_STALE_HOURS = 26;
+
 interface SystemStatusProps {
     compact?: boolean;
 }
@@ -125,6 +129,11 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         // Error state
         if (source.has_error) return 'bg-red-500';
 
+        // Daily sources: stale after 26 hours, otherwise healthy
+        if (DAILY_SOURCES.includes(source.source)) {
+            return hoursSinceSync > DAILY_STALE_HOURS ? 'bg-red-500' : 'bg-emerald-500';
+        }
+
         // Stale: > 24 hours (likely real issue)
         if (hoursSinceSync > 24) return 'bg-red-500';
 
@@ -141,6 +150,9 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
 
         if (source.has_error) return '(error)';
+        if (DAILY_SOURCES.includes(source.source)) {
+            return hoursSinceSync > DAILY_STALE_HOURS ? '(stale)' : '';
+        }
         if (hoursSinceSync > 24) return '(stale)';
         if (hoursSinceSync > 1) return '(idle)';
         return '';
@@ -153,6 +165,7 @@ export default function SystemStatus({ compact = false }: SystemStatusProps = {}
         thorchain: 'THORChain',
         mayachain: 'MAYAChain',
         lifi: 'LI.FI',
+        'swapkit-earned': 'SwapKit (earned)',
     };
 
     const formatSourceName = (source: string) =>

@@ -124,6 +124,34 @@ export async function fetchRevenue(params: CommonQueryParams) {
   return fetchApi(`/api/revenue?${queryParams.toString()}`);
 }
 
+export interface SwapkitEarnedRow {
+  date: string;
+  provider: string;
+  revenue_usd: number;
+  volume_usd: number;
+}
+
+export interface SwapkitEarnedResponse {
+  series: SwapkitEarnedRow[];
+  totals: { revenue_usd: number; volume_usd: number };
+  granularity: string;
+  last_updated: string | null;
+  data_through: string | null;
+}
+
+/**
+ * Fetch SwapKit-reported earned revenue and volume
+ */
+export async function fetchSwapkitEarned(params: CommonQueryParams, signal?: AbortSignal) {
+  const queryParams = buildQueryParams({
+    r: params.range,
+    g: params.granularity,
+    sd: params.startDate,
+    ed: params.endDate,
+  });
+  return fetchApi<SwapkitEarnedResponse>(`/api/swapkit/earned?${queryParams.toString()}`, { signal });
+}
+
 /**
  * Fetch revenue data for a specific provider
  */
