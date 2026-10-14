@@ -15,7 +15,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from threading import Lock
 
-import psycopg2
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -1404,7 +1403,7 @@ def get_revenue():
 
         swaps_total = db_manager.execute_query(swaps_revenue_query, fetch=True)[0]
         arkham_total = db_manager.execute_query(arkham_revenue_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
-        swapkit_buckets = _swapkit_earned_buckets(granularity, range_param, start_date_param, end_date_param)
+        swapkit_buckets = _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param)
         swapkit_revenue = sum((r['revenue'] for r in swapkit_buckets), Decimal(0))
 
         total_revenue_value = (
@@ -1827,7 +1826,7 @@ def get_swap_volume():
         swaps_stats = db_manager.execute_query(swaps_stats_query, fetch=True)[0]
         arkham_stats = db_manager.execute_query(arkham_stats_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
 
-        swapkit_buckets = _swapkit_earned_buckets(granularity, range_param, start_date_param, end_date_param)
+        swapkit_buckets = _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param)
         swapkit_volume = sum((r['volume'] for r in swapkit_buckets), Decimal(0))
 
         # SwapKit reports no swap count, so it adds volume but no swaps.
@@ -3453,7 +3452,7 @@ def build_swapkit_date_filter(range_param, start_date_param, end_date_param, tod
     return "date >= %s AND date < %s", [today - timedelta(days=days), today]
 
 
-def _swapkit_earned_buckets(granularity, range_param, start_date_param, end_date_param):
+def _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param):
     """SwapKit earned revenue and volume per time bucket, summed over its underlying
     providers: the `swapkit` source of /api/revenue and /api/swap-volume.
 
@@ -3487,12 +3486,7 @@ def _swapkit_earned_buckets(granularity, range_param, start_date_param, end_date
         GROUP BY 1
         ORDER BY 1
     """
-    try:
-        return db_manager.execute_query(query, params, fetch=True)
-    except psycopg2.Error as e:
-        # A SwapKit read failure drops the bucket, not the whole revenue or volume response.
-        logger.error(f"Error reading swapkit_daily for totals: {e}")
-        return []
+    return db_manager.execute_query(query, params, fetch=True)
 
 
 @app.route('/api/swapkit/earned')

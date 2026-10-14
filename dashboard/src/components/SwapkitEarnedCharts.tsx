@@ -24,7 +24,7 @@ interface SwapkitEarnedChartsProps {
     granularity: string;
 }
 
-const TITLES: Record<Measure, string> = {
+const chartTitles: Record<Measure, string> = {
     revenue_usd: 'Earned revenue (SwapKit-reported)',
     volume_usd: 'Earned volume (SwapKit-reported)',
 };
@@ -115,7 +115,7 @@ function SwapkitEarnedCharts({ measure, range, startDate, endDate, granularity }
             )}
             {chart && (
                 <StackedBarChart
-                    title={TITLES[measure]}
+                    title={chartTitles[measure]}
                     subtitle={`${response?.granularity ?? granularity} breakdown`}
                     data={chart.data}
                     keys={chart.keys}

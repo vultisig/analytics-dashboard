@@ -349,10 +349,6 @@ class SwapkitDailyDbTest(unittest.TestCase):
         rules = {rule.rule for rule in self.api.app.url_map.iter_rules()}
         self.assertEqual(sum(1 for r in rules if 'swapkit' in r), 1)
 
-    def test_swapkit_read_failure_drops_only_the_bucket(self):
-        self.cur.execute('DROP TABLE swapkit_daily')
-        self.assertEqual(self.api._swapkit_earned_buckets('day', 'all', None, None), [])
-
     def test_swapkit_buckets_sum_providers_and_skip_sub_day_views(self):
         today = datetime.now(timezone.utc).date()
         for days_ago in (1, 2):
@@ -362,7 +358,7 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.insert(today, 'NEAR', '9', '900')  # open day: never counted
 
         def buckets(*args):
-            return [(r['revenue'], r['volume']) for r in self.api._swapkit_earned_buckets(*args)]
+            return [(r['revenue'], r['volume']) for r in self.api._query_swapkit_earned(*args)]
 
         two_days = [(Decimal('1.750000'), Decimal('150.000000'))] * 2
         self.assertEqual(buckets('day', 'all', None, None), two_days)
