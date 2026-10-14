@@ -191,8 +191,23 @@ class EarnedEndpointAttacks(unittest.TestCase):
         self.assertEqual(r.status_code, 500)
         self.assertEqual(r.get_json(), {'error': 'Internal server error'})
 
-    def test_existing_endpoints_do_not_count_earned_rows(self):
-        paths = ('/api/health', '/api/revenue', '/api/swap-count', '/api/stats')
+    def test_revenue_and_volume_count_earned_rows_as_swapkit_bucket(self):
+        self.seed('2024-02-29', '999', '999')
+        revenue = self.client.get('/api/revenue').get_json()
+        self.assertEqual(revenue['totalRevenue']['total_revenue'], 999.0)
+        self.assertEqual(revenue['revenueByProvider'], [{'name': 'swapkit', 'value': 999.0}])
+        self.assertEqual([r['source'] for r in revenue['revenueOverTime']], ['swapkit'])
+        volume = self.client.get('/api/swap-volume').get_json()
+        self.assertEqual(volume['globalStats'], {'total_volume': 999.0, 'total_swaps': 0})
+        self.assertEqual([r['source'] for r in volume['volumeOverTime']], ['swapkit'])
+        for query in ('?g=h', '?r=1d'):
+            with self.subTest(query=query):
+                r = self.client.get('/api/revenue' + query).get_json()
+                self.assertEqual(r['totalRevenue']['total_revenue'], 0.0)
+                self.assertEqual(r['revenueByProvider'], [])
+
+    def test_other_endpoints_do_not_count_earned_rows(self):
+        paths = ('/api/health', '/api/swap-count', '/api/stats')
         before = {p: self.client.get(p) for p in paths}
         for p, r in before.items():
             self.assertEqual(r.status_code, 200, (p, r.get_json()))

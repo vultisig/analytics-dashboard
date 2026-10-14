@@ -343,13 +343,33 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.assertEqual(row['latest_data_timestamp'], '2026-01-05T00:00:00+00:00')
         self.assertFalse(row['has_error'])
 
-    def test_existing_revenue_route_does_not_touch_new_table(self):
+    def test_revenue_and_volume_routes_add_the_swapkit_bucket(self):
         import inspect
-        self.assertNotIn('swapkit', inspect.getsource(self.api.get_revenue).lower())
+        for route in (self.api.get_revenue, self.api.get_swap_volume):
+            self.assertIn('_swapkit_earned_buckets', inspect.getsource(route))
         self.assertNotIn('swapkit', inspect.getsource(self.api.build_date_filter).lower())
         rules = {rule.rule for rule in self.api.app.url_map.iter_rules()}
-        self.assertIn('/api/revenue', rules)
         self.assertEqual(sum(1 for r in rules if 'swapkit' in r), 1)
+
+    def test_swapkit_buckets_sum_providers_and_skip_sub_day_views(self):
+        today = datetime.now(timezone.utc).date()
+        for days_ago in (1, 2):
+            day = today - timedelta(days=days_ago)
+            self.insert(day, 'NEAR', '1.50', '100')
+            self.insert(day, 'CHAINFLIP', '0.25', '50')
+        self.insert(today, 'NEAR', '9', '900')  # open day: never counted
+
+        def buckets(*args):
+            return [(r['revenue'], r['volume']) for r in self.api._swapkit_earned_buckets(*args)]
+
+        two_days = [(Decimal('1.750000'), Decimal('150.000000'))] * 2
+        self.assertEqual(buckets('day', 'all', None, None), two_days)
+        self.assertEqual(buckets('day', 'unknown', None, None), two_days)
+        self.assertEqual(buckets('day', 'custom', None, None), two_days)
+        self.assertEqual(buckets('hour', 'all', None, None), [])
+        self.assertEqual(buckets('day', '1d', None, None), [])
+        later, earlier = today.isoformat(), (today - timedelta(days=5)).isoformat()
+        self.assertEqual(buckets('day', 'custom', later, earlier), [])
 
     # -- endpoint: edge cases ---------------------------------------------------
 
