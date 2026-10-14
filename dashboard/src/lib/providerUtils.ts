@@ -98,6 +98,26 @@ export function isSwapkitProvider(name: string): boolean {
   return name.toLowerCase() === 'swapkit';
 }
 
+/**
+ * Providers in the Revenue and Volume totals: the known providers plus SwapKit.
+ * SwapKit stays out of getKnownProviders because it has no per-provider endpoint,
+ * swap counts or users.
+ */
+export function getTotalsProviders(): string[] {
+  return [...PROVIDER_ORDER, 'swapkit'];
+}
+
+/** True when the API leaves SwapKit out: its data holds closed UTC days only. */
+function isSwapkitExcluded(range: string, granularity: string): boolean {
+  return range === '1d' || granularity === 'h';
+}
+
+/** Subtitle suffix for a total chart naming the providers its view leaves out. */
+export function totalsExclusionNote(view: 'provider' | 'platform', range: string, granularity: string): string {
+  if (view === 'platform') return ' · excludes 1inch + KyberSwap + SwapKit';
+  return isSwapkitExcluded(range, granularity) ? ' · excludes SwapKit (daily data only)' : '';
+}
+
 // Feature flag for the SwapKit earned charts. Off unless set to '1' at build time.
 export const SWAPKIT_EARNED_ENABLED = process.env.NEXT_PUBLIC_SWAPKIT_EARNED === '1';
 

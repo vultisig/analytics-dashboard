@@ -14,7 +14,8 @@ import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders, getKnownProviders } from '@/lib/providerUtils';
+import { sortProviders, getKnownProviders, getTotalsProviders, isSwapkitProvider, totalsExclusionNote } from '@/lib/providerUtils';
+import { SwapkitEarnedSection } from '@/components/SwapkitEarnedCharts';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
 
@@ -89,7 +90,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                 setProviderViews(initialViews);
 
                 // Initialize all known providers as visible
-                setVisibleProviders(sortProviders(allKnownProviders));
+                setVisibleProviders(sortProviders(getTotalsProviders()));
             } catch (err) {
                 console.error('Error fetching swap volume data:', err);
                 setError('Failed to load swap volume data');
@@ -385,7 +386,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                             {chartView === 'provider' ? 'Total Swap Volume' : 'Total Swap Volume by Platform'}
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
+                            {getGranularityLabel()} breakdown{totalsExclusionNote(chartView, range, granularity)}
                         </p>
                     </div>
                     <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
@@ -445,6 +446,18 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
             {/* Provider Sections */}
             <div className="space-y-6">
                 {data.providers.map((provider) => {
+                    if (isSwapkitProvider(provider)) {
+                        return (
+                            <SwapkitEarnedSection
+                                key={provider}
+                                measure="volume_usd"
+                                range={range}
+                                startDate={startDate}
+                                endDate={endDate}
+                                granularity={granularity}
+                            />
+                        );
+                    }
                     const currentView = providerViews[provider] || 'total';
                     const specificData = providerData[provider];
 
