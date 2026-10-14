@@ -343,13 +343,15 @@ class SwapkitDailyDbTest(unittest.TestCase):
         self.assertEqual(row['latest_data_timestamp'], '2026-01-05T00:00:00+00:00')
         self.assertFalse(row['has_error'])
 
-    def test_revenue_and_volume_routes_add_the_swapkit_bucket(self):
+    def test_one_swapkit_route_and_shared_date_filter_untouched(self):
         import inspect
-        for route in (self.api.get_revenue, self.api.get_swap_volume):
-            self.assertIn('_swapkit_earned_buckets', inspect.getsource(route))
         self.assertNotIn('swapkit', inspect.getsource(self.api.build_date_filter).lower())
         rules = {rule.rule for rule in self.api.app.url_map.iter_rules()}
         self.assertEqual(sum(1 for r in rules if 'swapkit' in r), 1)
+
+    def test_swapkit_read_failure_drops_only_the_bucket(self):
+        self.cur.execute('DROP TABLE swapkit_daily')
+        self.assertEqual(self.api._swapkit_earned_buckets('day', 'all', None, None), [])
 
     def test_swapkit_buckets_sum_providers_and_skip_sub_day_views(self):
         today = datetime.now(timezone.utc).date()

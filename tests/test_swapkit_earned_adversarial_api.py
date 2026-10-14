@@ -200,6 +200,7 @@ class EarnedEndpointAttacks(unittest.TestCase):
         volume = self.client.get('/api/swap-volume').get_json()
         self.assertEqual(volume['globalStats'], {'total_volume': 999.0, 'total_swaps': 0})
         self.assertEqual([r['source'] for r in volume['volumeOverTime']], ['swapkit'])
+        self.assertEqual(volume['volumeByProvider'], [{'source': 'swapkit', 'total_volume': 999.0, 'swap_count': 0}])
         for query in ('?g=h', '?r=1d'):
             with self.subTest(query=query):
                 r = self.client.get('/api/revenue' + query).get_json()

@@ -15,6 +15,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from threading import Lock
 
+import psycopg2
 import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -3486,15 +3487,21 @@ def _swapkit_earned_buckets(granularity, range_param, start_date_param, end_date
         GROUP BY 1
         ORDER BY 1
     """
-    return db_manager.execute_query(query, params, fetch=True)
+    try:
+        return db_manager.execute_query(query, params, fetch=True)
+    except psycopg2.Error as e:
+        # A SwapKit read failure drops the bucket, not the whole revenue or volume response.
+        logger.error(f"Error reading swapkit_daily for totals: {e}")
+        return []
 
 
 @app.route('/api/swapkit/earned')
 def get_swapkit_earned():
     """SwapKit-reported earned revenue and volume per UTC day and provider.
 
-    Dated by swap day, unlike /api/revenue which dates fee-wallet receipts at
-    payout. The table is filled daily by an external job.
+    Dated by swap day. /api/revenue and /api/swap-volume show the same rows as one
+    `swapkit` bucket; this route splits them by underlying provider. The table is
+    filled daily by an external job.
     """
     # Parameter errors raise ValueError and become a 400 via the app handler.
     granularity = parse_swapkit_granularity(get_param(request.args, 'GRANULARITY'))
