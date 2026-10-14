@@ -17,7 +17,7 @@ import {
     IconCalculatorV,
 } from '@/icons';
 import { providerColors } from '@/lib/chartStyles';
-import { getKnownProviders } from '@/lib/providerUtils';
+import { getTotalsProviders, isSwapkitExcluded, SWAPKIT_EXCLUDED_TOOLTIP } from '@/lib/providerUtils';
 import { filterByDateRange, aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
 import type { DateRangeType } from '@/lib/dateUtils';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
@@ -98,7 +98,7 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
 
         // Use direct API totals (not calculated from time-series)
         // This ensures totals are independent of granularity
-        const providers = getKnownProviders();
+        const providers = getTotalsProviders();
 
         const totalVolume = Number(allData.globalStats?.total_volume || 0);
         const totalRevenue = Number(allData.totalRevenue || 0);
@@ -195,6 +195,8 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
         }
     };
 
+    const swapkitTooltip = isSwapkitExcluded(range, granularity) ? SWAPKIT_EXCLUDED_TOOLTIP : undefined;
+
     return (
         <div className="space-y-6">
             {/* Hero Metrics */}
@@ -205,12 +207,14 @@ export function OverviewTab({ range, startDate, endDate, granularity }: Overview
                     icon={IconDollar}
                     color="accent"
                     format="currency"
+                    tooltip={swapkitTooltip}
                 />
                 <HeroMetric
                     label="Total Revenue"
                     value={stats.totalRevenue}
                     icon={IconVault}
                     format="currency"
+                    tooltip={swapkitTooltip}
                 />
                 <HeroMetric
                     label="Total Unique Swappers"

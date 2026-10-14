@@ -13,8 +13,8 @@ import { CumulativeToggle } from '@/components/CumulativeToggle';
 import { ChartViewToggle } from '@/components/ChartViewToggle';
 import { providerColors, chainColorMap } from '@/lib/chartStyles';
 import { aggregateByGranularity, transformToChartData } from '@/lib/dataProcessing';
-import { sortProviders, getKnownProviders, isSwapkitProvider, SWAPKIT_EARNED_ENABLED } from '@/lib/providerUtils';
-import { SwapkitEarnedCharts } from '@/components/SwapkitEarnedCharts';
+import { sortProviders, getKnownProviders, getTotalsProviders, isSwapkitProvider, totalsExclusionNote } from '@/lib/providerUtils';
+import { SwapkitEarnedSection } from '@/components/SwapkitEarnedCharts';
 import { buildApiUrl, buildQueryParams } from '@/lib/api';
 import { IconCircleInfo, IconDollar, IconTrendingUpV, IconWallet4 } from '@/icons';
 
@@ -88,8 +88,8 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                 });
                 setProviderViews(initialViews);
 
-                // Initialize all known providers as visible
-                setVisibleProviders(sortProviders(allKnownProviders));
+                // Every provider in the totals starts visible
+                setVisibleProviders(sortProviders(getTotalsProviders()));
             } catch (err) {
                 console.error('Error fetching revenue data:', err);
                 setError('Failed to load revenue data');
@@ -280,18 +280,6 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
         return Object.values(platformByDate);
     }, [allData, granularity]);
 
-    // SwapKit-reported earned charts (behind NEXT_PUBLIC_SWAPKIT_EARNED). They sit inside the
-    // swapkit provider section when the revenue data has one, and in their own section otherwise,
-    // so the dashboard never shows two SwapKit sections.
-    const earnedCharts = SWAPKIT_EARNED_ENABLED ? (
-        <SwapkitEarnedCharts
-            range={range}
-            startDate={startDate}
-            endDate={endDate}
-            granularity={granularity}
-        />
-    ) : null;
-
     // Show error if we have no data at all
     if (error && !data) {
         return (
@@ -311,16 +299,11 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
 
     if (!data) {
         return (
-            <div className="space-y-6">
-                <div className="flex items-center justify-center py-20">
-                    <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
-                </div>
-                {earnedCharts && <ProviderSection provider="swapkit">{earnedCharts}</ProviderSection>}
+            <div className="flex items-center justify-center py-20">
+                <div className="text-[var(--text-tertiary)] text-lg">No data available</div>
             </div>
         );
     }
-
-    const swapkitInProviders = data.providers.some(isSwapkitProvider);
 
     // Filter chart data based on visible providers
     let filteredChartData = data.chartData.map(item => {
@@ -396,7 +379,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                             {chartView === 'provider' ? 'Total Revenue' : 'Total Revenue by Platform'}
                         </h3>
                         <p className="t-footnote text-[var(--text-tertiary)] mt-0.5">
-                            {getGranularityLabel()} breakdown{chartView === 'platform' ? ' · excludes 1inch + KyberSwap' : ''}
+                            {getGranularityLabel()} breakdown{totalsExclusionNote(chartView, range, granularity)}
                         </p>
                     </div>
                     <CumulativeToggle enabled={mainChartCumulative} onToggle={setMainChartCumulative} />
@@ -449,6 +432,18 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
             {/* Provider Sections */}
             <div className="space-y-6">
                 {data.providers.map((provider) => {
+                    if (isSwapkitProvider(provider)) {
+                        return (
+                            <SwapkitEarnedSection
+                                key={provider}
+                                measure="revenue_usd"
+                                range={range}
+                                startDate={startDate}
+                                endDate={endDate}
+                                granularity={granularity}
+                            />
+                        );
+                    }
                     const currentView = providerViews[provider] || 'total';
                     const specificData = providerData[provider];
 
@@ -587,18 +582,11 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                                             total={data.providerBreakdowns[provider].totalRevenue}
                                         />
                                     </div>
-
-                                    {isSwapkitProvider(provider) && earnedCharts}
                                 </div>
                             )}
                         </ProviderSection>
                     );
                 })}
-
-                {/* SwapKit-reported earned series (behind NEXT_PUBLIC_SWAPKIT_EARNED) */}
-                {earnedCharts && !swapkitInProviders && (
-                    <ProviderSection provider="swapkit">{earnedCharts}</ProviderSection>
-                )}
             </div>
         </div>
     );

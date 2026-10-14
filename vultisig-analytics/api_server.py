@@ -1403,8 +1403,14 @@ def get_revenue():
 
         swaps_total = db_manager.execute_query(swaps_revenue_query, fetch=True)[0]
         arkham_total = db_manager.execute_query(arkham_revenue_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
+        swapkit_buckets = _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param)
+        swapkit_revenue = sum((r['revenue'] for r in swapkit_buckets), Decimal(0))
 
-        total_revenue_value = safe_float(swaps_total['total_revenue']) + safe_float(arkham_total['total_revenue'])
+        total_revenue_value = (
+            safe_float(swaps_total['total_revenue'])
+            + safe_float(arkham_total['total_revenue'])
+            + float(swapkit_revenue)
+        )
 
         # 2. Fee Revenue by Provider (Over Time)
         swaps_over_time_query = f"""
@@ -1436,8 +1442,12 @@ def get_revenue():
         swaps_over_time = db_manager.execute_query(swaps_over_time_query, fetch=True)
         arkham_over_time = db_manager.execute_query(arkham_over_time_query, (ARKHAM_PROVIDERS,), fetch=True)
 
+        swapkit_over_time = [
+            {'date': r['date'], 'source': SWAPKIT_PROVIDER, 'revenue': r['revenue']}
+            for r in swapkit_buckets
+        ]
         revenue_over_time = sorted(
-            list(swaps_over_time) + list(arkham_over_time),
+            list(swaps_over_time) + list(arkham_over_time) + swapkit_over_time,
             key=lambda x: x['date']
         )
 
@@ -1467,8 +1477,9 @@ def get_revenue():
         swaps_by_provider = db_manager.execute_query(swaps_by_provider_query, fetch=True)
         arkham_by_provider = db_manager.execute_query(arkham_by_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
+        swapkit_by_provider = [{'name': SWAPKIT_PROVIDER, 'value': swapkit_revenue}] if swapkit_buckets else []
         revenue_by_provider = sorted(
-            list(swaps_by_provider) + list(arkham_by_provider),
+            list(swaps_by_provider) + list(arkham_by_provider) + swapkit_by_provider,
             key=lambda x: safe_float(x['value']),
             reverse=True
         )
@@ -1815,13 +1826,28 @@ def get_swap_volume():
         swaps_stats = db_manager.execute_query(swaps_stats_query, fetch=True)[0]
         arkham_stats = db_manager.execute_query(arkham_stats_query, (ARKHAM_PROVIDERS,), fetch=True)[0]
 
+        swapkit_buckets = _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param)
+        swapkit_volume = sum((r['volume'] for r in swapkit_buckets), Decimal(0))
+
+        # SwapKit reports no swap count, so it adds volume but no swaps.
         global_stats = {
-            'total_volume': safe_float(swaps_stats['total_volume']) + safe_float(arkham_stats['total_volume']),
+            'total_volume': (
+                safe_float(swaps_stats['total_volume'])
+                + safe_float(arkham_stats['total_volume'])
+                + float(swapkit_volume)
+            ),
             'total_swaps': safe_int(swaps_stats['total_swaps']) + safe_int(arkham_stats['total_swaps'])
         }
 
         # 2. Volume by Provider (Over Time)
-        volume_over_time = _query_volume_over_time(granularity, date_filter, date_filter_arkham)
+        volume_over_time = sorted(
+            _query_volume_over_time(granularity, date_filter, date_filter_arkham)
+            + [
+                {'time_period': r['date'], 'source': SWAPKIT_PROVIDER, 'volume': r['volume']}
+                for r in swapkit_buckets
+            ],
+            key=lambda x: x['time_period']
+        )
 
         # 3. Total Volume by Provider
         swaps_provider_query = f"""
@@ -1851,8 +1877,12 @@ def get_swap_volume():
         swaps_provider = db_manager.execute_query(swaps_provider_query, fetch=True)
         arkham_provider = db_manager.execute_query(arkham_provider_query, (ARKHAM_PROVIDERS,), fetch=True)
 
+        swapkit_provider = (
+            [{'source': SWAPKIT_PROVIDER, 'total_volume': swapkit_volume, 'swap_count': 0}]
+            if swapkit_buckets else []
+        )
         volume_by_provider = sorted(
-            list(swaps_provider) + list(arkham_provider),
+            list(swaps_provider) + list(arkham_provider) + swapkit_provider,
             key=lambda x: safe_float(x['total_volume']),
             reverse=True
         )
@@ -3354,6 +3384,8 @@ def get_system_status():
 # =============================================================================
 
 SWAPKIT_EARNED_SOURCE = 'swapkit-earned'
+# Provider name of the SwapKit bucket in /api/revenue and /api/swap-volume.
+SWAPKIT_PROVIDER = 'swapkit'
 # Canonical range names accepted by /api/swapkit/earned (short names map via RANGE_TO_SQL).
 SWAPKIT_RANGES = ('24h', '7d', '30d', '90d', 'ytd', '365d', 'all', 'custom')
 SWAPKIT_GRANULARITIES = ('day', 'week', 'month')
@@ -3420,12 +3452,50 @@ def build_swapkit_date_filter(range_param, start_date_param, end_date_param, tod
     return "date >= %s AND date < %s", [today - timedelta(days=days), today]
 
 
+def _query_swapkit_earned(granularity, range_param, start_date_param, end_date_param):
+    """SwapKit earned revenue and volume per time bucket, summed over its underlying
+    providers: the `swapkit` source of /api/revenue and /api/swap-volume.
+
+    Takes the same parameters as build_date_filter and reads them the same way: an
+    unknown range or a custom range without both dates means all closed days, and a
+    custom range that cannot match (start after end) returns no rows.
+    Returns rows with `date` (TIMESTAMPTZ), `revenue` and `volume` (Decimal).
+    """
+    range_value = RANGE_TO_SQL.get(range_param, range_param)
+    # Closed UTC days only: no SwapKit data at hourly or 24h resolution, so leave it out.
+    if granularity == 'hour' or range_value == '24h':
+        return []
+    if range_value not in SWAPKIT_RANGES or (
+        range_value == 'custom' and not (start_date_param and end_date_param)
+    ):
+        range_param = 'all'
+    try:
+        where_sql, params = build_swapkit_date_filter(
+            range_param, start_date_param, end_date_param, datetime.now(timezone.utc).date()
+        )
+    except ValueError:
+        return []
+
+    # granularity comes from GRAN_TO_SQL values; user values are bound.
+    query = f"""
+        SELECT date_trunc('{granularity}', date::timestamptz) AS date,
+               SUM(revenue_usd) AS revenue,
+               SUM(volume_usd) AS volume
+        FROM swapkit_daily
+        WHERE {where_sql}
+        GROUP BY 1
+        ORDER BY 1
+    """
+    return db_manager.execute_query(query, params, fetch=True)
+
+
 @app.route('/api/swapkit/earned')
 def get_swapkit_earned():
     """SwapKit-reported earned revenue and volume per UTC day and provider.
 
-    Dated by swap day, unlike /api/revenue which dates fee-wallet receipts at
-    payout. The table is filled daily by an external job.
+    Dated by swap day. /api/revenue and /api/swap-volume show the same rows as one
+    `swapkit` bucket; this route splits them by underlying provider. The table is
+    filled daily by an external job.
     """
     # Parameter errors raise ValueError and become a 400 via the app handler.
     granularity = parse_swapkit_granularity(get_param(request.args, 'GRANULARITY'))
