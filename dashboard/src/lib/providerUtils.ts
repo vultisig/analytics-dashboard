@@ -98,11 +98,7 @@ export function isSwapkitProvider(name: string): boolean {
   return name.toLowerCase() === 'swapkit';
 }
 
-/**
- * Providers in the Revenue and Volume totals: the known providers plus SwapKit.
- * SwapKit stays out of getKnownProviders because it has no per-provider endpoint,
- * swap counts or users.
- */
+/** Providers in the Revenue and Volume totals. SwapKit is not a known provider: it has no per-provider endpoint, counts or users. */
 export function getTotalsProviders(): string[] {
   return [...PROVIDER_ORDER, 'swapkit'];
 }
