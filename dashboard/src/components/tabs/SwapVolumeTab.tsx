@@ -89,7 +89,7 @@ export function SwapVolumeTab({ range, startDate, endDate, granularity }: SwapVo
                 });
                 setProviderViews(initialViews);
 
-                // Initialize all known providers as visible
+                // Every provider in the totals starts visible
                 setVisibleProviders(sortProviders(getTotalsProviders()));
             } catch (err) {
                 console.error('Error fetching swap volume data:', err);

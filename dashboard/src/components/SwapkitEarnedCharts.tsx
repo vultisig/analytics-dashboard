@@ -41,6 +41,15 @@ function pivot(response: SwapkitEarnedResponse, measure: Measure) {
     return { data, keys: providers.map(providerLabel) };
 }
 
+function earnedNote(failed: boolean, response: SwapkitEarnedResponse | null, stale: boolean, hasSeries: boolean): string | null {
+    if (failed) return 'Earned data could not be loaded.';
+    if (!response) return null;
+    if (!response.last_updated) return 'Earned data has not been updated yet.';
+    if (stale) return `Earned data is out of date. Last updated ${formatDistanceToNow(new Date(response.last_updated), { addSuffix: true })}.`;
+    if (!hasSeries) return 'No earned data within this date range.';
+    return null;
+}
+
 /** The SwapKit provider section: one earned measure by underlying provider. Hidden unless NEXT_PUBLIC_SWAPKIT_EARNED is on. */
 export function SwapkitEarnedSection(props: SwapkitEarnedChartsProps) {
     if (!SWAPKIT_EARNED_ENABLED) return null;
@@ -95,16 +104,7 @@ function SwapkitEarnedCharts({ measure, range, startDate, endDate, granularity }
     const showSeries = hasSeries && !stale;
     const chart = useMemo(() => (showSeries && response ? pivot(response, measure) : null), [showSeries, response, measure]);
 
-    let note: string | null = null;
-    if (failed) {
-        note = 'Earned data could not be loaded.';
-    } else if (response && !response.last_updated) {
-        note = 'Earned data has not been updated yet.';
-    } else if (response && stale) {
-        note = `Earned data is out of date. Last updated ${formatDistanceToNow(new Date(response.last_updated as string), { addSuffix: true })}.`;
-    } else if (response && !hasSeries) {
-        note = 'No earned data within this date range.';
-    }
+    const note = earnedNote(failed, response, stale, hasSeries);
 
     const info = <Tooltip content={SWAPKIT_EARNED_TOOLTIP} iconOnly />;
 

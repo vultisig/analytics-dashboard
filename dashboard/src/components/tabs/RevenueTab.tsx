@@ -88,7 +88,7 @@ export function RevenueTab({ range, startDate, endDate, granularity }: RevenueTa
                 });
                 setProviderViews(initialViews);
 
-                // Initialize all known providers as visible
+                // Every provider in the totals starts visible
                 setVisibleProviders(sortProviders(getTotalsProviders()));
             } catch (err) {
                 console.error('Error fetching revenue data:', err);
