@@ -63,6 +63,10 @@ def _router_set(protocol: str) -> Set[str]:
     return {addr.lower() for addr in KNOWN_ROUTERS.get(protocol, [])}
 
 
+def _fee_receiver_set() -> Set[str]:
+    return {addr.lower() for _, addr in config.ARKHAM_FEE_RECEIVERS}
+
+
 def fetch_tx_to(
     api_key: str,
     chainid: int,
@@ -74,6 +78,21 @@ def fetch_tx_to(
     Returns (tx_to_lowercase, error_message). On success error is None.
     On any failure (HTTP, missing field, unexpected envelope) returns
     (None, error_string) so the caller can fail-open and skip the row.
+    """
+    tx_to, _tx_from, err = fetch_tx_endpoints(api_key, chainid, tx_hash, session=session)
+    return tx_to, err
+
+
+def fetch_tx_endpoints(
+    api_key: str,
+    chainid: int,
+    tx_hash: str,
+    session: Optional[requests.Session] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Resolve (tx_to, tx_from, error) with one eth_getTransactionByHash call.
+
+    Same failure contract as fetch_tx_to. tx_from is lowercased, or None
+    when the response does not carry it.
     """
     sess = session or requests
     try:
@@ -91,20 +110,22 @@ def fetch_tx_to(
         r.raise_for_status()
         data = r.json()
     except requests.exceptions.RequestException as e:
-        return None, f"HTTP error: {e}"
+        return None, None, f"HTTP error: {e}"
 
     # Etherscan V2 proxy errors come back as {jsonrpc, id, error: {...}} or
     # as a body with 'message' set. Result missing or null means tx not found.
     if 'error' in data and data.get('error'):
-        return None, f"Etherscan error: {data['error']}"
+        return None, None, f"Etherscan error: {data['error']}"
     result = data.get('result')
     if not isinstance(result, dict):
-        return None, f"unexpected result shape: {data!r}"
+        return None, None, f"unexpected result shape: {data!r}"
+    from_addr = result.get('from')
+    tx_from = from_addr.lower() if isinstance(from_addr, str) else None
     to_addr = result.get('to')
     if to_addr is None:
         # Contract creation tx — `to` is null. Definitely not a router call.
-        return '', None
-    return to_addr.lower(), None
+        return '', tx_from, None
+    return to_addr.lower(), tx_from, None
 
 
 def classify_row(
@@ -117,7 +138,8 @@ def classify_row(
     """Classify one row. Returns (final_protocol, tx_to, error).
 
     final_protocol = expected_protocol if tx.to is a known router for it;
-                   = 'other' if tx.to is not a known router;
+                   = 'other' if tx.to is not a known router, or if a fee
+                     receiver sent the tx (its own swap, not a fee);
                    = None if classification couldn't run (API error).
 
     tx_to lets the caller recognise LiFi-Diamond transfers, which get a
@@ -125,9 +147,14 @@ def classify_row(
 
     Caller writes the new protocol + verification tag only when error is None.
     """
-    tx_to, err = fetch_tx_to(api_key, chainid, tx_hash, session=session)
+    tx_to, tx_from, err = fetch_tx_endpoints(api_key, chainid, tx_hash, session=session)
     if err is not None:
         return None, None, err
+
+    if tx_from in _fee_receiver_set():
+        # The receiver sent this tx itself: a swap it made with its own funds.
+        # The tokens it got back are swap output, not an integrator fee.
+        return 'other', tx_to, None
 
     expected_routers = _router_set(expected_protocol)
     if not expected_routers:

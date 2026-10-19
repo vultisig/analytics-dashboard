@@ -30,6 +30,12 @@ class THORChainIngestor(BaseIngestor):
     
     def parse_swap(self, raw_swap: Dict) -> Dict:
         """Parse THORChain swap data into normalized format"""
+        if raw_swap.get('status') == 'pending':
+            # A streaming swap still in progress: its affiliate out-leg and
+            # amounts are not final. The rolling Midgard re-check in
+            # main.sync_source stores it once it completes.
+            return None
+
         try:
             # Basic transaction info
             timestamp = self.parse_timestamp(raw_swap.get('date', ''))
@@ -95,11 +101,17 @@ class THORChainIngestor(BaseIngestor):
                 out_heights.append(int(height) if height is not None else None)
 
             # Fee data - extract from the Vultisig affiliate output
+            affiliate_output_count = sum(1 for o in raw_swap.get('out', []) if o.get('affiliate'))
             fee_data = self._find_vultisig_affiliate_output(raw_swap.get('out', []), vultisig_address)
             if fee_data and fee_data.get('coins'):
                 fee_coin = fee_data['coins'][0]
                 fee_asset = fee_coin.get('asset', '')
                 fee_amount = float(fee_coin.get('amount', 0))
+            elif vultisig_bps > 0 and in_asset == 'THOR.RUNE':
+                # A native THOR.RUNE input pays the affiliate fee inside the protocol,
+                # so Midgard shows no affiliate out-leg. The fee was still earned.
+                fee_asset = ''
+                fee_amount = 0.0
             else:
                 # No fee collected for our affiliate
                 logger.debug(f"Skipping transaction {tx_hash}: No Vultisig affiliate fee output found")
@@ -150,7 +162,12 @@ class THORChainIngestor(BaseIngestor):
 
             # NEW: Calculate affiliate fee USD from actual fee amount collected, not percentage
             # The fee is collected in fee_asset (usually THOR.RUNE)
-            if fee_asset == 'THOR.RUNE':
+            if not fee_asset or affiliate_output_count > 1:
+                # No out-leg (native input), or several affiliates (a referral code
+                # plus ours): Midgard does not say which out-leg is ours, so use
+                # our own bps of the input value.
+                affiliate_fee_usd = (affiliate_fee_bps / 10000) * in_amount_usd
+            elif fee_asset == 'THOR.RUNE':
                 # Get RUNE price - try Midgard first, fallback to swap data
                 try:
                     rune_price_usd = self._get_rune_price_from_midgard(timestamp)
