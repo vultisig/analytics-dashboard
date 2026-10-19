@@ -355,7 +355,9 @@ class EtherscanIngestor:
         chain_name: str,
     ) -> Tuple[int, Optional[str]]:
         last_block = self._last_block_for(receiver_address, chain_name)
-        from_block = (last_block + 1) if last_block else 0
+        # Resume AT the last block, not after it: a run that stopped at the
+        # page cap can end mid-block. ON CONFLICT (tx_hash) drops the repeats.
+        from_block = last_block or 0
         categories = list(ALCHEMY_CATEGORIES)
         page_key = None
         inserted = 0
@@ -366,10 +368,12 @@ class EtherscanIngestor:
             transfers, next_key, err = self.fetch_alchemy_page(
                 network, receiver_address, from_block, page_key, categories
             )
-            if err and 'internal' in categories:
+            if err and 'internal' in categories and "'internal' category" in err:
                 # Network without internal-transfer support: ERC-20 only.
-                logger.info(f"  {chain_name}: retrying without 'internal' ({err})")
+                # Restart pagination, because a page key belongs to one query.
+                logger.info(f"  {chain_name}: no internal transfers on {network}, ERC-20 only")
                 categories = ['erc20']
+                page_key = None
                 continue
             if err:
                 return inserted, err

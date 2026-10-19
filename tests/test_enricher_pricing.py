@@ -71,10 +71,30 @@ class TestResolveFeeUsd(unittest.TestCase):
         self.assertEqual(_enricher().resolve_fee_usd(_record()), 0.0)
 
     @patch.object(eav.requests, "get")
-    def test_llama_failure_returns_zero(self, mock_get):
+    def test_llama_timeout_is_transient(self, mock_get):
         import requests as req
         mock_get.side_effect = req.exceptions.Timeout("slow")
+        with self.assertRaises(eav.TransientPriceError):
+            _enricher().resolve_fee_usd(_record())
+
+    @patch.object(eav.requests, "get")
+    def test_llama_404_is_definitive_zero(self, mock_get):
+        import requests as req
+        resp = MagicMock(status_code=404)
+        mock_get.return_value.raise_for_status.side_effect = req.exceptions.HTTPError(response=resp)
         self.assertEqual(_enricher().resolve_fee_usd(_record()), 0.0)
+
+    @patch.object(eav.requests, "get")
+    def test_transient_failure_leaves_row_unstamped(self, mock_get):
+        import requests as req
+        resp = MagicMock(status_code=503)
+        mock_get.return_value.raise_for_status.side_effect = req.exceptions.HTTPError(response=resp)
+        enricher = _enricher()
+        enricher.apply_updates = MagicMock()
+        enricher.extract_swap_path = MagicMock(return_value={})
+        row = _record(tx_hash="0xabc", swap_volume_usd=None, token_in_symbol=None, token_out_symbol=None)
+        self.assertFalse(enricher.enrich_record(row))
+        enricher.apply_updates.assert_not_called()
 
     @patch.object(eav.requests, "get")
     def test_native_fee_has_no_contract_lookup(self, mock_get):

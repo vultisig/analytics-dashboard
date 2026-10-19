@@ -72,6 +72,11 @@ NATIVE_TOKENS = {
     'HyperEVM': 'HYPE',
 }
 
+class TransientPriceError(Exception):
+    """A price lookup failed for a reason that can pass (timeout, 5xx, 429).
+    The row must stay eligible for the next cycle, not be stamped processed."""
+
+
 class VolumeEnricher:
     def __init__(self):
         if not DATABASE_URL:
@@ -223,10 +228,12 @@ class VolumeEnricher:
 
     @staticmethod
     def defillama_price(chain: str, token_address: str, timestamp) -> float:
-        """Historical USD price of an ERC-20 by contract address, or 0.0.
+        """Historical USD price of an ERC-20 by contract address, or 0.0 when
+        DefiLlama has no reliable price. Raises TransientPriceError when the
+        lookup itself failed (network error, HTTP 429 or 5xx).
 
-        Pricing by contract, not symbol, keeps look-alike spam tokens (which
-        copy a symbol but not an address) from borrowing a real price."""
+        Used for tokens outside the CoinGecko symbol map. A contract lookup
+        cannot be fooled by a spam token that copies a symbol."""
         slug = DEFILLAMA_CHAINS.get(chain)
         if not slug or not token_address:
             return 0.0
@@ -240,6 +247,9 @@ class VolumeEnricher:
             r.raise_for_status()
             info = (r.json().get('coins') or {}).get(coin)
         except (requests.exceptions.RequestException, ValueError) as e:
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status is None or status == 429 or status >= 500:
+                raise TransientPriceError(f"DefiLlama {coin}: {e}") from e
             logger.warning(f"DefiLlama price failed for {coin}: {e}")
             return 0.0
         if not info or float(info.get('confidence') or 0) < DEFILLAMA_MIN_CONFIDENCE:
@@ -298,7 +308,11 @@ class VolumeEnricher:
 
         updates = {}
         if record.get('swap_volume_usd') is None:
-            fee_usd = self.resolve_fee_usd(record)
+            try:
+                fee_usd = self.resolve_fee_usd(record)
+            except TransientPriceError as e:
+                logger.warning(f"Skipping {tx_hash} this cycle, price lookup failed: {e}")
+                return False
             if fee_usd:
                 updates['swap_volume_usd'] = fee_usd * VOLUME_TO_FEE_MULTIPLIER
                 if not record.get('actual_fee_usd'):

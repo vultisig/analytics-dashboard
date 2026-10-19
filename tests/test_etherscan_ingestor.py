@@ -376,12 +376,25 @@ class TestIngestChainAlchemy(unittest.TestCase):
     @patch("ingestors.etherscan_ingestor.requests.post")
     def test_retries_without_internal_when_rejected(self, mock_post, _mock_ev):
         mock_post.side_effect = [
-            _alchemy_resp([], error={"code": -32602, "message": "internal category not supported"}),
+            _alchemy_resp([ALCHEMY_ERC20], page_key="p2"),
+            _alchemy_resp([], error={"code": -32602, "message":
+                          "The 'internal' category is only supported for ETH and MATIC."}),
             _alchemy_resp([ALCHEMY_ERC20]),
         ]
-        _, err = self.ing.ingest_chain("kyberswap", RECEIVER, 8453, "Base")
+        _, err = self.ing.ingest_chain("kyberswap", RECEIVER, 56, "BSC")
         self.assertIsNone(err)
-        self.assertEqual(mock_post.call_args_list[1][1]["json"]["params"][0]["category"], ["erc20"])
+        retry = mock_post.call_args_list[2][1]["json"]["params"][0]
+        self.assertEqual(retry["category"], ["erc20"])
+        # A page key belongs to one query: the ERC-20-only query starts over.
+        self.assertNotIn("pageKey", retry)
+
+    @patch("ingestors.etherscan_ingestor.requests.post")
+    def test_transient_error_keeps_internal_and_propagates(self, mock_post):
+        mock_post.return_value = _alchemy_resp([], error={"code": 429, "message": "rate limited"})
+        inserted, err = self.ing.ingest_chain("kyberswap", RECEIVER, 1, "Ethereum")
+        self.assertEqual(inserted, 0)
+        self.assertIn("rate limited", err)
+        self.assertEqual(mock_post.call_count, 1)
 
     @patch("ingestors.etherscan_ingestor.requests.post")
     def test_real_error_propagates(self, mock_post):
@@ -403,7 +416,8 @@ class TestIngestChainAlchemy(unittest.TestCase):
         self.assertIn("LOWER(to_address) = %s", sql)
         self.assertNotIn("protocol", sql)
         self.assertEqual(params, (RECEIVER.lower(), "Ethereum"))
-        self.assertEqual(mock_post.call_args[1]["json"]["params"][0]["fromBlock"], hex(101))
+        # Inclusive resume: a capped run can stop mid-block.
+        self.assertEqual(mock_post.call_args[1]["json"]["params"][0]["fromBlock"], hex(100))
 
     def test_full_crawl_ignores_cursor(self):
         self.ing.full_crawl = True

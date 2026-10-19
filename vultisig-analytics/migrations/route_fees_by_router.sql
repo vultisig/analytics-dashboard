@@ -8,6 +8,10 @@
 --    aggregator whose router tx.to names. Rows that are not router fees
 --    (direct sends, THORChain or MAYAChain payouts, LI.FI Diamond rows of
 --    other tools) are demoted again. One eth_getTransactionByHash per row.
+--    Only rows that were never priced are revived (1inch fees were demoted
+--    before the enricher saw them). A revived row adds $0 until the
+--    classifier confirms it, and rows rejected after pricing (for example
+--    the receiver's own swaps) stay rejected.
 --
 -- 2. Fees in tokens outside the enricher's CoinGecko symbol map were stored
 --    at 0 USD. The enricher now prices them by contract through DefiLlama.
@@ -31,6 +35,7 @@ FROM (VALUES
 WHERE d.fee_data_source = 'etherscan'
   AND d.protocol = 'other'
   AND d.volume_data_source = 'router_check'
+  AND COALESCE(d.actual_fee_usd, 0) = 0
   AND LOWER(d.to_address) = r.receiver;
 
 UPDATE dex_aggregator_revenue
