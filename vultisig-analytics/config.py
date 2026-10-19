@@ -27,6 +27,24 @@ class Config:
     ONEINCH_API_KEY = os.getenv("ONEINCH_API_KEY", "")
     LIFI_API_KEY = os.getenv("LIFI_API_KEY", "")
     ARKHAM_API_KEY = os.getenv("ARKHAM_API_KEY", "")
+    ALCHEMY_API_KEY = os.getenv("ALCHEMY_API_KEY", "")
+
+    # Fee-receiver crawl: chain name -> Alchemy network. When ALCHEMY_API_KEY
+    # is set, these chains are crawled with alchemy_getAssetTransfers (ERC-20
+    # plus native-coin credits) and their transactions are read over Alchemy
+    # RPC. The Etherscan V2 free tier refuses BSC, Base, Optimism and
+    # Avalanche, and ends Blast support on 2026-10-31.
+    ALCHEMY_NETWORKS = {
+        'Ethereum': 'eth-mainnet',
+        'BSC': 'bnb-mainnet',
+        'Polygon': 'polygon-mainnet',
+        'Arbitrum': 'arb-mainnet',
+        'Optimism': 'opt-mainnet',
+        'Base': 'base-mainnet',
+        'Avalanche': 'avax-mainnet',
+        'Blast': 'blast-mainnet',
+        'HyperEVM': 'hyperliquid-mainnet',
+    }
 
     # Arkham-sourced aggregator fee receivers
     # (source_name, evm_address) — Arkham crawls ERC20 transfers TO these.
@@ -69,6 +87,7 @@ class Config:
         'lifi': 0.8,        # 75 req/min (under 200 limit with API key)
         'arkham': 0.1,      # 600 req/min (under 1200 limit) — kept for parity with retained ArkhamIngestor
         'etherscan': 0.25,  # 4 req/s — under the V2 free-tier 5 req/s shared budget
+        'alchemy': 0.2,
     }
     MAX_RETRIES = 5
     REQUEST_TIMEOUT = 120  # Increased for slow vanaheimex responses

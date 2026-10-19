@@ -17,6 +17,9 @@ if os.path.isdir(_VA) and _VA not in sys.path:
 
 from ingestors import router_source_classifier as rsc  # noqa: E402
 
+# Etherscan-proxy path by default; Alchemy tests opt in with patch.object.
+rsc.config.ALCHEMY_API_KEY = ""
+
 
 KYBER_V2_ROUTER = '0x6131b5fae19ea4f9d964eac0408e4408b66337b5'
 ONEINCH_V5_ROUTER = '0x1111111254eeb25477b68fb85ed929f73a960582'
@@ -125,12 +128,48 @@ class TestClassifyRow(unittest.TestCase):
         self.assertIsNone(err)
 
     @patch.object(rsc.requests, 'get')
-    def test_cross_protocol_router_demoted(self, mock_get):
-        """1inch router on a kyberswap-tagged row → demote (defensible to be
-        strict; cross-protocol attribution would require calldata decode)."""
+    def test_cross_protocol_router_credited_to_that_router(self, mock_get):
+        """1inch router on a kyberswap-labeled row → credit 1inch. The apps
+        use one receiver as both the 1inch referrer and the KyberSwap fee
+        receiver, so the router, not the receiver label, names the payer."""
         mock_get.return_value = _mock_get(ONEINCH_V5_ROUTER)
         final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
-        self.assertEqual(final, 'other')
+        self.assertEqual(final, '1inch')
+        self.assertIsNone(err)
+
+    @patch.object(rsc.requests, 'get')
+    def test_kyber_router_on_oneinch_receiver_credited_to_kyber(self, mock_get):
+        mock_get.return_value = _mock_get(KYBER_V2_ROUTER)
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', '1inch')
+        self.assertEqual(final, 'kyberswap')
+
+    @patch.object(rsc.config, 'ALCHEMY_API_KEY', 'alchemy-test-key')
+    @patch.object(rsc.requests, 'post')
+    @patch.object(rsc.requests, 'get')
+    def test_alchemy_rpc_used_when_key_set(self, mock_get, mock_post):
+        resp = MagicMock()
+        resp.json.return_value = {'jsonrpc': '2.0', 'id': 1,
+                                  'result': {'to': KYBER_V2_ROUTER, 'from': TREASURY_EOA}}
+        resp.raise_for_status = MagicMock()
+        mock_post.return_value = resp
+        final, _to, err = rsc.classify_row('key', 56, '0xabc', 'kyberswap')
+        self.assertEqual(final, 'kyberswap')
+        self.assertIsNone(err)
+        mock_get.assert_not_called()
+        url = mock_post.call_args[0][0]
+        self.assertIn('bnb-mainnet.g.alchemy.com', url)
+        self.assertEqual(mock_post.call_args[1]['json']['method'], 'eth_getTransactionByHash')
+
+    @patch.object(rsc.config, 'ALCHEMY_API_KEY', 'alchemy-test-key')
+    @patch.object(rsc.requests, 'post')
+    def test_alchemy_rpc_error_fails_open(self, mock_post):
+        resp = MagicMock()
+        resp.json.return_value = {'jsonrpc': '2.0', 'id': 1, 'error': {'code': -32000, 'message': 'boom'}}
+        resp.raise_for_status = MagicMock()
+        mock_post.return_value = resp
+        final, _to, err = rsc.classify_row('key', 999, '0xabc', 'kyberswap')
+        self.assertIsNone(final)
+        self.assertIsNotNone(err)
 
     @patch.object(rsc.requests, 'get')
     def test_receiver_own_swap_demoted(self, mock_get):
@@ -216,6 +255,18 @@ class TestReclassifyAll(unittest.TestCase):
         self.assertEqual(counts['skipped_error'], 0)
         # Two UPDATE statements should have landed
         self.assertEqual(update_cursor.execute.call_count, 2)
+
+    @patch.object(rsc, 'time')
+    @patch.object(rsc.requests, 'get')
+    def test_reassigned_count(self, mock_get, _mock_time):
+        rows = [(1, '0xone', 'Ethereum', 'kyberswap', OLD_TS)]
+        mock_get.return_value = _mock_get(ONEINCH_V5_ROUTER)
+        db, update_cursor = self._mock_db(rows)
+        counts = rsc.reclassify_all('key', db)
+        self.assertEqual(counts['reassigned'], 1)
+        self.assertEqual(counts['demoted'], 0)
+        args = update_cursor.execute.call_args[0][1]
+        self.assertEqual(args[0], '1inch')
 
     @patch.object(rsc, 'time')
     @patch.object(rsc.requests, 'get')

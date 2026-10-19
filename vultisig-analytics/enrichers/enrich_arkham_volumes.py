@@ -11,6 +11,7 @@ import subprocess
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
+import requests
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -29,8 +30,10 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 # Matches the volume_to_fee_ratio of historical Arkham-sourced rows.
 VOLUME_TO_FEE_MULTIPLIER = 200
 
-# CoinGecko ids for fee tokens we can price. Fees in unmapped (long-tail)
-# tokens stay at 0 — the row is still marked processed so it never loops.
+# CoinGecko ids for fee tokens we can price by symbol. An ERC-20 fee in an
+# unmapped (long-tail) token is priced by contract address through DefiLlama
+# instead; if that fails too it stays at 0, and the row is still marked
+# processed so it never loops.
 COINGECKO_IDS = {
     'ETH': 'ethereum', 'WETH': 'ethereum',
     'BNB': 'binancecoin', 'WBNB': 'binancecoin',
@@ -43,7 +46,19 @@ COINGECKO_IDS = {
     'WBTC': 'wrapped-bitcoin',
     'VULT': 'vultisig',
     'INJ': 'injective-protocol',
+    'HYPE': 'hyperliquid',
 }
+
+# DefiLlama chain slugs for pricing an ERC-20 fee by contract address.
+DEFILLAMA_CHAINS = {
+    'Ethereum': 'ethereum', 'BSC': 'bsc', 'Polygon': 'polygon', 'Arbitrum': 'arbitrum',
+    'Optimism': 'optimism', 'Base': 'base', 'Avalanche': 'avax', 'Blast': 'blast',
+    'HyperEVM': 'hyperliquid',
+}
+DEFILLAMA_URL = 'https://coins.llama.fi/prices/historical/{ts}/{coin}'
+# DefiLlama marks thin or unreliable prices with low confidence. Below this,
+# treat the token as unpriced rather than book a spam token's pool price.
+DEFILLAMA_MIN_CONFIDENCE = 0.9
 
 NATIVE_TOKENS = {
     'Ethereum': 'ETH',
@@ -54,7 +69,13 @@ NATIVE_TOKENS = {
     'Base': 'ETH',
     'Avalanche': 'AVAX',
     'Blast': 'ETH',
+    'HyperEVM': 'HYPE',
 }
+
+class TransientPriceError(Exception):
+    """A price lookup failed for a reason that can pass (timeout, 5xx, 429).
+    The row must stay eligible for the next cycle, not be stamped processed."""
+
 
 class VolumeEnricher:
     def __init__(self):
@@ -192,14 +213,48 @@ class VolumeEnricher:
         if existing:
             return float(existing)
 
-        token_id = COINGECKO_IDS.get((record.get('fee_token_symbol') or '').upper())
-        if not token_id or not record.get('fee_amount_raw'):
+        if not record.get('fee_amount_raw'):
             return 0.0
 
-        price = self.price_fetcher.get_historical_price(token_id, record['timestamp'].date())
+        price = None
+        token_id = COINGECKO_IDS.get((record.get('fee_token_symbol') or '').upper())
+        if token_id:
+            price = self.price_fetcher.get_historical_price(token_id, record['timestamp'].date())
+        if not price and record.get('fee_token_address'):
+            price = self.defillama_price(record['chain'], record['fee_token_address'], record['timestamp'])
         if not price:
             return 0.0
         return float(record['fee_amount_raw']) * price
+
+    @staticmethod
+    def defillama_price(chain: str, token_address: str, timestamp) -> float:
+        """Historical USD price of an ERC-20 by contract address, or 0.0 when
+        DefiLlama has no reliable price. Raises TransientPriceError when the
+        lookup itself failed (network error, HTTP 429 or 5xx).
+
+        Used for tokens outside the CoinGecko symbol map. A contract lookup
+        cannot be fooled by a spam token that copies a symbol."""
+        slug = DEFILLAMA_CHAINS.get(chain)
+        if not slug or not token_address:
+            return 0.0
+        coin = f"{slug}:{token_address.lower()}"
+        try:
+            r = requests.get(
+                DEFILLAMA_URL.format(ts=int(timestamp.timestamp()), coin=coin),
+                params={'searchWidth': '12h'},
+                timeout=20,
+            )
+            r.raise_for_status()
+            info = (r.json().get('coins') or {}).get(coin)
+        except (requests.exceptions.RequestException, ValueError) as e:
+            status = getattr(getattr(e, 'response', None), 'status_code', None)
+            if status is None or status == 429 or status >= 500:
+                raise TransientPriceError(f"DefiLlama {coin}: {e}") from e
+            logger.warning(f"DefiLlama price failed for {coin}: {e}")
+            return 0.0
+        if not info or float(info.get('confidence') or 0) < DEFILLAMA_MIN_CONFIDENCE:
+            return 0.0
+        return float(info.get('price') or 0)
 
     def extract_swap_path(self, record: dict) -> dict:
         """Token in/out symbols + amounts for the swap, via volume_extractor.js.
@@ -253,7 +308,11 @@ class VolumeEnricher:
 
         updates = {}
         if record.get('swap_volume_usd') is None:
-            fee_usd = self.resolve_fee_usd(record)
+            try:
+                fee_usd = self.resolve_fee_usd(record)
+            except TransientPriceError as e:
+                logger.warning(f"Skipping {tx_hash} this cycle, price lookup failed: {e}")
+                return False
             if fee_usd:
                 updates['swap_volume_usd'] = fee_usd * VOLUME_TO_FEE_MULTIPLIER
                 if not record.get('actual_fee_usd'):
@@ -287,7 +346,7 @@ class VolumeEnricher:
         query = """
             SELECT tx_hash, chain, timestamp, actual_fee_usd, swap_volume_usd,
                    token_in_symbol, token_out_symbol,
-                   fee_token_symbol, fee_amount_raw, fee_data_source
+                   fee_token_symbol, fee_token_address, fee_amount_raw, fee_data_source
             FROM dex_aggregator_revenue
             WHERE (swap_volume_usd IS NULL OR token_in_symbol IS NULL OR token_out_symbol IS NULL)
               AND protocol IN %s
