@@ -57,6 +57,7 @@ def _make_ingestor():
         integrators=[("kyberswap", RECEIVER)],
         chains=[(1, "Ethereum")],
     )
+    ing.alchemy_key = ""  # Etherscan path unless a test opts into Alchemy
     mock_conn = MagicMock()
     mock_conn.closed = False
     ing.db = mock_conn
@@ -264,3 +265,147 @@ class TestIngest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Alchemy crawl (alchemy_getAssetTransfers)
+# ---------------------------------------------------------------------------
+
+ALCHEMY_ERC20 = {
+    "category": "erc20",
+    "blockNum": "0x17f9a3f",
+    "hash": "0x94ce4ff0e19887888f65893ea5cb15e4cd9fab7cb7861b10810c142ec66e8618",
+    "from": "0x111111125421ca6dc452d289314280a0f8842a65",
+    "to": RECEIVER.lower(),
+    "asset": "SYRUP",
+    "rawContract": {
+        "value": hex(489 * 10**18),
+        "address": "0x643C4E15d7d62Ad0aBeC4a9BD4b001aA3Ef52d66",
+        "decimal": "0x12",
+    },
+    "metadata": {"blockTimestamp": "2025-12-29T10:00:00.000Z"},
+}
+
+ALCHEMY_INTERNAL = {
+    "category": "internal",
+    "blockNum": "0x17f9a40",
+    "hash": "0x" + "ab" * 32,
+    "from": "0x111111125421ca6dc452d289314280a0f8842a65",
+    "to": RECEIVER.lower(),
+    "asset": "ETH",
+    "rawContract": {"value": hex(5 * 10**16), "address": None, "decimal": None},
+    "metadata": {"blockTimestamp": "2026-01-03T10:00:00.000Z"},
+}
+
+
+def _alchemy_resp(transfers, page_key=None, error=None):
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    if error:
+        resp.json.return_value = {"jsonrpc": "2.0", "id": 1, "error": error}
+    else:
+        result = {"transfers": transfers}
+        if page_key:
+            result["pageKey"] = page_key
+        resp.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": result}
+    return resp
+
+
+class TestBuildAlchemyRow(unittest.TestCase):
+    def test_erc20_row(self):
+        from ingestors.etherscan_ingestor import _build_alchemy_row, INSERT_COLUMNS
+        row = dict(zip(INSERT_COLUMNS, _build_alchemy_row(ALCHEMY_ERC20, "kyberswap", "Ethereum", RECEIVER)))
+        self.assertEqual(row["fee_token_symbol"], "SYRUP")
+        self.assertEqual(row["fee_token_address"], "0x643c4e15d7d62ad0abec4a9bd4b001aa3ef52d66")
+        self.assertEqual(row["amount_in"], Decimal(489))
+        self.assertEqual(row["block_number"], 0x17f9a3f)
+        self.assertEqual(row["fee_data_source"], "etherscan")
+        self.assertEqual(row["timestamp"].year, 2025)
+
+    def test_native_internal_row(self):
+        from ingestors.etherscan_ingestor import _build_alchemy_row, INSERT_COLUMNS
+        row = dict(zip(INSERT_COLUMNS, _build_alchemy_row(ALCHEMY_INTERNAL, "kyberswap", "Base", RECEIVER)))
+        self.assertEqual(row["fee_token_symbol"], "ETH")
+        self.assertEqual(row["fee_token_address"], "")
+        self.assertEqual(row["amount_in"], Decimal("0.05"))
+
+    def test_native_symbol_follows_chain(self):
+        from ingestors.etherscan_ingestor import _build_alchemy_row, INSERT_COLUMNS
+        row = dict(zip(INSERT_COLUMNS, _build_alchemy_row(ALCHEMY_INTERNAL, "kyberswap", "BSC", RECEIVER)))
+        self.assertEqual(row["fee_token_symbol"], "BNB")
+
+    def test_outbound_and_zero_filtered(self):
+        from ingestors.etherscan_ingestor import _build_alchemy_row
+        outbound = {**ALCHEMY_ERC20, "to": "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
+        zero = {**ALCHEMY_ERC20, "rawContract": {**ALCHEMY_ERC20["rawContract"], "value": "0x0"}}
+        self.assertIsNone(_build_alchemy_row(outbound, "kyberswap", "Ethereum", RECEIVER))
+        self.assertIsNone(_build_alchemy_row(zero, "kyberswap", "Ethereum", RECEIVER))
+
+
+class TestIngestChainAlchemy(unittest.TestCase):
+    def setUp(self):
+        self.ing, self.mock_conn = _make_ingestor()
+        self.ing.alchemy_key = "alchemy-test-key"
+        self.cursor = self.mock_conn.cursor.return_value
+        self.cursor.__enter__.return_value = self.cursor
+        self.cursor.fetchone.return_value = (None,)
+        self.cursor.rowcount = 1
+
+    @patch("ingestors.etherscan_ingestor.execute_values")
+    @patch("ingestors.etherscan_ingestor.time.sleep", lambda _x: None)
+    @patch("ingestors.etherscan_ingestor.requests.get")
+    @patch("ingestors.etherscan_ingestor.requests.post")
+    def test_pages_with_page_key(self, mock_post, mock_get, mock_ev):
+        mock_post.side_effect = [
+            _alchemy_resp([ALCHEMY_ERC20], page_key="next"),
+            _alchemy_resp([ALCHEMY_INTERNAL]),
+        ]
+        inserted, err = self.ing.ingest_chain("kyberswap", RECEIVER, 56, "BSC")
+        self.assertIsNone(err)
+        self.assertEqual(inserted, 2)
+        mock_get.assert_not_called()
+        self.assertIn("bnb-mainnet.g.alchemy.com", mock_post.call_args_list[0][0][0])
+        first = mock_post.call_args_list[0][1]["json"]["params"][0]
+        second = mock_post.call_args_list[1][1]["json"]["params"][0]
+        self.assertEqual(first["category"], ["erc20", "internal"])
+        self.assertEqual(first["fromBlock"], "0x0")
+        self.assertEqual(second["pageKey"], "next")
+
+    @patch("ingestors.etherscan_ingestor.execute_values")
+    @patch("ingestors.etherscan_ingestor.time.sleep", lambda _x: None)
+    @patch("ingestors.etherscan_ingestor.requests.post")
+    def test_retries_without_internal_when_rejected(self, mock_post, _mock_ev):
+        mock_post.side_effect = [
+            _alchemy_resp([], error={"code": -32602, "message": "internal category not supported"}),
+            _alchemy_resp([ALCHEMY_ERC20]),
+        ]
+        _, err = self.ing.ingest_chain("kyberswap", RECEIVER, 8453, "Base")
+        self.assertIsNone(err)
+        self.assertEqual(mock_post.call_args_list[1][1]["json"]["params"][0]["category"], ["erc20"])
+
+    @patch("ingestors.etherscan_ingestor.requests.post")
+    def test_real_error_propagates(self, mock_post):
+        mock_post.return_value = _alchemy_resp([], error={"code": 401, "message": "invalid key"})
+        self.ing.alchemy_key = "bad"
+        with patch("ingestors.etherscan_ingestor.ALCHEMY_CATEGORIES", ["erc20"]):
+            inserted, err = self.ing.ingest_chain("kyberswap", RECEIVER, 1, "Ethereum")
+        self.assertEqual(inserted, 0)
+        self.assertIn("invalid key", err)
+
+    @patch("ingestors.etherscan_ingestor.execute_values")
+    @patch("ingestors.etherscan_ingestor.time.sleep", lambda _x: None)
+    @patch("ingestors.etherscan_ingestor.requests.post")
+    def test_cursor_keyed_on_receiver(self, mock_post, _mock_ev):
+        self.cursor.fetchone.return_value = (100,)
+        mock_post.return_value = _alchemy_resp([])
+        self.ing.ingest_chain("kyberswap", RECEIVER, 1, "Ethereum")
+        sql, params = next(c[0] for c in self.cursor.execute.call_args_list if "MAX(block_number)" in c[0][0])
+        self.assertIn("LOWER(to_address) = %s", sql)
+        self.assertNotIn("protocol", sql)
+        self.assertEqual(params, (RECEIVER.lower(), "Ethereum"))
+        self.assertEqual(mock_post.call_args[1]["json"]["params"][0]["fromBlock"], hex(101))
+
+    def test_full_crawl_ignores_cursor(self):
+        self.ing.full_crawl = True
+        self.assertIsNone(self.ing._last_block_for(RECEIVER, "Ethereum"))
+        self.cursor.execute.assert_not_called()

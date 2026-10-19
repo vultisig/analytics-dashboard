@@ -1,4 +1,14 @@
-"""Etherscan V2 multichain ingestor for DEX aggregator fees."""
+"""Fee-receiver ingestor for DEX aggregator fees (Etherscan V2 or Alchemy).
+
+With ALCHEMY_API_KEY set, every chain in config.ALCHEMY_NETWORKS is crawled
+with alchemy_getAssetTransfers, which also returns native-coin credits
+(1inch and KyberSwap pay the fee in the output token, which can be the
+chain's native coin). Without the key, the Etherscan V2 `tokentx` crawl runs
+as before (ERC-20 only).
+
+Rows from both crawls carry fee_data_source = 'etherscan', which every
+consumer reads as "on-chain transfer into a fee receiver".
+"""
 
 import os
 import logging
@@ -27,10 +37,21 @@ DEFAULT_CHAINS: List[Tuple[int, str]] = [
     (8453, 'Base'),
     (43114, 'Avalanche'),
     (81457, 'Blast'),
+    (999, 'HyperEVM'),
 ]
 
 PAGE_SIZE = 1000  # Etherscan tokentx cap
 MAX_PAGES_PER_CHAIN = 20
+
+ALCHEMY_PAGE_SIZE = 1000
+# 'internal' carries native-coin fees paid out by a router contract. Some
+# networks reject it; the crawl then retries the page with ERC-20 only.
+ALCHEMY_CATEGORIES = ['erc20', 'internal']
+NATIVE_SYMBOLS = {
+    'Ethereum': 'ETH', 'BSC': 'BNB', 'Polygon': 'POL', 'Arbitrum': 'ETH',
+    'Optimism': 'ETH', 'Base': 'ETH', 'Avalanche': 'AVAX', 'Blast': 'ETH',
+    'HyperEVM': 'HYPE',
+}
 
 # Row column order matches the INSERT statement in _insert_rows.
 INSERT_COLUMNS = (
@@ -97,6 +118,72 @@ def _build_row(
     )
 
 
+def _build_alchemy_row(
+    transfer: Dict,
+    source_name: str,
+    chain_name: str,
+    receiver_address: str,
+) -> Optional[Tuple]:
+    """Convert one alchemy_getAssetTransfers record to an INSERT tuple.
+
+    Same column layout as _build_row. Native-coin credits ('internal' or
+    'external') get the chain's native symbol and an empty token address.
+    Returns None for outbound, zero-value or malformed records.
+    """
+    tx_hash = transfer.get('hash')
+    if not tx_hash:
+        return None
+    to_addr = (transfer.get('to') or '').lower()
+    if to_addr != receiver_address.lower():
+        return None
+
+    raw = transfer.get('rawContract') or {}
+    try:
+        raw_value = int(raw.get('value') or '0x0', 16)
+        native = transfer.get('category') in ('internal', 'external')
+        decimals_hex = raw.get('decimal')
+        decimals = int(decimals_hex, 16) if decimals_hex else (18 if native else 0)
+        block_number = int(transfer.get('blockNum') or '0x0', 16) or None
+    except (TypeError, ValueError):
+        return None
+    if raw_value == 0:
+        return None
+
+    amount = Decimal(raw_value) / (Decimal(10) ** decimals) if decimals else Decimal(raw_value)
+    ts_str = (transfer.get('metadata') or {}).get('blockTimestamp')
+    timestamp = (
+        datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+        if ts_str
+        else datetime.now(tz=timezone.utc)
+    )
+    if native:
+        symbol = NATIVE_SYMBOLS.get(chain_name) or transfer.get('asset') or ''
+        token_address = ''
+    else:
+        symbol = transfer.get('asset') or ''
+        token_address = (raw.get('address') or '').lower()
+
+    return (
+        tx_hash,
+        chain_name,
+        source_name,
+        timestamp,
+        0,  # actual_fee_usd — enricher prices it
+        symbol,
+        token_address,
+        format(amount, 'f'),
+        None,
+        None, None, None, None,
+        amount,
+        None,
+        block_number,
+        (transfer.get('from') or '').lower(),
+        to_addr,
+        'etherscan',  # on-chain fee-receiver crawl; consumers filter on this value
+        None,
+    )
+
+
 class EtherscanIngestor:
     """Ingests aggregator fee transfers via Etherscan V2 multichain API."""
 
@@ -117,6 +204,10 @@ class EtherscanIngestor:
         self.chains = chains if chains is not None else DEFAULT_CHAINS
         # Shared rate budget: 5 req/s across all chainids on one key.
         self.delay = config.API_DELAYS.get('etherscan', 0.25)
+        self.alchemy_key = config.ALCHEMY_API_KEY
+        self.alchemy_delay = config.API_DELAYS.get('alchemy', 0.2)
+        # full_crawl ignores the cursor (one-off history backfill).
+        self.full_crawl = False
 
     def _get_connection(self):
         try:
@@ -137,16 +228,22 @@ class EtherscanIngestor:
         logger.info("Database connection established")
         return self.db
 
-    def _last_block_for(self, source_name: str, chain_name: str) -> Optional[int]:
-        """Highest block_number already ingested for (protocol, chain), or
-        None to start from chain genesis."""
+    def _last_block_for(self, receiver_address: str, chain_name: str) -> Optional[int]:
+        """Highest block_number already ingested for (receiver, chain), or
+        None to start from chain genesis.
+
+        Keyed on the receiver, not on protocol: the classifier moves rows
+        between '1inch', 'kyberswap' and 'other', and a protocol-keyed
+        cursor would then step backwards and re-crawl old pages."""
+        if self.full_crawl:
+            return None
         db = self._get_connection()
         cursor = db.cursor()
         try:
             cursor.execute(
                 "SELECT MAX(block_number) FROM dex_aggregator_revenue "
-                "WHERE protocol = %s AND chain = %s",
-                (source_name, chain_name),
+                "WHERE LOWER(to_address) = %s AND chain = %s",
+                (receiver_address.lower(), chain_name),
             )
             row = cursor.fetchone()
             return row[0] if row and row[0] is not None else None
@@ -214,6 +311,95 @@ class EtherscanIngestor:
             execute_values(cur, sql, rows, page_size=500)
             return cur.rowcount
 
+    def fetch_alchemy_page(
+        self,
+        network: str,
+        address: str,
+        from_block: int,
+        page_key: Optional[str],
+        categories: List[str],
+    ) -> Tuple[List[Dict], Optional[str], Optional[str]]:
+        """One page of inbound transfers. Returns (transfers, next_page_key,
+        error_msg); a real failure surfaces as error_msg, like Etherscan."""
+        params = {
+            'fromBlock': hex(from_block),
+            'toBlock': 'latest',
+            'toAddress': address,
+            'category': categories,
+            'withMetadata': True,
+            'excludeZeroValue': True,
+            'maxCount': hex(ALCHEMY_PAGE_SIZE),
+            'order': 'asc',
+        }
+        if page_key:
+            params['pageKey'] = page_key
+        body = {'jsonrpc': '2.0', 'id': 1, 'method': 'alchemy_getAssetTransfers', 'params': [params]}
+        try:
+            r = requests.post(
+                f"https://{network}.g.alchemy.com/v2/{self.alchemy_key}", json=body, timeout=30
+            )
+            r.raise_for_status()
+            data = r.json()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            return [], None, f"Alchemy HTTP error on {network}: {e}"
+        if data.get('error'):
+            return [], None, f"Alchemy {network} error: {data['error']}"
+        result = data.get('result') or {}
+        return result.get('transfers') or [], result.get('pageKey'), None
+
+    def _ingest_chain_alchemy(
+        self,
+        source_name: str,
+        receiver_address: str,
+        network: str,
+        chain_name: str,
+    ) -> Tuple[int, Optional[str]]:
+        last_block = self._last_block_for(receiver_address, chain_name)
+        from_block = (last_block + 1) if last_block else 0
+        categories = list(ALCHEMY_CATEGORIES)
+        page_key = None
+        inserted = 0
+        max_pages = None if self.full_crawl else MAX_PAGES_PER_CHAIN
+
+        page = 0
+        while max_pages is None or page < max_pages:
+            transfers, next_key, err = self.fetch_alchemy_page(
+                network, receiver_address, from_block, page_key, categories
+            )
+            if err and 'internal' in categories:
+                # Network without internal-transfer support: ERC-20 only.
+                logger.info(f"  {chain_name}: retrying without 'internal' ({err})")
+                categories = ['erc20']
+                continue
+            if err:
+                return inserted, err
+
+            rows = [
+                row for t in transfers
+                if (row := _build_alchemy_row(t, source_name, chain_name, receiver_address)) is not None
+            ]
+            try:
+                page_inserts = self._insert_rows(rows)
+                self._get_connection().commit()
+            except Exception as e:
+                logger.error(f"insert batch failed for {source_name}/{chain_name} page={page + 1}: {e}")
+                if self.db:
+                    self.db.rollback()
+                return inserted, f"{chain_name} insert failed: {e}"
+
+            inserted += page_inserts
+            page += 1
+            logger.info(
+                f"  {source_name}/{chain_name} (alchemy) page={page}: {page_inserts} new "
+                f"(of {len(transfers)} returned, {len(rows)} inbound)"
+            )
+            if not next_key:
+                break
+            page_key = next_key
+            time.sleep(self.alchemy_delay)
+
+        return inserted, None
+
     def ingest_chain(
         self,
         source_name: str,
@@ -221,7 +407,11 @@ class EtherscanIngestor:
         chainid: int,
         chain_name: str,
     ) -> Tuple[int, Optional[str]]:
-        last_block = self._last_block_for(source_name, chain_name)
+        network = config.ALCHEMY_NETWORKS.get(chain_name) if self.alchemy_key else None
+        if network:
+            return self._ingest_chain_alchemy(source_name, receiver_address, network, chain_name)
+
+        last_block = self._last_block_for(receiver_address, chain_name)
         startblock = (last_block + 1) if last_block else 0
         inserted = 0
 
@@ -296,8 +486,14 @@ class EtherscanIngestor:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Crawl fee-receiver transfers')
+    parser.add_argument('--full', action='store_true',
+                        help='Ignore the cursor and crawl each chain from genesis (one-off backfill)')
+    args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ingestor = EtherscanIngestor()
+    ingestor.full_crawl = args.full
     for r in ingestor.ingest():
         print(r)
 
