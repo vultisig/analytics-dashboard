@@ -750,6 +750,54 @@ class TestParseSwap(unittest.TestCase):
         raw = _with_vultisig(include_fee_output=False)
         self.assertIsNone(self.ing.parse_swap(raw))
 
+    def test_native_rune_input_without_fee_output_uses_bps(self):
+        """A THOR.RUNE input pays the affiliate fee inside the protocol, so
+        Midgard has no affiliate out-leg. The fee is still earned."""
+        raw = _with_vultisig(include_fee_output=False, bps=50)
+        raw["in"][0]["coins"][0]["asset"] = "THOR.RUNE"
+        raw["in"][0]["coins"][0]["amount"] = "100000000000"  # 1,000 RUNE
+        raw["metadata"]["swap"]["inPriceUSD"] = "2.0"
+        # High slip so the sanity check does not replace the input value.
+        raw["metadata"]["swap"]["swapSlip"] = "9999"
+        result = self.ing.parse_swap(raw)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["in_amount_usd"], 2000.0, places=8)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], 10.0, places=8)  # 50 bps
+
+    def test_referral_swap_uses_vultisig_bps_not_first_affiliate_output(self):
+        """With a referral code ahead of ours (ref/vi, 10/35 bps), Midgard has
+        two affiliate out-legs and does not say which one is ours. The first
+        one is the referrer's 10 bps, so take our 35 bps of the input."""
+        raw = _with_vultisig(
+            affiliate_address="ref/vi",
+            affiliate_fee="0",
+            memo="=:THOR.TCY:dest:0/1/1:ref/vi:10/35",
+            fee_amount="10000000",  # referrer's leg, listed first
+        )
+        raw["out"].append(
+            {
+                "address": "thor1vultisig",
+                "coins": [{"asset": "THOR.RUNE", "amount": "35000000"}],
+                "txID": "AFFTX2",
+                "height": raw.get("height", REAL_HEIGHT),
+                "affiliate": True,
+            }
+        )
+        raw["metadata"]["swap"]["swapSlip"] = "9999"
+        result = self.ing.parse_swap(raw)
+        self.assertIsNotNone(result)
+        self.assertGreater(result["affiliate_fee_usd"], 0)
+        self.assertAlmostEqual(
+            result["affiliate_fee_usd"], (35 / 10000) * result["in_amount_usd"], places=12
+        )
+
+    def test_pending_swap_is_skipped(self):
+        """A streaming swap in progress has no final affiliate out-leg. Skip
+        it so the rolling Midgard re-check stores it once it completes."""
+        raw = _with_vultisig()
+        raw["status"] = "pending"
+        self.assertIsNone(self.ing.parse_swap(raw))
+
     # ---- Fee-asset branches -------------------------------------------------
 
     def test_fee_asset_is_input_asset(self):
