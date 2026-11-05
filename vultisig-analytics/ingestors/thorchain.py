@@ -1,6 +1,5 @@
 # ingestors/thorchain.py
-from typing import Dict, List, Optional
-from datetime import datetime, timezone
+from typing import Dict, Optional
 from .base import BaseIngestor, BackoffRetry
 from config import config
 import logging
@@ -31,7 +30,7 @@ class THORChainIngestor(BaseIngestor):
     def parse_swap(self, raw_swap: Dict) -> Dict:
         """Parse THORChain swap data into normalized format"""
         if raw_swap.get('status') == 'pending':
-            # A streaming swap still in progress: its affiliate out-leg and
+            # A streaming swap still in progress: its outputs and
             # amounts are not final. The rolling Midgard re-check in
             # main.sync_source stores it once it completes.
             return None
@@ -81,7 +80,6 @@ class THORChainIngestor(BaseIngestor):
             
             vultisig_code = vultisig_affiliate_info['code']  # vi, va, or v0
             vultisig_bps = vultisig_affiliate_info['bps']    # BPS for our affiliate
-            vultisig_address = vultisig_affiliate_info['address']  # Full address for our affiliate
             
             # NEW: Parse ALL output data (multiple outputs)
             out_data_list = raw_swap.get('out', [])
@@ -100,32 +98,10 @@ class THORChainIngestor(BaseIngestor):
                 height = out_item.get('height')
                 out_heights.append(int(height) if height is not None else None)
 
-            # Fee data - extract from the Vultisig affiliate output
-            affiliate_output_count = sum(1 for o in raw_swap.get('out', []) if o.get('affiliate'))
-            fee_data = self._find_vultisig_affiliate_output(raw_swap.get('out', []), vultisig_address)
-            if fee_data and fee_data.get('coins'):
-                fee_coin = fee_data['coins'][0]
-                fee_asset = fee_coin.get('asset', '')
-                fee_amount = float(fee_coin.get('amount', 0))
-            elif vultisig_bps > 0 and in_asset == 'THOR.RUNE':
-                # A native THOR.RUNE input pays the affiliate fee inside the protocol,
-                # so Midgard shows no affiliate out-leg. The fee was still earned.
-                fee_asset = ''
-                fee_amount = 0.0
-            else:
-                # No fee collected for our affiliate
-                logger.debug(f"Skipping transaction {tx_hash}: No Vultisig affiliate fee output found")
-                return None
+            destination_outputs = self.find_destination_outputs(raw_swap.get('out', []), in_asset, memo)
+            out_asset = destination_outputs[0]['coins'][0]['asset'] if destination_outputs else ''
+            out_amount = sum(float(o['coins'][0].get('amount', 0)) for o in destination_outputs)
 
-            # Output data - for reference (actual swap output)
-            out_data = self._find_swap_output(raw_swap.get('out', []), in_asset)
-            if out_data and out_data.get('coins'):
-                out_coin = out_data['coins'][0]
-                out_asset = out_coin.get('asset', '')
-                out_amount = float(out_coin.get('amount', 0))
-            else:
-                out_asset = ''
-                out_amount = 0
             # NEW: Store price data separately
             in_price_usd = float(swap_meta.get('inPriceUSD', 0))
             out_price_usd = float(swap_meta.get('outPriceUSD', 0))
@@ -133,65 +109,15 @@ class THORChainIngestor(BaseIngestor):
             # NEW: Parse network fees
             network_fees_raw = json.dumps(swap_meta.get('networkFees', []))
             
-            # Calculate USD volume: (amount / 1e8) * price
-            logger.info(f"DEBUG: in_amount={in_amount}, in_price_usd={in_price_usd}")
+            # THORChain normalizes every amount to 1e8, whatever the asset's native decimals.
             in_amount_usd = (in_amount / 1e8) * in_price_usd
             out_amount_usd = (out_amount / 1e8) * out_price_usd
-            # Note: THORChain normalizes all amounts to 1e8 (E8) internally.
-            # We strictly divide by 1e8 to get human readable amounts, regardless of the asset's native decimals.
-            # This applies to both input and output amounts from Midgard /v2/actions. Logic (Price Sanity Check)
-            # If slip is low, Input USD should be close to Output USD.
-            # If discrepancy is huge, assume the LOWER value is correct.
-            swap_slip_bps = float(swap_meta.get('swapSlip', 0)) if swap_meta.get('swapSlip') else 0
-            if in_amount_usd > 0 and out_amount_usd > 0 and swap_slip_bps < 500: # < 5% slip
-                diff_pct = abs(in_amount_usd - out_amount_usd) / max(in_amount_usd, out_amount_usd)
-                if diff_pct > 0.1: # > 10% discrepancy
-                    # Trust the LOWER value
-                    if in_amount_usd < out_amount_usd:
-                        out_amount_usd = in_amount_usd
-                    else:
-                        in_amount_usd = out_amount_usd
-            
-            # Fees
-            # Calculate total economic fee (Input Value - Output Value)
-            # This captures Liquidity Fee + Network Fee + Affiliate Fee + Slippage
-            total_fee_usd = max(0, in_amount_usd - out_amount_usd)
 
-            # Use the Vultisig-specific BPS (handles dual affiliates correctly)
-            affiliate_fee_bps = vultisig_bps
+            total_fee_usd = max(0, in_amount_usd - out_amount_usd) if destination_outputs else 0
 
-            # NEW: Calculate affiliate fee USD from actual fee amount collected, not percentage
-            # The fee is collected in fee_asset (usually THOR.RUNE)
-            if not fee_asset or affiliate_output_count > 1:
-                # No out-leg (native input), or several affiliates (a referral code
-                # plus ours): Midgard does not say which out-leg is ours, so use
-                # our own bps of the input value.
-                affiliate_fee_usd = (affiliate_fee_bps / 10000) * in_amount_usd
-            elif fee_asset == 'THOR.RUNE':
-                # Get RUNE price - try Midgard first, fallback to swap data
-                try:
-                    rune_price_usd = self._get_rune_price_from_midgard(timestamp)
-                    logger.debug(f"Got RUNE price from Midgard: ${rune_price_usd:.4f}")
-                except Exception as e:
-                    logger.warning(f"Failed to get RUNE price from Midgard for {tx_hash}: {e}, using fallback")
-                    rune_price_usd = self._derive_rune_price_from_pools(raw_swap)
-                    if rune_price_usd > 0:
-                        logger.debug(f"Derived RUNE price from swap: ${rune_price_usd:.4f}")
-
-                # Calculate USD value of fee collected in RUNE
-                affiliate_fee_usd = (fee_amount / 1e8) * rune_price_usd
-            elif fee_asset == in_asset:
-                # Fee is in input asset
-                affiliate_fee_usd = (fee_amount / 1e8) * in_price_usd
-            elif fee_asset == out_asset:
-                # Fee is in output asset
-                affiliate_fee_usd = (fee_amount / 1e8) * out_price_usd
-            else:
-                # Unknown asset, fallback to percentage calculation
-                logger.warning(f"Unknown fee asset {fee_asset} for {tx_hash}, using percentage fallback")
-                affiliate_fee_usd = (affiliate_fee_bps / 10000) * in_amount_usd
-
-            logger.info(f"DEBUG: tx={tx_hash[:16]}..., vultisig_bps={vultisig_bps}, fee_asset={fee_asset}, fee_amount={fee_amount}, affiliate_fee_usd=${affiliate_fee_usd:.2f}")
+            # Flagged outputs are not reliable: on referral swaps they belong to the
+            # partner, and on part-refunded streaming swaps to the user.
+            affiliate_fee_usd = (vultisig_bps / 10000) * in_amount_usd
 
             # We can estimate liquidity/network fees as the remainder, but they are less critical for revenue
             # liquidity_fee_usd = total_fee_usd - affiliate_fee_usd - network_fee_usd (approx)
@@ -231,8 +157,8 @@ class THORChainIngestor(BaseIngestor):
                 'in_asset': in_asset,
                 'in_amount': in_amount,
                 'in_amount_usd': in_amount_usd,
-                'out_asset': fee_asset,  # Use fee_asset for price calculation
-                'out_amount': fee_amount,  # Use fee_amount for price calculation
+                'out_asset': out_asset,
+                'out_amount': out_amount,
                 'out_amount_usd': out_amount_usd,
                 'total_fee_usd': total_fee_usd,
                 'network_fee_usd': network_fee_usd,
@@ -323,102 +249,3 @@ class THORChainIngestor(BaseIngestor):
             'bps': vultisig_bps,
             'address': affiliates[vultisig_index]  # The exact affiliate code from the address
         }
-    
-    def _find_vultisig_affiliate_output(self, outputs: List[Dict], vultisig_address: str) -> Optional[Dict]:
-        """
-        Find the affiliate output for Vultisig.
-        In dual affiliate scenarios, there may be multiple affiliate outputs.
-        We need to find the one corresponding to our affiliate.
-        
-        Note: THORChain outputs don't explicitly tag which affiliate output belongs to which affiliate.
-        For now, we'll use the first affiliate output. If there are multiple affiliates,
-        we may need more sophisticated logic based on output addresses.
-        """
-        for output in outputs:
-            if output.get('affiliate'):
-                return output
-        return None
-    
-    def _find_swap_output(self, outputs: List[Dict], in_asset: str) -> Optional[Dict]:
-        """Find the actual swap output (different asset, non-affiliate)"""
-        # Find an output with a different asset than input
-        for output in outputs:
-            if output.get('coins') and len(output['coins']) > 0:
-                out_asset = output['coins'][0].get('asset', '')
-                if not output.get('affiliate') and out_asset != in_asset:
-                    return output
-
-        # Fallback: find first non-affiliate output
-        for output in outputs:
-            if not output.get('affiliate'):
-                return output
-
-        return outputs[0] if outputs else None
-
-    def _get_rune_price_from_midgard(self, timestamp: datetime) -> float:
-        """
-        Query Midgard /v2/history/swaps for RUNE price at the given timestamp.
-
-        API: GET /v2/history/swaps?interval=5min&from={timestamp}&count=1
-        Returns: runePriceUSD field from the first interval
-        """
-        from datetime import timezone
-
-        # Get Unix timestamp
-        ts_unix = int(timestamp.replace(tzinfo=timezone.utc).timestamp())
-
-        # Replace /v2/actions with /v2/history/swaps
-        history_url = self.api_endpoint.replace('/v2/actions', '/v2/history/swaps')
-
-        # Use 5min interval, from timestamp, count=1 (only these 2 parameters allowed)
-        params = {
-            'interval': '5min',
-            'from': ts_unix,
-            'count': 1
-        }
-
-        try:
-            response = self.make_request(history_url, params)
-            intervals = response.get('intervals', [])
-            if intervals and len(intervals) > 0:
-                rune_price = float(intervals[0].get('runePriceUSD', 0))
-                if rune_price > 0:
-                    return rune_price
-        except Exception as e:
-            logger.warning(f"Midgard history API error: {e}")
-
-        raise Exception("No RUNE price data available from Midgard")
-
-    def _derive_rune_price_from_pools(self, raw_swap: Dict) -> float:
-        """
-        FALLBACK: Calculate RUNE price from pool data in the swap.
-
-        For swaps involving RUNE on one side:
-        - If X → RUNE: RUNE price = outPriceUSD
-        - If RUNE → X: RUNE price = inPriceUSD
-        """
-        try:
-            # Extract in/out data
-            in_data = raw_swap['in'][0]
-            in_coin = in_data['coins'][0]
-            in_asset = in_coin.get('asset', '')
-
-            metadata = raw_swap.get('metadata', {}).get('swap', {})
-            in_price_usd = float(metadata.get('inPriceUSD', 0))
-            out_price_usd = float(metadata.get('outPriceUSD', 0))
-
-            # Find RUNE side
-            out_data = self._find_swap_output(raw_swap.get('out', []), in_asset)
-            if out_data and out_data.get('coins'):
-                out_coin = out_data['coins'][0]
-                out_asset = out_coin.get('asset', '')
-
-                if in_asset == 'THOR.RUNE' and in_price_usd > 0:
-                    return in_price_usd
-                elif out_asset == 'THOR.RUNE' and out_price_usd > 0:
-                    return out_price_usd
-        except Exception as e:
-            logger.warning(f"Failed to derive RUNE price from swap: {e}")
-
-        # Last resort: return 0 (will skip this swap)
-        return 0

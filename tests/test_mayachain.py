@@ -296,10 +296,8 @@ def _with_vultisig(
     CACAO affiliate fee output. Override any of the kwargs to construct
     dual-affiliate / fee-in-other-asset / missing-fee-output variants.
 
-    Note: MayaChain ALWAYS calculates affiliate_fee_usd from bps, so the
-    fee_asset/fee_amount don't directly affect that field — but the test
-    helper still wires them through so the affiliate-output detection
-    branches can be exercised.
+    fee_asset/fee_amount only shape the flagged output, which the parser
+    ignores for the fee.
     """
     s = _clone() if swap is None else copy.deepcopy(swap)
     meta = s["metadata"]["swap"]
@@ -464,74 +462,6 @@ class TestExtractVultisigAffiliate(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _find_vultisig_affiliate_output & _find_swap_output
-# ---------------------------------------------------------------------------
-
-class TestFindOutputs(unittest.TestCase):
-    def setUp(self):
-        self.ing = MayaChainIngestor()
-
-    def test_no_real_action_has_affiliate_output(self):
-        for i, action in enumerate(REAL_RESPONSE["actions"]):
-            with self.subTest(action=i):
-                self.assertIsNone(
-                    self.ing._find_vultisig_affiliate_output(action["out"], "vi")
-                )
-
-    def test_real_swap_swap_output_is_first_zec(self):
-        out = self.ing._find_swap_output(REAL_SWAP["out"], "DASH~DASH")
-        self.assertEqual(out["coins"][0]["asset"], "ZEC~ZEC")
-        # First output has empty txID
-        self.assertEqual(out["txID"], "")
-
-    def test_btc_action_swap_output_is_zec(self):
-        """Action 2 is a BTC~BTC → ZEC~ZEC cross-chain swap."""
-        action = REAL_RESPONSE["actions"][2]
-        out = self.ing._find_swap_output(action["out"], "BTC~BTC")
-        self.assertEqual(out["coins"][0]["asset"], "ZEC~ZEC")
-
-    def test_find_affiliate_output_returns_first_affiliate(self):
-        outputs = [
-            {"affiliate": False, "coins": [{"asset": "ZEC~ZEC", "amount": "1"}]},
-            {"affiliate": True, "coins": [{"asset": "MAYA.CACAO", "amount": "2"}]},
-            {"affiliate": True, "coins": [{"asset": "MAYA.CACAO", "amount": "3"}]},
-        ]
-        result = self.ing._find_vultisig_affiliate_output(outputs, "vi")
-        self.assertEqual(result["coins"][0]["amount"], "2")
-
-    def test_find_affiliate_output_none_when_no_affiliate(self):
-        outputs = [{"affiliate": False, "coins": []}]
-        self.assertIsNone(self.ing._find_vultisig_affiliate_output(outputs, "vi"))
-
-    def test_find_swap_output_prefers_different_asset_non_affiliate(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "MAYA.CACAO", "amount": "1"}]},
-            {"affiliate": False, "coins": [{"asset": "DASH~DASH", "amount": "2"}]},
-            {"affiliate": False, "coins": [{"asset": "ZEC~ZEC", "amount": "3"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "DASH~DASH")
-        self.assertEqual(result["coins"][0]["asset"], "ZEC~ZEC")
-
-    def test_find_swap_output_falls_back_to_any_non_affiliate(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "MAYA.CACAO", "amount": "1"}]},
-            {"affiliate": False, "coins": [{"asset": "DASH~DASH", "amount": "2"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "DASH~DASH")
-        self.assertEqual(result["coins"][0]["asset"], "DASH~DASH")
-
-    def test_find_swap_output_last_resort_returns_first(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "MAYA.CACAO", "amount": "1"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "DASH~DASH")
-        self.assertEqual(result["coins"][0]["asset"], "MAYA.CACAO")
-
-    def test_find_swap_output_empty_list_returns_none(self):
-        self.assertIsNone(self.ing._find_swap_output([], "DASH~DASH"))
-
-
-# ---------------------------------------------------------------------------
 # parse_swap
 # ---------------------------------------------------------------------------
 
@@ -580,7 +510,6 @@ class TestParseSwap(unittest.TestCase):
         self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=6)
         self.assertAlmostEqual(result["out_amount_usd"], REAL_OUT_USD, places=6)
 
-        # The diff between in/out USD is small (≪10%), so no sanity correction.
         diff_pct = abs(REAL_IN_USD - REAL_OUT_USD) / max(REAL_IN_USD, REAL_OUT_USD)
         self.assertLess(diff_pct, 0.01)
 
@@ -596,10 +525,8 @@ class TestParseSwap(unittest.TestCase):
         # MayaChain affiliate fee = (bps/10000) * in_amount_usd, ALWAYS.
         expected_aff = (35 / 10000) * REAL_IN_USD
         self.assertAlmostEqual(result["affiliate_fee_usd"], expected_aff, places=6)
-
-        # The fee output we attached used MAYA.CACAO
-        self.assertEqual(result["out_asset"], "MAYA.CACAO")
-        self.assertEqual(result["out_amount"], 350000000000.0)
+        self.assertEqual(result["out_asset"], "ZEC~ZEC")
+        self.assertEqual(result["out_amount"], 28980939.0)
 
         # Pools, metadata, and misc
         self.assertEqual(result["pool_1"], "DASH.DASH")
@@ -759,10 +686,6 @@ class TestParseSwap(unittest.TestCase):
         )
         self.assertIsNone(self.ing.parse_swap(raw))
 
-    def test_skips_when_no_affiliate_fee_output(self):
-        raw = _with_vultisig(include_fee_output=False)
-        self.assertIsNone(self.ing.parse_swap(raw))
-
     def test_native_cacao_input_without_fee_output_uses_bps(self):
         """A MAYA.CACAO input pays the affiliate fee inside the protocol, so
         Midgard has no affiliate out-leg. The fee is still earned."""
@@ -781,6 +704,18 @@ class TestParseSwap(unittest.TestCase):
         raw["status"] = "pending"
         self.assertIsNone(self.ing.parse_swap(raw))
 
+    def test_zero_bps_swap_without_fee_output_counts_as_volume(self):
+        raw = _with_vultisig(include_fee_output=False, bps=0)
+        result = self.ing.parse_swap(raw)
+        self.assertGreater(result["in_amount_usd"], 0)
+        self.assertEqual(result["affiliate_fee_usd"], 0)
+
+    def test_partial_output_does_not_lower_input_value(self):
+        raw = _with_vultisig()
+        expected = self.ing.parse_swap(copy.deepcopy(raw))["in_amount_usd"]
+        raw["out"][0]["coins"][0]["amount"] = "1"
+        self.assertEqual(self.ing.parse_swap(raw)["in_amount_usd"], expected)
+
     # ---- MayaChain-specific decimal handling --------------------------------
 
     def test_cacao_input_uses_1e10_decimals(self):
@@ -793,10 +728,12 @@ class TestParseSwap(unittest.TestCase):
         # in_amount_usd = (1e10 / 1e10) * 0.5 = 0.5
         self.assertAlmostEqual(result["in_amount_usd"], 0.5, places=8)
 
-    def test_maya_substring_also_uses_1e10(self):
+    def test_maya_token_uses_1e8(self):
+        """Live swap 51908B68: 1892933 MAYA.MAYA at $30,103 swapped for about
+        $521 of CACAO, which only fits 1e8."""
         raw = _with_vultisig()
-        raw["in"][0]["coins"][0]["asset"] = "MAYA.MAYA"  # contains 'MAYA'
-        raw["in"][0]["coins"][0]["amount"] = "20000000000"  # 2 MAYA
+        raw["in"][0]["coins"][0]["asset"] = "MAYA.MAYA"
+        raw["in"][0]["coins"][0]["amount"] = "200000000"  # 2 MAYA
         raw["metadata"]["swap"]["inPriceUSD"] = "1.25"
         result = self.ing.parse_swap(raw)
         self.assertAlmostEqual(result["in_amount_usd"], 2.5, places=8)
@@ -809,35 +746,10 @@ class TestParseSwap(unittest.TestCase):
         raw["out"][1]["coins"][0]["asset"] = "MAYA.CACAO"
         raw["out"][1]["coins"][0]["amount"] = "10000000000"
         raw["metadata"]["swap"]["outPriceUSD"] = "0.5"
-        # High slip so the sanity-check correction does NOT collapse out_amount_usd.
         raw["metadata"]["swap"]["swapSlip"] = "9999"
         result = self.ing.parse_swap(raw)
         # out_amount_usd = (1e10 / 1e10) * 0.5 = 0.5
         self.assertAlmostEqual(result["out_amount_usd"], 0.5, places=8)
-
-    # ---- Price sanity check -------------------------------------------------
-
-    def test_price_sanity_check_trusts_lower_value(self):
-        """
-        out_amount_usd >> in_amount_usd with low slip → both collapse to lower.
-        """
-        raw = _with_vultisig()
-        # Bump output amount 100x → out_amount_usd ≈ $11000 vs in ≈ $110.
-        raw["out"][0]["coins"][0]["amount"] = "2898093900"
-        result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=6)
-        self.assertAlmostEqual(result["out_amount_usd"], REAL_IN_USD, places=6)
-
-    def test_price_sanity_check_skipped_for_high_slip(self):
-        raw = _with_vultisig()
-        raw["out"][0]["coins"][0]["amount"] = "2898093900"
-        raw["metadata"]["swap"]["swapSlip"] = "800"  # 8% > 5% threshold
-        result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        expected_out = (2898093900 / 1e8) * 380.2924279365528
-        self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=6)
-        self.assertAlmostEqual(result["out_amount_usd"], expected_out, places=4)
 
     # ---- Flags / platform / pools ------------------------------------------
 

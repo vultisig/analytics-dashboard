@@ -2,12 +2,10 @@
 """
 One-shot backfill for THORChain and MayaChain affiliate swaps.
 
-The parsers used to (a) skip swaps whose input was the chain's native asset
-(THOR.RUNE, MAYA.CACAO), because those carry no affiliate out-leg,
-(b) credit the first affiliate out-leg to us on referral swaps with two
-affiliates, and (c) store streaming swaps while they were still pending.
-Before the late-swap reconciliation in main.sync_source, a swap that
-finished after the sync had moved past it was never picked up at all.
+The parsers used to book the first flagged output as our fee, drop swaps with
+no flagged output (native inputs, 0-bps Ultimate swaps), store streaming swaps
+while still pending, lower input value from a partial output, and store the fee
+coin as the swap's output. The sync does not re-read stored swaps.
 
 This job re-pages Midgard from now back to --since and upserts every swap
 with the current parser: new rows are inserted, existing rows get every
@@ -32,6 +30,13 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Midgard re-indexed a few actions under a new date. The timestamp is part of the
+# upsert key, so align it first or the upsert would add a second row for the swap.
+ALIGN_TIMESTAMP_QUERY = """
+UPDATE swaps SET timestamp = %(timestamp)s
+WHERE source = %(source)s AND tx_hash = %(tx_hash)s AND timestamp <> %(timestamp)s
+"""
 
 UPSERT_QUERY = """
 INSERT INTO swaps (
@@ -99,7 +104,7 @@ def _make_ingestor(source: str):
 
 
 def backfill(source: str, since: datetime, dry_run: bool, ingestor=None, db=None) -> dict:
-    """Returns {'pages', 'fetched', 'written', 'fee_by_month'}."""
+    """Returns {'pages', 'fetched', 'written', 'fee_by_month', 'volume_by_month'}."""
     ingestor = ingestor or _make_ingestor(source)
     if db is None and not dry_run:
         from database.connection import DatabaseManager
@@ -108,6 +113,7 @@ def backfill(source: str, since: datetime, dry_run: bool, ingestor=None, db=None
     next_token = ''
     pages = fetched = written = 0
     fee_by_month = defaultdict(float)
+    volume_by_month = defaultdict(float)
     while True:
         response = ingestor.fetch_data(next_page_token=next_token)
         actions = response.get('actions', [])
@@ -125,12 +131,15 @@ def backfill(source: str, since: datetime, dry_run: bool, ingestor=None, db=None
                 continue
             parsed.setdefault('tool', None)
             records.append(parsed)
-            fee_by_month[parsed['timestamp'].strftime('%Y-%m')] += float(parsed['affiliate_fee_usd'] or 0)
+            month = parsed['timestamp'].strftime('%Y-%m')
+            fee_by_month[month] += float(parsed['affiliate_fee_usd'] or 0)
+            volume_by_month[month] += float(parsed['in_amount_usd'] or 0)
         fetched += len(actions)
 
         if records and not dry_run:
             with db.get_connection() as conn:
                 with conn.cursor() as cursor:
+                    cursor.executemany(ALIGN_TIMESTAMP_QUERY, records)
                     cursor.executemany(UPSERT_QUERY, records)
                     conn.commit()
             written += len(records)
@@ -144,11 +153,13 @@ def backfill(source: str, since: datetime, dry_run: bool, ingestor=None, db=None
             break
 
     for month in sorted(fee_by_month):
-        logger.info(f"{source} {month}: affiliate_fee_usd {fee_by_month[month]:,.2f}")
+        logger.info(f"{source} {month}: affiliate_fee_usd {fee_by_month[month]:,.2f}, "
+                    f"volume_usd {volume_by_month[month]:,.2f}")
     logger.info(f"Backfill complete: {fetched} actions fetched, {written} rows upserted, "
                 f"affiliate_fee_usd total {sum(fee_by_month.values()):,.2f}"
                 + (" (dry run, nothing written)" if dry_run else ""))
-    return {'pages': pages, 'fetched': fetched, 'written': written, 'fee_by_month': dict(fee_by_month)}
+    return {'pages': pages, 'fetched': fetched, 'written': written, 'fee_by_month': dict(fee_by_month),
+            'volume_by_month': dict(volume_by_month)}
 
 
 if __name__ == '__main__':
