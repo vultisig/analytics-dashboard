@@ -45,7 +45,7 @@ class _FakeIngestor:
     def parse_swap(self, action):
         if action.get('skip'):
             return None
-        return {'timestamp': action['ts'], 'affiliate_fee_usd': action['fee']}
+        return {'timestamp': action['ts'], 'affiliate_fee_usd': action['fee'], 'in_amount_usd': action['fee'] * 200}
 
 
 class TestBackfill(unittest.TestCase):
@@ -60,6 +60,7 @@ class TestBackfill(unittest.TestCase):
         self.assertEqual(result['fetched'], 4)
         self.assertEqual(result['written'], 0)
         self.assertEqual(result['fee_by_month'], {'2026-05': 3.5})
+        self.assertEqual(result['volume_by_month'], {'2026-05': 700.0})
         self.assertEqual(ingestor.calls, ['', '1'])
 
     def test_stops_when_no_next_page_token(self):
@@ -78,6 +79,15 @@ class TestBackfill(unittest.TestCase):
         self.assertIn('ON CONFLICT (timestamp, tx_hash, source) DO UPDATE', query)
         self.assertEqual(len(records), 1)
         self.assertIsNone(records[0]['tool'])
+
+    def test_aligns_timestamp_before_upserting(self):
+        """The timestamp is part of the upsert key: a re-indexed action must
+        update its row, not add a second one."""
+        db = MagicMock()
+        cursor = db.get_connection.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+        bmf.backfill('thorchain', _ts(5), dry_run=False, ingestor=_FakeIngestor([[{'ts': _ts(20), 'fee': 1.0}]]), db=db)
+        queries = [call[0][0] for call in cursor.executemany.call_args_list]
+        self.assertEqual(queries, [bmf.ALIGN_TIMESTAMP_QUERY, bmf.UPSERT_QUERY])
 
     def test_upsert_refreshes_parser_owned_columns(self):
         for column in ('affiliate_fee_usd', 'in_amount_usd', 'volume_tier', 'swap_slip',

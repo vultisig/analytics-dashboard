@@ -1,6 +1,5 @@
 # ingestors/mayachain.py
-from typing import Dict, List, Optional
-from datetime import datetime, timezone
+from typing import Dict, Optional
 from .base import BaseIngestor, BackoffRetry
 from config import config
 import logging
@@ -40,7 +39,7 @@ class MayaChainIngestor(BaseIngestor):
                 return default
 
         if raw_swap.get('status') == 'pending':
-            # A streaming swap still in progress: its affiliate out-leg and
+            # A streaming swap still in progress: its outputs and
             # amounts are not final. The rolling Midgard re-check in
             # main.sync_source stores it once it completes.
             return None
@@ -90,7 +89,6 @@ class MayaChainIngestor(BaseIngestor):
             
             vultisig_code = vultisig_affiliate_info['code']  # vi, va, or v0
             vultisig_bps = vultisig_affiliate_info['bps']    # BPS for our affiliate
-            vultisig_address = vultisig_affiliate_info['address']  # Full address for our affiliate
 
             # NEW: Parse ALL output data (multiple outputs)
             out_data_list = raw_swap.get('out', [])
@@ -109,32 +107,9 @@ class MayaChainIngestor(BaseIngestor):
                 height = out_item.get('height')
                 out_heights.append(int(height) if height is not None else None)
 
-            # Fee data - extract from the Vultisig affiliate output
-            fee_data = self._find_vultisig_affiliate_output(raw_swap.get('out', []), vultisig_address)
-            if fee_data and fee_data.get('coins'):
-                fee_coin = fee_data['coins'][0]
-                fee_asset = fee_coin.get('asset', '')
-                fee_amount = safe_float(fee_coin.get('amount', 0))
-            elif vultisig_bps > 0 and in_asset == 'MAYA.CACAO':
-                # A native MAYA.CACAO input pays the affiliate fee inside the protocol,
-                # so Midgard shows no affiliate out-leg. The fee is still earned, and
-                # the fee below comes from bps, not from the out-leg.
-                fee_asset = ''
-                fee_amount = 0.0
-            else:
-                # No fee collected for our affiliate
-                logger.debug(f"Skipping transaction {tx_hash}: No Vultisig affiliate fee output found")
-                return None
-
-            # Output data - for reference (actual swap output)
-            out_data = self._find_swap_output(raw_swap.get('out', []), in_asset)
-            if out_data and out_data.get('coins'):
-                out_coin = out_data['coins'][0]
-                out_asset = out_coin.get('asset', '')
-                out_amount = safe_float(out_coin.get('amount', 0))
-            else:
-                out_asset = ''
-                out_amount = 0
+            destination_outputs = self.find_destination_outputs(raw_swap.get('out', []), in_asset, memo)
+            out_asset = destination_outputs[0]['coins'][0]['asset'] if destination_outputs else ''
+            out_amount = sum(safe_float(o['coins'][0].get('amount', 0)) for o in destination_outputs)
 
             # NEW: Store price data separately
             in_price_usd = safe_float(swap_meta.get('inPriceUSD', 0))
@@ -148,13 +123,13 @@ class MayaChainIngestor(BaseIngestor):
             # Calculate USD volume: (amount / decimals) * unit_price
 
             # Determine decimals for input asset (CACAO uses 1e10)
-            if 'CACAO' in in_asset or 'MAYA' in in_asset:
+            if 'CACAO' in in_asset:
                 in_decimals = 1e10
             else:
                 in_decimals = 1e8
 
             # Determine decimals for output asset
-            if 'CACAO' in out_asset or 'MAYA' in out_asset:
+            if 'CACAO' in out_asset:
                 out_decimals = 1e10
             else:
                 out_decimals = 1e8
@@ -163,46 +138,14 @@ class MayaChainIngestor(BaseIngestor):
             in_amount_usd = (in_amount / in_decimals) * in_price_usd
             out_amount_usd = (out_amount / out_decimals) * out_price_usd
 
-            # Fees are in CACAO (base units 1e10)
-            liquidity_fee = safe_float(swap_meta.get('liquidityFee', 0)) / 1e10
-            affiliate_fee = safe_float(swap_meta.get('affiliateFee', 0)) / 1e10
-            network_fees = swap_meta.get('networkFees', [])
-            network_fee = sum(safe_float(fee.get('amount', 0)) for fee in network_fees) / 1e10
-
-            # Trust Lower Value Logic (Price Sanity Check)
-            # If slip is low, Input USD should be close to Output USD.
-            # If discrepancy is huge, assume the LOWER value is correct.
-            swap_slip_bps = safe_float(swap_meta.get('swapSlip', 0))
-            if in_amount_usd > 0 and out_amount_usd > 0 and swap_slip_bps < 500: # < 5% slip
-                diff_pct = abs(in_amount_usd - out_amount_usd) / max(in_amount_usd, out_amount_usd)
-                if diff_pct > 0.1: # > 10% discrepancy
-                    # Trust the LOWER value
-                    if in_amount_usd < out_amount_usd:
-                        out_amount_usd = in_amount_usd
-                    else:
-                        in_amount_usd = out_amount_usd
-
-            # Fees
-            # Calculate total economic fee (Input Value - Output Value)
-            # This captures Liquidity Fee + Network Fee + Affiliate Fee + Slippage
-
-            # Affiliate Fee is usually in basis points (bps) in the metadata
-            # Use the Vultisig-specific BPS (handles dual affiliates correctly)
-            affiliate_fee_bps = vultisig_bps
-
-            # CRITICAL: MayaChain Midgard returns unreliable affiliate fee amounts (inflated 493x-20,896x)
-            # ALWAYS calculate fees from BPS instead: affiliate_fee_usd = (bps / 10000) * volume
-            # This is based on analysis in fix_mayachain_fees.py
-            affiliate_fee_usd = (affiliate_fee_bps / 10000) * in_amount_usd
-
-            logger.info(f"DEBUG: tx={tx_hash[:16]}..., vultisig_bps={vultisig_bps}, fee_asset={fee_asset}, fee_amount={fee_amount}, affiliate_fee_usd=${affiliate_fee_usd:.2f}")
+            # Midgard's flagged amounts are unreliable here, so use our share of the input.
+            affiliate_fee_usd = (vultisig_bps / 10000) * in_amount_usd
 
             # We can estimate liquidity/network fees as the remainder
             liquidity_fee_usd = 0
             network_fee_usd = 0
 
-            # Calculate total economic fee
-            total_fee_usd = max(0, in_amount_usd - out_amount_usd)
+            total_fee_usd = max(0, in_amount_usd - out_amount_usd) if destination_outputs else 0
 
             # Pool info (NEW: store all pools as array)
             pools = raw_swap.get('pools', [])
@@ -237,8 +180,8 @@ class MayaChainIngestor(BaseIngestor):
                 'in_asset': in_asset,
                 'in_amount': in_amount,
                 'in_amount_usd': in_amount_usd,
-                'out_asset': fee_asset,  # Use fee_asset for price calculation
-                'out_amount': fee_amount,  # Use fee_amount for price calculation
+                'out_asset': out_asset,
+                'out_amount': out_amount,
                 'out_amount_usd': out_amount_usd,
                 'total_fee_usd': total_fee_usd,
                 'network_fee_usd': network_fee_usd,
@@ -329,31 +272,3 @@ class MayaChainIngestor(BaseIngestor):
             'bps': vultisig_bps,
             'address': affiliates[vultisig_index]  # The exact affiliate code from the address
         }
-    
-    def _find_vultisig_affiliate_output(self, outputs: List[Dict], vultisig_address: str) -> Optional[Dict]:
-        """
-        Find the affiliate output for Vultisig.
-        In dual affiliate scenarios, there may be multiple affiliate outputs.
-        We need to find the one corresponding to our affiliate.
-        """
-        for output in outputs:
-            if output.get('affiliate'):
-                return output
-        return None
-    
-    def _find_swap_output(self, outputs: List[Dict], in_asset: str) -> Optional[Dict]:
-        """Find the actual swap output (different asset, non-affiliate)"""
-        # Find an output with a different asset than input
-        for output in outputs:
-            if output.get('coins') and len(output['coins']) > 0:
-                out_asset = output['coins'][0].get('asset', '')
-                if not output.get('affiliate') and out_asset != in_asset:
-                    return output
-
-        # Fallback: find first non-affiliate output
-        for output in outputs:
-            if not output.get('affiliate'):
-                return output
-
-        return outputs[0] if outputs else None
-

@@ -15,7 +15,7 @@ import json
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import patch
 
 # Make `ingestors` importable whether the test runs from the repo root
@@ -313,7 +313,7 @@ def _with_vultisig(
 
     By default produces a single-affiliate ``vi`` swap at 35 bps with a
     0.1 RUNE affiliate fee output. Override any of the kwargs to construct
-    dual-affiliate / fee-in-other-asset / missing-fee-output variants.
+    dual-affiliate / missing-fee-output variants.
     """
     s = _clone() if swap is None else copy.deepcopy(swap)
     meta = s["metadata"]["swap"]
@@ -478,79 +478,44 @@ class TestExtractVultisigAffiliate(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _find_vultisig_affiliate_output & _find_swap_output
+# find_destination_outputs
 # ---------------------------------------------------------------------------
 
-class TestFindOutputs(unittest.TestCase):
-    def setUp(self):
-        self.ing = THORChainIngestor()
+class TestFindDestinationOutputs(unittest.TestCase):
+    MEMO = "=:r:thor1dest:0/1/0:vi:50"
 
-    def test_no_real_action_has_affiliate_output(self):
-        for i, action in enumerate(REAL_RESPONSE["actions"]):
-            with self.subTest(action=i):
-                self.assertIsNone(
-                    self.ing._find_vultisig_affiliate_output(action["out"], "vi")
-                )
+    def _out(self, asset, amount="1", address="thor1dest", affiliate=False):
+        out = {"address": address, "coins": [{"asset": asset, "amount": amount}]}
+        if affiliate:
+            out["affiliate"] = True
+        return out
 
-    def test_canonical_swap_output_is_tcy(self):
-        out = self.ing._find_swap_output(
-            REAL_SWAP["out"], REAL_SWAP["in"][0]["coins"][0]["asset"]
-        )
-        self.assertEqual(out["coins"][0]["asset"], "THOR.TCY")
+    def test_skips_fee_leg_and_refund(self):
+        target = self._out("ETH.ETH")
+        outputs = [
+            self._out("THOR.RUNE", address="thor1collector", affiliate=True),
+            self._out("BTC.BTC"),
+            target,
+        ]
+        self.assertEqual(THORChainIngestor.find_destination_outputs(outputs, "BTC.BTC", self.MEMO), [target])
 
-    def test_multi_output_action_picks_first_non_affiliate(self):
-        """Action 2 has two duplicate ETH-USDC outputs (neither affiliate)."""
-        action = REAL_RESPONSE["actions"][2]
-        out = self.ing._find_swap_output(
-            action["out"], action["in"][0]["coins"][0]["asset"]
-        )
+    def test_flagged_output_to_memo_destination_counts(self):
+        output = self._out("THOR.RUNE", affiliate=True)
+        self.assertEqual(THORChainIngestor.find_destination_outputs([output], "THOR.TCY", self.MEMO), [output])
+
+    def test_returns_every_leg_of_the_target_asset(self):
+        legs = [self._out("ETH.USDT", "1"), self._out("ETH.USDT", "2")]
+        self.assertEqual(THORChainIngestor.find_destination_outputs(legs, "BTC.BTC", self.MEMO), legs)
+
+    def test_duplicate_listing_of_one_leg_is_returned_once(self):
+        first = self._out("ETH.USDT", "5")
         self.assertEqual(
-            out["coins"][0]["asset"],
-            "ETH-USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+            THORChainIngestor.find_destination_outputs([first, self._out("ETH.USDT", "5")], "BTC.BTC", self.MEMO),
+            [first],
         )
-        # The first entry had the height field + empty txID
-        self.assertEqual(out["txID"], "")
-        self.assertEqual(out["height"], "25719544")
 
-    def test_find_affiliate_output_returns_first_affiliate(self):
-        outputs = [
-            {"affiliate": False, "coins": [{"asset": "ETH.ETH", "amount": "1"}]},
-            {"affiliate": True, "coins": [{"asset": "THOR.RUNE", "amount": "2"}]},
-            {"affiliate": True, "coins": [{"asset": "THOR.RUNE", "amount": "3"}]},
-        ]
-        result = self.ing._find_vultisig_affiliate_output(outputs, "vi")
-        self.assertEqual(result["coins"][0]["amount"], "2")
-
-    def test_find_affiliate_output_none_when_no_affiliate(self):
-        outputs = [{"affiliate": False, "coins": []}]
-        self.assertIsNone(self.ing._find_vultisig_affiliate_output(outputs, "vi"))
-
-    def test_find_swap_output_prefers_different_asset_non_affiliate(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "THOR.RUNE", "amount": "1"}]},
-            {"affiliate": False, "coins": [{"asset": "BTC.BTC", "amount": "2"}]},
-            {"affiliate": False, "coins": [{"asset": "ETH.ETH", "amount": "3"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "BTC.BTC")
-        self.assertEqual(result["coins"][0]["asset"], "ETH.ETH")
-
-    def test_find_swap_output_falls_back_to_any_non_affiliate(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "THOR.RUNE", "amount": "1"}]},
-            {"affiliate": False, "coins": [{"asset": "BTC.BTC", "amount": "2"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "BTC.BTC")
-        self.assertEqual(result["coins"][0]["asset"], "BTC.BTC")
-
-    def test_find_swap_output_last_resort_returns_first(self):
-        outputs = [
-            {"affiliate": True, "coins": [{"asset": "THOR.RUNE", "amount": "1"}]},
-        ]
-        result = self.ing._find_swap_output(outputs, "BTC.BTC")
-        self.assertEqual(result["coins"][0]["asset"], "THOR.RUNE")
-
-    def test_find_swap_output_empty_list_returns_none(self):
-        self.assertIsNone(self.ing._find_swap_output([], "BTC.BTC"))
+    def test_refund_only_returns_empty(self):
+        self.assertEqual(THORChainIngestor.find_destination_outputs([self._out("BTC.BTC")], "BTC.BTC", self.MEMO), [])
 
 
 # ---------------------------------------------------------------------------
@@ -560,14 +525,6 @@ class TestFindOutputs(unittest.TestCase):
 class TestParseSwap(unittest.TestCase):
     def setUp(self):
         self.ing = THORChainIngestor()
-        # Deterministic RUNE price so fee maths is predictable.
-        self.rune_patch = patch.object(
-            THORChainIngestor, "_get_rune_price_from_midgard", return_value=5.0
-        )
-        self.rune_patch.start()
-
-    def tearDown(self):
-        self.rune_patch.stop()
 
     # ---- All five real actions ---------------------------------------------
 
@@ -609,19 +566,14 @@ class TestParseSwap(unittest.TestCase):
         self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=12)
         self.assertAlmostEqual(result["out_amount_usd"], REAL_OUT_USD, places=12)
 
-        # The diff is ~4% — below the 10% sanity-check threshold, no correction.
-        diff_pct = abs(REAL_IN_USD - REAL_OUT_USD) / max(REAL_IN_USD, REAL_OUT_USD)
-        self.assertLess(diff_pct, 0.1)
-
         # total_fee = in - out
         self.assertAlmostEqual(
             result["total_fee_usd"], REAL_IN_USD - REAL_OUT_USD, places=12
         )
 
-        # Affiliate output: 0.1 RUNE * $5 = $0.5
-        self.assertEqual(result["out_asset"], "THOR.RUNE")
-        self.assertEqual(result["out_amount"], 10000000.0)
-        self.assertAlmostEqual(result["affiliate_fee_usd"], 0.5, places=6)
+        self.assertEqual(result["out_asset"], "THOR.TCY")
+        self.assertEqual(result["out_amount"], 8340.0)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], (35 / 10000) * REAL_IN_USD, places=12)
 
         # Pools, metadata, and misc
         self.assertEqual(
@@ -680,8 +632,6 @@ class TestParseSwap(unittest.TestCase):
         # pools has a single entry
         self.assertEqual(result["pool_1"], "THOR.RUJI")
         self.assertIsNone(result["pool_2"])
-        # The *real* swap output is RUNE — but `out_asset` in the result is
-        # the fee-asset (also RUNE in this case because we defaulted to it).
         self.assertEqual(result["out_asset"], "THOR.RUNE")
 
     def test_multi_output_action_parses_with_vultisig(self):
@@ -746,10 +696,6 @@ class TestParseSwap(unittest.TestCase):
         )
         self.assertIsNone(self.ing.parse_swap(raw))
 
-    def test_skips_when_no_affiliate_fee_output(self):
-        raw = _with_vultisig(include_fee_output=False)
-        self.assertIsNone(self.ing.parse_swap(raw))
-
     def test_native_rune_input_without_fee_output_uses_bps(self):
         """A THOR.RUNE input pays the affiliate fee inside the protocol, so
         Midgard has no affiliate out-leg. The fee is still earned."""
@@ -757,8 +703,6 @@ class TestParseSwap(unittest.TestCase):
         raw["in"][0]["coins"][0]["asset"] = "THOR.RUNE"
         raw["in"][0]["coins"][0]["amount"] = "100000000000"  # 1,000 RUNE
         raw["metadata"]["swap"]["inPriceUSD"] = "2.0"
-        # High slip so the sanity check does not replace the input value.
-        raw["metadata"]["swap"]["swapSlip"] = "9999"
         result = self.ing.parse_swap(raw)
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result["in_amount_usd"], 2000.0, places=8)
@@ -792,77 +736,92 @@ class TestParseSwap(unittest.TestCase):
         )
 
     def test_pending_swap_is_skipped(self):
-        """A streaming swap in progress has no final affiliate out-leg. Skip
+        """A streaming swap in progress has no final outputs. Skip
         it so the rolling Midgard re-check stores it once it completes."""
         raw = _with_vultisig()
         raw["status"] = "pending"
         self.assertIsNone(self.ing.parse_swap(raw))
 
-    # ---- Fee-asset branches -------------------------------------------------
+    # ---- Regressions from real Midgard actions -----------------------------
 
-    def test_fee_asset_is_input_asset(self):
-        in_asset = REAL_SWAP["in"][0]["coins"][0]["asset"]
-        raw = _with_vultisig(fee_asset=in_asset, fee_amount="100")
-        result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        expected = (100 / 1e8) * 0.9994973024793127
-        self.assertAlmostEqual(result["affiliate_fee_usd"], expected, places=12)
+    def _swap(self, memo, outs, in_asset="THOR.TCY", in_amount="100000000000", in_price="2.0", out_price="1.0"):
+        address, fee = memo.split(":")[4:6]
+        raw = _clone()
+        raw["in"][0]["coins"][0] = {"asset": in_asset, "amount": in_amount}
+        raw["out"] = outs
+        raw["metadata"]["swap"].update(
+            memo=memo, affiliateAddress=address, affiliateFee=fee, inPriceUSD=in_price, outPriceUSD=out_price
+        )
+        return raw
 
-    def test_fee_asset_is_output_asset(self):
-        raw = _with_vultisig(fee_asset="THOR.TCY", fee_amount="1000")
-        result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        expected = (1000 / 1e8) * 0.11514031210088482
-        self.assertAlmostEqual(result["affiliate_fee_usd"], expected, places=12)
+    def _out(self, asset, amount, address="thor1dest", affiliate=False):
+        out = {"address": address, "coins": [{"asset": asset, "amount": amount}], "txID": "", "height": "1"}
+        if affiliate:
+            out["affiliate"] = True
+        return out
 
-    def test_fee_asset_unknown_falls_back_to_bps(self):
-        raw = _with_vultisig(
-            fee_asset="DOGE.DOGE", fee_amount="5000000", bps=35
+    def test_user_output_flagged_as_affiliate_is_not_our_fee(self):
+        """Part-refunded streaming swap 5AD6E01D: Midgard flags the user's RUNE
+        output, and the memo pays us 0 bps."""
+        raw = self._swap(
+            "=:r:thor1dest:1754696093927/0/32:vi:0",
+            [self._out("THOR.RUNE", "200000000000", affiliate=True), self._out("THOR.TCY", "5000")],
         )
         result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        self.assertAlmostEqual(
-            result["affiliate_fee_usd"], (35 / 10000) * REAL_IN_USD, places=12
+        self.assertEqual(result["affiliate_fee_usd"], 0)
+        self.assertEqual(result["in_amount_usd"], 2000.0)
+        self.assertEqual(result["out_asset"], "THOR.RUNE")
+        self.assertEqual(result["out_amount_usd"], 2000.0)
+
+    def test_flagged_user_output_with_paid_bps_uses_bps(self):
+        raw = self._swap(
+            "=:r:thor1dest:0/1/0:vi:50",
+            [self._out("THOR.RUNE", "200000000000", affiliate=True)],
         )
+        self.assertAlmostEqual(self.ing.parse_swap(raw)["affiliate_fee_usd"], 10.0)
 
-    def test_rune_price_midgard_failure_uses_pool_fallback(self):
-        self.rune_patch.stop()
-        with patch.object(
-            THORChainIngestor,
-            "_get_rune_price_from_midgard",
-            side_effect=Exception("midgard down"),
-        ), patch.object(
-            THORChainIngestor,
-            "_derive_rune_price_from_pools",
-            return_value=7.5,
-        ):
-            raw = _with_vultisig(fee_amount="10000000")
-            result = self.ing.parse_swap(raw)
-        self.rune_patch.start()
-
-        self.assertIsNotNone(result)
-        self.assertAlmostEqual(result["affiliate_fee_usd"], 0.75, places=6)
-
-    # ---- Price sanity check -------------------------------------------------
-
-    def test_price_sanity_check_trusts_lower_value(self):
-        raw = _with_vultisig()
-        # Bump the output amount 100x → out_amount_usd ≫ in_amount_usd.
-        raw["out"][0]["coins"][0]["amount"] = "10000000000"
+    def test_zero_bps_swap_without_fee_output_counts_as_volume(self):
+        """Ultimate tier 8B4B77DA: pays no affiliate fee, so no flagged output."""
+        raw = self._swap("=:ETH.USDC:0xdest:636/0/27:vi:0", [self._out("ETH.USDC", "200000000000", "0xdest")])
         result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=12)
-        self.assertAlmostEqual(result["out_amount_usd"], REAL_IN_USD, places=12)
+        self.assertEqual(result["in_amount_usd"], 2000.0)
+        self.assertEqual(result["affiliate_fee_usd"], 0)
+        self.assertEqual(result["affiliate_fees_bps"], [0])
 
-    def test_price_sanity_check_skipped_for_high_slip(self):
-        raw = _with_vultisig()
-        raw["out"][0]["coins"][0]["amount"] = "10000000000"
-        raw["metadata"]["swap"]["swapSlip"] = "800"  # 8% > 5% threshold
+    def test_partner_leg_is_not_our_fee_when_our_bps_is_zero(self):
+        raw = self._swap(
+            "=:ETH.USDC:0xdest:0/1/0:SIN/va:10/0",
+            [self._out("THOR.RUNE", "1000000", "thor1partner", affiliate=True), self._out("ETH.USDC", "1", "0xdest")],
+        )
+        self.assertEqual(self.ing.parse_swap(raw)["affiliate_fee_usd"], 0)
+
+    def test_outbound_split_across_outputs_keeps_input_value(self):
+        """0EAE770D: $3.2M in, paid out in several legs. A single leg must not
+        lower the input value."""
+        raw = self._swap(
+            "=:ETH.USDT:0xdest:0/1/0:vi:50",
+            [
+                self._out("THOR.RUNE", "100000000", "thor1collector", affiliate=True),
+                self._out("ETH.USDT", "120000000000", "0xdest"),
+                self._out("ETH.USDT", "80000000000", "0xdest"),
+            ],
+        )
         result = self.ing.parse_swap(raw)
-        self.assertIsNotNone(result)
-        expected_out = (10000000000 / 1e8) * 0.11514031210088482
-        self.assertAlmostEqual(result["in_amount_usd"], REAL_IN_USD, places=12)
-        self.assertAlmostEqual(result["out_amount_usd"], expected_out, places=6)
+        self.assertEqual(result["in_amount_usd"], 2000.0)
+        self.assertEqual(result["out_amount"], 200000000000.0)
+        self.assertEqual(result["out_amount_usd"], 2000.0)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], 10.0)
+
+    def test_price_lookup_is_not_needed_for_the_fee(self):
+        raw = self._swap("=:ETH.USDT:0xdest:0/1/0:vi:50", [self._out("ETH.USDT", "200000000000", "0xdest")])
+        with patch.object(self.ing, "make_request", side_effect=AssertionError("no network")):
+            self.assertAlmostEqual(self.ing.parse_swap(raw)["affiliate_fee_usd"], 10.0)
+
+    def test_refund_only_swap_has_no_output_and_no_total_fee(self):
+        raw = self._swap("=:ETH.USDT:0xdest:0/1/0:vi:50", [self._out("THOR.TCY", "100000000000")])
+        result = self.ing.parse_swap(raw)
+        self.assertEqual(result["out_asset"], "")
+        self.assertEqual(result["total_fee_usd"], 0)
 
     # ---- Flags / platform / pools ------------------------------------------
 
@@ -919,96 +878,6 @@ class TestParseSwap(unittest.TestCase):
         self.assertEqual(result["affiliate_addresses"], ["vi"])
         # affiliate_fee_str == "" → [] → falls back to [vultisig_bps]
         self.assertEqual(result["affiliate_fees_bps"], [35])
-
-
-# ---------------------------------------------------------------------------
-# _get_rune_price_from_midgard
-# ---------------------------------------------------------------------------
-
-class TestGetRunePriceFromMidgard(unittest.TestCase):
-    def setUp(self):
-        self.ing = THORChainIngestor()
-        self.ts = datetime(2026, 4, 11, 12, 0, 0, tzinfo=timezone.utc)
-
-    def test_returns_rune_price_from_first_interval(self):
-        with patch.object(
-            self.ing,
-            "make_request",
-            return_value={"intervals": [{"runePriceUSD": "4.25"}]},
-        ) as m:
-            price = self.ing._get_rune_price_from_midgard(self.ts)
-
-        self.assertAlmostEqual(price, 4.25)
-        called_url, called_params = m.call_args[0]
-        self.assertIn("/v2/history/swaps", called_url)
-        self.assertNotIn("/v2/actions", called_url)
-        self.assertEqual(called_params["interval"], "5min")
-        self.assertEqual(called_params["count"], 1)
-        self.assertEqual(called_params["from"], int(self.ts.timestamp()))
-
-    def test_uses_api_endpoint_for_history_url(self):
-        with patch.object(
-            self.ing, "make_request", return_value={"intervals": [{"runePriceUSD": "2"}]}
-        ) as m:
-            self.ing._get_rune_price_from_midgard(self.ts)
-        called_url, _ = m.call_args[0]
-        expected_base = self.ing.api_endpoint.replace(
-            "/v2/actions", "/v2/history/swaps"
-        )
-        self.assertEqual(called_url, expected_base)
-
-    def test_no_intervals_raises(self):
-        with patch.object(self.ing, "make_request", return_value={"intervals": []}):
-            with self.assertRaises(Exception):
-                self.ing._get_rune_price_from_midgard(self.ts)
-
-    def test_zero_price_raises(self):
-        with patch.object(
-            self.ing,
-            "make_request",
-            return_value={"intervals": [{"runePriceUSD": "0"}]},
-        ):
-            with self.assertRaises(Exception):
-                self.ing._get_rune_price_from_midgard(self.ts)
-
-    def test_request_exception_raises(self):
-        with patch.object(
-            self.ing, "make_request", side_effect=Exception("network")
-        ):
-            with self.assertRaises(Exception):
-                self.ing._get_rune_price_from_midgard(self.ts)
-
-
-# ---------------------------------------------------------------------------
-# _derive_rune_price_from_pools
-# ---------------------------------------------------------------------------
-
-class TestDeriveRunePriceFromPools(unittest.TestCase):
-    def setUp(self):
-        self.ing = THORChainIngestor()
-
-    def test_canonical_swap_no_rune_returns_zero(self):
-        # Canonical action has ETH-USDC on the in side and THOR.TCY out —
-        # neither is RUNE, so we can't derive a price from it.
-        self.assertEqual(self.ing._derive_rune_price_from_pools(_clone()), 0)
-
-    def test_real_rune_output_action_derives_price(self):
-        """
-        Action 1 (THOR.RUJI → THOR.RUNE) has RUNE on the output side,
-        so the fallback should return outPriceUSD from the real payload.
-        """
-        price = self.ing._derive_rune_price_from_pools(_clone(1))
-        self.assertAlmostEqual(price, 0.40054394216376576)
-
-    def test_rune_as_input(self):
-        raw = _clone()
-        raw["in"][0]["coins"][0]["asset"] = "THOR.RUNE"
-        raw["metadata"]["swap"]["inPriceUSD"] = "4.5"
-        self.assertAlmostEqual(self.ing._derive_rune_price_from_pools(raw), 4.5)
-
-    def test_malformed_input_returns_zero(self):
-        self.assertEqual(self.ing._derive_rune_price_from_pools({}), 0)
-
 
 if __name__ == "__main__":
     unittest.main()

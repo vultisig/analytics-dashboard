@@ -173,6 +173,34 @@ class BaseIngestor(ABC):
             return 'Other'
 
     @staticmethod
+    def find_destination_outputs(outputs: List[Dict], in_asset: str, memo: str) -> List[Dict]:
+        """Outputs that paid the swap's target asset, one per outbound leg.
+
+        Skips refunds of the input asset and flagged outputs, except a flagged
+        output paid to the memo's destination: Midgard flags the user's own
+        output on part-refunded streaming swaps.
+        """
+        memo_parts = memo.split(':')
+        destination = memo_parts[2] if len(memo_parts) > 2 else None
+        paid = [
+            o for o in outputs
+            if o.get('coins')
+            and o['coins'][0]['asset'] != in_asset
+            and (not o.get('affiliate') or o.get('address') == destination)
+        ]
+        if not paid:
+            return []
+
+        target_asset = paid[0]['coins'][0]['asset']
+        legs = {}
+        for output in paid:
+            coin = output['coins'][0]
+            if coin['asset'] == target_asset:
+                # Midgard can list one leg twice, once without its height.
+                legs.setdefault((output.get('address'), coin.get('amount')), output)
+        return list(legs.values())
+
+    @staticmethod
     def reconcile_affiliate_fees_from_memo(
         affiliate_addresses: List[str],
         affiliate_fees_bps: List[int],
