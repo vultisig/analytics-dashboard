@@ -763,6 +763,24 @@ class TestParseSwap(unittest.TestCase):
         raw = _with_vultisig(include_fee_output=False)
         self.assertIsNone(self.ing.parse_swap(raw))
 
+    def test_native_cacao_input_without_fee_output_uses_bps(self):
+        """A MAYA.CACAO input pays the affiliate fee inside the protocol, so
+        Midgard has no affiliate out-leg. The fee is still earned."""
+        raw = _with_vultisig(include_fee_output=False, bps=50)
+        raw["in"][0]["coins"][0]["asset"] = "MAYA.CACAO"
+        raw["in"][0]["coins"][0]["amount"] = "10000000000000"  # 1,000 CACAO at 1e10
+        raw["metadata"]["swap"]["inPriceUSD"] = "0.5"
+        raw["metadata"]["swap"]["swapSlip"] = "9999"
+        result = self.ing.parse_swap(raw)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["in_amount_usd"], 500.0, places=8)
+        self.assertAlmostEqual(result["affiliate_fee_usd"], 2.5, places=8)  # 50 bps
+
+    def test_pending_swap_is_skipped(self):
+        raw = _with_vultisig()
+        raw["status"] = "pending"
+        self.assertIsNone(self.ing.parse_swap(raw))
+
     # ---- MayaChain-specific decimal handling --------------------------------
 
     def test_cacao_input_uses_1e10_decimals(self):

@@ -133,6 +133,39 @@ class TestClassifyRow(unittest.TestCase):
         self.assertEqual(final, 'other')
 
     @patch.object(rsc.requests, 'get')
+    def test_receiver_own_swap_demoted(self, mock_get):
+        """The fee receiver sent the tx through a real Kyber router: it is the
+        receiver's own swap, and the tokens it got back are swap output."""
+        receiver = dict(rsc.config.ARKHAM_FEE_RECEIVERS)['kyberswap']
+        resp = _mock_get(KYBER_V2_ROUTER)
+        resp.json.return_value['result']['from'] = receiver.upper()
+        mock_get.return_value = resp
+        final, to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        self.assertEqual(final, 'other')
+        self.assertEqual(to, KYBER_V2_ROUTER)
+        self.assertIsNone(err)
+
+    @patch.object(rsc.requests, 'get')
+    def test_other_receiver_own_swap_demoted(self, mock_get):
+        """A swap sent by the other fee receiver is not a fee either."""
+        receiver = dict(rsc.config.ARKHAM_FEE_RECEIVERS)['1inch']
+        resp = _mock_get(KYBER_V2_ROUTER)
+        resp.json.return_value['result']['from'] = receiver
+        mock_get.return_value = resp
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        self.assertEqual(final, 'other')
+        self.assertIsNone(err)
+
+    @patch.object(rsc.requests, 'get')
+    def test_user_swap_through_router_kept(self, mock_get):
+        resp = _mock_get(KYBER_V2_ROUTER)
+        resp.json.return_value['result']['from'] = TREASURY_EOA
+        mock_get.return_value = resp
+        final, _to, err = rsc.classify_row('key', 1, '0xabc', 'kyberswap')
+        self.assertEqual(final, 'kyberswap')
+        self.assertIsNone(err)
+
+    @patch.object(rsc.requests, 'get')
     def test_api_error_returns_none(self, mock_get):
         """The Arkham silent-failure invariant: an API error must surface as
         an inability to classify, never a forced demote."""

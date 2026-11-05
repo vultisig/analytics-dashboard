@@ -39,6 +39,12 @@ class MayaChainIngestor(BaseIngestor):
             except (ValueError, TypeError, OverflowError):
                 return default
 
+        if raw_swap.get('status') == 'pending':
+            # A streaming swap still in progress: its affiliate out-leg and
+            # amounts are not final. The rolling Midgard re-check in
+            # main.sync_source stores it once it completes.
+            return None
+
         try:
             # Basic transaction info
             timestamp = self.parse_timestamp(raw_swap.get('date', ''))
@@ -109,6 +115,12 @@ class MayaChainIngestor(BaseIngestor):
                 fee_coin = fee_data['coins'][0]
                 fee_asset = fee_coin.get('asset', '')
                 fee_amount = safe_float(fee_coin.get('amount', 0))
+            elif vultisig_bps > 0 and in_asset == 'MAYA.CACAO':
+                # A native MAYA.CACAO input pays the affiliate fee inside the protocol,
+                # so Midgard shows no affiliate out-leg. The fee is still earned, and
+                # the fee below comes from bps, not from the out-leg.
+                fee_asset = ''
+                fee_amount = 0.0
             else:
                 # No fee collected for our affiliate
                 logger.debug(f"Skipping transaction {tx_hash}: No Vultisig affiliate fee output found")
