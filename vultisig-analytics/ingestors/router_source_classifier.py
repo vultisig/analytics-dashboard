@@ -6,10 +6,12 @@ deposits — the receiver address also catches treasury moves, OTC settlements,
 cross-chain affiliate fees from THORChain/Maya routers (already captured
 separately), and on-chain spam.
 
-This classifier asks Etherscan one extra question per candidate row —
-`eth_getTransactionByHash(tx_hash)` — and inspects the top-level `tx.to`.
-If it matches a known router for the row's protocol, the row stays
-classified as that aggregator. Transfers from the LI.FI Diamond get a second
+This classifier asks one extra question per candidate row —
+`eth_getTransactionByHash(tx_hash)`, over Alchemy RPC when ALCHEMY_API_KEY is
+set, else the Etherscan V2 proxy — and inspects the top-level `tx.to`.
+If it matches a known router of any configured aggregator, the row is
+credited to that aggregator. The receiver's label does not decide: the apps
+use one receiver as the 1inch referrer and the KyberSwap fee receiver. Transfers from the LI.FI Diamond get a second
 look: when the matching li.quest swap was executed by an attributed
 aggregator tool (config.ATTRIBUTED_LIFI_TOOLS), the row is credited to that
 aggregator with the exact volume/fee from li.quest. Everything else is
@@ -56,11 +58,28 @@ CHAIN_TO_ID: Dict[str, int] = {
     'Base': 8453,
     'Avalanche': 43114,
     'Blast': 81457,
+    'HyperEVM': 999,
 }
+CHAINID_TO_NAME: Dict[int, str] = {cid: name for name, cid in CHAIN_TO_ID.items()}
 
 
 def _router_set(protocol: str) -> Set[str]:
     return {addr.lower() for addr in KNOWN_ROUTERS.get(protocol, [])}
+
+
+def _protocol_for_router(tx_to: Optional[str]) -> Optional[str]:
+    """The configured aggregator whose router is tx_to, if any."""
+    for protocol in config.ARKHAM_PROVIDERS:
+        if tx_to in _router_set(protocol):
+            return protocol
+    return None
+
+
+def _alchemy_rpc_url(chainid: int) -> Optional[str]:
+    if not config.ALCHEMY_API_KEY:
+        return None
+    network = config.ALCHEMY_NETWORKS.get(CHAINID_TO_NAME.get(chainid, ''))
+    return f"https://{network}.g.alchemy.com/v2/{config.ALCHEMY_API_KEY}" if network else None
 
 
 def _fee_receiver_set() -> Set[str]:
@@ -95,21 +114,30 @@ def fetch_tx_endpoints(
     when the response does not carry it.
     """
     sess = session or requests
+    alchemy_url = _alchemy_rpc_url(chainid)
     try:
-        r = sess.get(
-            ETHERSCAN_V2_URL,
-            params={
-                'chainid': chainid,
-                'module': 'proxy',
-                'action': 'eth_getTransactionByHash',
-                'txhash': tx_hash,
-                'apikey': api_key,
-            },
-            timeout=30,
-        )
+        if alchemy_url:
+            r = sess.post(
+                alchemy_url,
+                json={'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getTransactionByHash',
+                      'params': [tx_hash]},
+                timeout=30,
+            )
+        else:
+            r = sess.get(
+                ETHERSCAN_V2_URL,
+                params={
+                    'chainid': chainid,
+                    'module': 'proxy',
+                    'action': 'eth_getTransactionByHash',
+                    'txhash': tx_hash,
+                    'apikey': api_key,
+                },
+                timeout=30,
+            )
         r.raise_for_status()
         data = r.json()
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, ValueError) as e:
         return None, None, f"HTTP error: {e}"
 
     # Etherscan V2 proxy errors come back as {jsonrpc, id, error: {...}} or
@@ -137,7 +165,9 @@ def classify_row(
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Classify one row. Returns (final_protocol, tx_to, error).
 
-    final_protocol = expected_protocol if tx.to is a known router for it;
+    final_protocol = the aggregator whose router tx.to is (it can differ
+                     from expected_protocol: one receiver serves several
+                     aggregators);
                    = 'other' if tx.to is not a known router, or if a fee
                      receiver sent the tx (its own swap, not a fee);
                    = None if classification couldn't run (API error).
@@ -156,14 +186,9 @@ def classify_row(
         # The tokens it got back are swap output, not an integrator fee.
         return 'other', tx_to, None
 
-    expected_routers = _router_set(expected_protocol)
-    if not expected_routers:
-        # No router config for this source — can't classify; demote to other
-        # so this isn't a permanently unclassified row.
-        return 'other', tx_to, None
-
-    if tx_to in expected_routers:
-        return expected_protocol, tx_to, None
+    routed = _protocol_for_router(tx_to)
+    if routed:
+        return routed, tx_to, None
     return 'other', tx_to, None
 
 
@@ -349,7 +374,7 @@ def reclassify_all(
 ) -> Dict[str, int]:
     """Run classifier across every unverified row. Returns counts dict."""
     counts = {
-        'kept': 0, 'demoted': 0, 'attributed': 0, 'deferred': 0,
+        'kept': 0, 'reassigned': 0, 'demoted': 0, 'attributed': 0, 'deferred': 0,
         'skipped_error': 0, 'skipped_unknown_chain': 0,
     }
 
@@ -373,6 +398,10 @@ def reclassify_all(
         if final == protocol:
             counts['kept'] += 1
             apply_classification(db, row_id, final)
+        elif final != 'other':
+            # Another aggregator's router paid into this receiver.
+            counts['reassigned'] += 1
+            apply_classification(db, row_id, final)
         elif tx_to == config.LIFI_DIAMOND_ADDRESS:
             _resolve_lifi_diamond(db, row_id, tx_hash, row_ts, counts)
         else:
@@ -382,7 +411,7 @@ def reclassify_all(
         time.sleep(delay)
 
     logger.info(
-        f"Classifier done: kept={counts['kept']} demoted={counts['demoted']} "
+        f"Classifier done: kept={counts['kept']} reassigned={counts['reassigned']} demoted={counts['demoted']} "
         f"attributed={counts['attributed']} deferred={counts['deferred']} "
         f"skipped_error={counts['skipped_error']} skipped_unknown_chain={counts['skipped_unknown_chain']}"
     )
