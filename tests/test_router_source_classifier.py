@@ -24,9 +24,9 @@ THORCHAIN_ROUTER = '0xd37bbe5744d730a1d98d8dc97c42f0ca46ad7146'
 TREASURY_EOA = '0x890b0a47d192857d41f3e50fa6338dc47944b9fc'
 LIFI_DIAMOND = rsc.config.LIFI_DIAMOND_ADDRESS
 
-from datetime import datetime, timedelta  # noqa: E402
-OLD_TS = datetime.utcnow() - timedelta(days=30)
-FRESH_TS = datetime.utcnow()
+from datetime import datetime, timedelta, timezone  # noqa: E402
+OLD_TS = datetime.now(timezone.utc) - timedelta(days=30)  # TIMESTAMPTZ rows are aware
+FRESH_TS = datetime.now(timezone.utc)
 
 
 def _mock_get(to_addr):
